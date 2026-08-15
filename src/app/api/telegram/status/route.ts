@@ -25,6 +25,9 @@ export async function GET(req: NextRequest) {
     // Fetch the last webhook event logged in memory
     const lastEvent = global.lastTelegramWebhookEvent || null;
 
+    // Fetch webhook status info from Telegram API
+    const webhookInfo = await TelegramService.getWebhookInfo();
+
     return NextResponse.json({
       success: true,
       data: {
@@ -33,6 +36,7 @@ export async function GET(req: NextRequest) {
         adminTelegramId,
         connectedClientsCount,
         lastEvent,
+        webhookInfo,
       },
     });
   } catch (error: any) {

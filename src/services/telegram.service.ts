@@ -41,9 +41,87 @@ export class TelegramService {
       });
       
       const data = await response.json();
-      return data.ok === true;
+      if (data.ok === true) {
+        await this.setBotCommands();
+        return true;
+      }
+      return false;
     } catch (error) {
       console.error('Failed to set Telegram Webhook:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get Webhook Info from Telegram API
+   */
+  static async getWebhookInfo(): Promise<any> {
+    if (!this.isConfigured()) return null;
+    try {
+      const response = await fetch(`${TELEGRAM_API}/getWebhookInfo`);
+      const data = await response.json();
+      return data.ok === true ? data.result : null;
+    } catch (error) {
+      console.error('Failed to get Telegram Webhook Info:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Configure bot commands in Telegram
+   */
+  static async setBotCommands(): Promise<boolean> {
+    if (!this.isConfigured()) return false;
+
+    const defaultCommands = [
+      { command: 'myprofile', description: 'View profile info' },
+      { command: 'myproject', description: 'View project details' },
+      { command: 'payment', description: 'View payment summary' },
+      { command: 'payments', description: 'View payment history' },
+      { command: 'invoice', description: 'Get latest invoice PDF' },
+      { command: 'invoices', description: 'View invoices history' },
+      { command: 'status', description: 'View project progress' },
+      { command: 'help', description: 'Show available commands' },
+    ];
+
+    const adminCommands = [
+      { command: 'clients', description: 'List all clients' },
+      { command: 'client', description: 'View client details (specify client code)' },
+      { command: 'payments', description: 'List recent payments' },
+      { command: 'pending', description: 'List pending invoices' },
+      { command: 'invoices', description: 'List recent invoices' },
+      { command: 'help', description: 'Show admin help menu' },
+    ];
+
+    try {
+      // 1. Set default commands for clients/all users
+      const r1 = await fetch(`${TELEGRAM_API}/setMyCommands`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          commands: defaultCommands,
+          scope: { type: 'default' },
+        }),
+      });
+      const data1 = await r1.json();
+
+      // 2. Set custom commands for admin if ADMIN_TELEGRAM_ID is configured
+      const adminTelegramId = process.env.ADMIN_TELEGRAM_ID;
+      if (adminTelegramId) {
+        const r2 = await fetch(`${TELEGRAM_API}/setMyCommands`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            commands: adminCommands,
+            scope: { type: 'chat', chat_id: Number(adminTelegramId) },
+          }),
+        });
+        await r2.json();
+      }
+
+      return data1.ok === true;
+    } catch (error) {
+      console.error('Failed to set Telegram commands:', error);
       return false;
     }
   }
@@ -177,7 +255,10 @@ export class TelegramService {
 
       await this.sendMessage(
         chatId,
-        `Hello!\n\nThis bot is private. To link your client account, please contact the administrator to get a secure connecting deep-link.\n\nYour Telegram User ID: <code>${userId}</code>`
+        `<b>👋 Welcome to Dr Debuggers.</b>\n\n` +
+        `Your Telegram account is not connected to a client account yet.\n\n` +
+        `Please ask the administrator for your secure connection link.\n\n` +
+        `<i>Your Telegram User ID:</i> <code>${userId}</code>`
       );
       return;
     }

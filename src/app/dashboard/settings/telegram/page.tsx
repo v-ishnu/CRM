@@ -12,6 +12,13 @@ interface BotStatus {
     timestamp: string;
     payload: any;
   } | null;
+  webhookInfo?: {
+    url?: string;
+    pending_update_count?: number;
+    last_error_message?: string;
+    last_error_date?: number;
+    ip_address?: string;
+  } | null;
 }
 
 export default function TelegramSettingsPage() {
@@ -47,7 +54,10 @@ export default function TelegramSettingsPage() {
   useEffect(() => {
     fetchBotStatus();
     // Default URL detection
-    if (typeof window !== 'undefined') {
+    const envAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (envAppUrl) {
+      setAppUrl(envAppUrl);
+    } else if (typeof window !== 'undefined') {
       setAppUrl(window.location.origin);
     }
   }, []);
@@ -106,13 +116,10 @@ export default function TelegramSettingsPage() {
     };
 
     try {
-      // Fetch webhook secret token if defined in simulated env
-      const secret = process.env.NEXT_PUBLIC_TELEGRAM_WEBHOOK_SECRET || 'secret';
-      const res = await fetch('/api/telegram/webhook', {
+      const res = await fetch('/api/telegram/simulator', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-telegram-bot-api-secret-token': secret, // simulate the secret header
         },
         body: JSON.stringify(payload),
       });
@@ -202,6 +209,60 @@ export default function TelegramSettingsPage() {
               </div>
             </div>
           </div>
+
+          {/* Webhook Status Info Card */}
+          {status.webhookInfo ? (
+            <div className="bg-[#0d0d12]/60 border border-slate-850 p-6 rounded-2xl">
+              <h2 className="text-sm font-bold text-slate-350 uppercase tracking-wider mb-5">Telegram Live Webhook Info</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div className="bg-slate-950/40 p-4 border border-slate-900 rounded-xl sm:col-span-2">
+                  <span className="text-[10px] text-slate-500 font-semibold uppercase">Active Webhook URL</span>
+                  <p className="text-slate-300 font-mono font-bold mt-1 break-all">
+                    {status.webhookInfo.url || 'None'}
+                  </p>
+                  {status.webhookInfo.url && (status.webhookInfo.url.includes('localhost') || status.webhookInfo.url.includes('127.0.0.1')) && (
+                    <p className="text-red-400 font-semibold text-[10px] mt-1.5 uppercase tracking-wider flex items-center">
+                      <AlertTriangle className="w-3.5 h-3.5 mr-1" />
+                      Invalid Production Webhook (Detected Localhost)
+                    </p>
+                  )}
+                </div>
+                <div className="bg-slate-950/40 p-4 border border-slate-900 rounded-xl">
+                  <span className="text-[10px] text-slate-500 font-semibold uppercase">Pending Updates</span>
+                  <p className="text-slate-300 font-bold mt-1">
+                    {status.webhookInfo.pending_update_count ?? 0} updates
+                  </p>
+                </div>
+                <div className="bg-slate-950/40 p-4 border border-slate-900 rounded-xl">
+                  <span className="text-[10px] text-slate-500 font-semibold uppercase">IP Address</span>
+                  <p className="text-slate-300 font-mono font-bold mt-1">
+                    {status.webhookInfo.ip_address || 'N/A'}
+                  </p>
+                </div>
+                {status.webhookInfo.last_error_message && (
+                  <div className="bg-red-950/20 p-4 border border-red-500/20 rounded-xl sm:col-span-2">
+                    <span className="text-[10px] text-red-400 font-semibold uppercase flex items-center">
+                      <AlertTriangle className="w-3.5 h-3.5 mr-1" />
+                      Last Delivery Error
+                    </span>
+                    <p className="text-red-300 mt-1">
+                      {status.webhookInfo.last_error_message}
+                    </p>
+                    {status.webhookInfo.last_error_date && (
+                      <p className="text-[9px] text-red-500 mt-1 font-mono">
+                        Occurred at: {new Date(status.webhookInfo.last_error_date * 1000).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="bg-[#0d0d12]/60 border border-slate-850 p-6 rounded-2xl">
+              <h2 className="text-sm font-bold text-slate-350 uppercase tracking-wider mb-2">Telegram Live Webhook Info</h2>
+              <p className="text-xs text-red-400">No active webhook registered on Telegram for this bot. Use the configuration panel below to register one.</p>
+            </div>
+          )}
 
           {/* Webhook Configuration form */}
           <div className="bg-[#0d0d12]/60 border border-slate-850 p-6 rounded-2xl">
