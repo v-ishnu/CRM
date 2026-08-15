@@ -83,7 +83,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               AG
             </div>
             <div>
-              <h1 className="font-bold text-slate-100 leading-none">Antigravity</h1>
+              <h1 className="font-bold text-slate-100 leading-none">Dr. Debuggers</h1>
               <span className="text-[10px] text-indigo-400 font-semibold tracking-wider uppercase">Developer CRM</span>
             </div>
           </div>
