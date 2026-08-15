@@ -144,6 +144,7 @@ export async function POST(req: NextRequest) {
           paymentMethod: body.paymentMethod || 'BANK_TRANSFER',
           paymentDate: body.paymentDate ? new Date(body.paymentDate) : new Date(),
           transactionReference: body.transactionReference,
+          paymentType: 'ADVANCE',
           notes: 'Advance project payment',
         },
         actor

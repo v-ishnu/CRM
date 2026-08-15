@@ -7,7 +7,8 @@ export interface IPayment extends Document {
   invoiceId?: mongoose.Types.ObjectId;
   amount: number;
   currency: string;
-  paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'UPI' | 'RAZORPAY' | 'STRIPE' | 'OTHER';
+  paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'UPI' | 'RAZORPAY' | 'STRIPE' | 'CARD' | 'OTHER';
+  paymentType: 'ADVANCE' | 'INSTALLMENT' | 'FINAL_PAYMENT' | 'OTHER';
   paymentDate: Date;
   transactionReference?: string;
   status: 'PENDING' | 'COMPLETED' | 'FAILED' | 'REFUNDED';
@@ -56,8 +57,14 @@ const PaymentSchema = new Schema<IPayment>(
     },
     paymentMethod: {
       type: String,
-      enum: ['CASH', 'BANK_TRANSFER', 'UPI', 'RAZORPAY', 'STRIPE', 'OTHER'],
+      enum: ['CASH', 'BANK_TRANSFER', 'UPI', 'RAZORPAY', 'STRIPE', 'CARD', 'OTHER'],
       default: 'BANK_TRANSFER',
+      required: true,
+    },
+    paymentType: {
+      type: String,
+      enum: ['ADVANCE', 'INSTALLMENT', 'FINAL_PAYMENT', 'OTHER'],
+      default: 'INSTALLMENT',
       required: true,
     },
     paymentDate: {

@@ -49,8 +49,10 @@ interface Invoice {
 interface Payment {
   _id: string;
   paymentNumber: string;
+  projectId: string;
   amount: number;
   paymentMethod: string;
+  paymentType?: string;
   paymentDate: string;
   transactionReference?: string;
   status: string;
@@ -115,12 +117,26 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
   const [confirmClientCode, setConfirmClientCode] = useState('');
   const [deleting, setDeleting] = useState(false);
 
+  // Record Payment States
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('UPI');
+  const [paymentType, setPaymentType] = useState('INSTALLMENT');
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [referenceId, setReferenceId] = useState('');
+  const [paymentNotes, setPaymentNotes] = useState('');
+  const [recordingPayment, setRecordingPayment] = useState(false);
+
   const fetchClientDetails = async () => {
     try {
       const res = await fetch(`/api/clients/${id}`);
       const json = await res.json();
       if (json.success) {
         setData(json.data);
+        if (json.data.projects && json.data.projects.length > 0) {
+          setSelectedProjectId(json.data.projects[0]._id);
+        }
       } else {
         setData(null);
       }
@@ -211,6 +227,86 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
       setActionError('Error connecting to Server.');
     } finally {
       setProcessingInvs((prev) => ({ ...prev, [invoiceId]: false }));
+    }
+  };
+
+  const handleRecordPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!data) return;
+
+    setActionError(null);
+    setActionSuccess(null);
+
+    const selectedProj = data.projects.find((p) => p._id === selectedProjectId);
+    if (!selectedProj) {
+      setActionError('Please select a valid project.');
+      return;
+    }
+
+    const projPayments = data.payments.filter(
+      (p) => p.projectId === selectedProjectId && p.status === 'COMPLETED'
+    );
+    const alreadyPaid = projPayments.reduce((sum, p) => sum + p.amount, 0);
+    const totalAmount = selectedProj.totalAmount;
+    const outstanding = Math.max(0, totalAmount - alreadyPaid);
+
+    const numAmount = Number(paymentAmount);
+    if (isNaN(numAmount) || !isFinite(numAmount) || numAmount <= 0) {
+      setActionError('Payment amount must be a valid positive number.');
+      return;
+    }
+
+    if (numAmount > outstanding) {
+      setActionError(
+        `Payment exceeds outstanding balance. Outstanding: Rs. ${outstanding.toLocaleString(
+          'en-IN'
+        )} Maximum payment allowed: Rs. ${outstanding.toLocaleString('en-IN')}`
+      );
+      return;
+    }
+
+    setRecordingPayment(true);
+
+    try {
+      const res = await fetch('/api/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: id,
+          projectId: selectedProjectId,
+          amount: numAmount,
+          paymentMethod,
+          paymentType,
+          paymentDate: new Date(paymentDate).toISOString(),
+          transactionReference: referenceId || undefined,
+          notes: paymentNotes || undefined,
+          notifyClient: true,
+        }),
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        setActionSuccess(
+          `Payment recorded successfully. Amount: Rs. ${numAmount.toLocaleString(
+            'en-IN'
+          )} Receipt: ${json.data.paymentNumber} New Outstanding: Rs. ${(
+            outstanding - numAmount
+          ).toLocaleString('en-IN')}`
+        );
+        // Reset form
+        setPaymentAmount('');
+        setReferenceId('');
+        setPaymentNotes('');
+        setPaymentModalOpen(false);
+        // Refresh details
+        await fetchClientDetails();
+      } else {
+        setActionError(json.error?.message || 'Payment was not recorded.');
+      }
+    } catch (err: any) {
+      setActionError('An error occurred while saving the payment.');
+    } finally {
+      setRecordingPayment(false);
     }
   };
 
@@ -553,10 +649,21 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
 
           {/* Payments listing */}
           <div className="bg-[#0d0d12]/30 border border-slate-850 p-6 rounded-2xl">
-            <h2 className="text-base font-bold text-slate-200 mb-4 flex items-center">
-              <CreditCard className="w-5 h-5 mr-2 text-indigo-400" />
-              Recent Payments
-            </h2>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+              <h2 className="text-base font-bold text-slate-200 flex items-center">
+                <CreditCard className="w-5 h-5 mr-2 text-indigo-400" />
+                Recent Payments
+              </h2>
+              {projects.length > 0 && (
+                <button
+                  onClick={() => setPaymentModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-650 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl transition-all"
+                >
+                  <Plus className="w-4 h-4" />
+                  Record Payment
+                </button>
+              )}
+            </div>
 
             {payments.length === 0 ? (
               <p className="text-sm text-slate-550 py-4 text-center">No payment transactions recorded.</p>
@@ -697,6 +804,208 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
               )}
             </button>
           </div>
+        </div>
+      </div>
+    )}
+    {/* Record Payment Modal */}
+    {paymentModalOpen && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+        <div className="bg-slate-950 border border-slate-850 rounded-2xl max-w-md w-full p-6 space-y-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+          <div className="space-y-1">
+            <h3 className="text-lg font-bold text-slate-100 flex items-center">
+              <CreditCard className="w-5 h-5 mr-2 text-indigo-400" />
+              Record Payment
+            </h3>
+            <p className="text-xs text-slate-400">
+              Record a manual transaction and notify the client on Telegram.
+            </p>
+          </div>
+
+          <form onSubmit={handleRecordPayment} className="space-y-4 text-xs">
+            {/* Project selection */}
+            <div className="space-y-1.5">
+              <label htmlFor="payment-project-select" className="block text-slate-400 font-medium">Project *</label>
+              <select
+                id="payment-project-select"
+                value={selectedProjectId}
+                onChange={(e) => setSelectedProjectId(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors"
+                required
+              >
+                {projects.map((proj) => (
+                  <option key={proj._id} value={proj._id}>
+                    {proj.name} ({proj.projectCode})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Balances block */}
+            {(() => {
+              const selectedProj = projects.find((p) => p._id === selectedProjectId);
+              if (!selectedProj) return null;
+
+              const projPayments = payments.filter(
+                (p) => p.projectId === selectedProjectId && p.status === 'COMPLETED'
+              );
+              const alreadyPaid = projPayments.reduce((sum, p) => sum + p.amount, 0);
+              const totalAmount = selectedProj.totalAmount;
+              const outstanding = Math.max(0, totalAmount - alreadyPaid);
+              const enteredAmount = Number(paymentAmount) || 0;
+              const remaining = Math.max(0, outstanding - enteredAmount);
+
+              return (
+                <div className="p-4 bg-slate-900/40 border border-slate-850 rounded-xl space-y-2 text-slate-350">
+                  <div className="flex justify-between">
+                    <span>Project Total:</span>
+                    <span className="font-bold text-slate-200">
+                      {selectedProj.currency} {totalAmount.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-emerald-450">
+                    <span>Already Paid:</span>
+                    <span>
+                      {selectedProj.currency} {alreadyPaid.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-red-405 border-b border-slate-850 pb-2">
+                    <span>Outstanding:</span>
+                    <span>
+                      {selectedProj.currency} {outstanding.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div className="flex justify-between pt-1 font-bold text-indigo-400">
+                    <span>Remaining Outstanding:</span>
+                    <span>
+                      {selectedProj.currency} {remaining.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Amount input */}
+            <div className="space-y-1.5">
+              <label htmlFor="payment-amount-input" className="block text-slate-400 font-medium">Payment Amount *</label>
+              <input
+                id="payment-amount-input"
+                type="number"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                placeholder="e.g. 10000"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-slate-205 focus:outline-none focus:border-indigo-500 transition-colors font-bold"
+                required
+                min="0.01"
+                step="any"
+              />
+            </div>
+
+            {/* Payment method & type */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label htmlFor="payment-method-select" className="block text-slate-400 font-medium">Payment Method *</label>
+                <select
+                  id="payment-method-select"
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-202 focus:outline-none"
+                  required
+                >
+                  <option value="UPI">UPI</option>
+                  <option value="BANK_TRANSFER">BANK TRANSFER</option>
+                  <option value="CASH">CASH</option>
+                  <option value="CARD">CARD</option>
+                  <option value="OTHER">OTHER</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor="payment-type-select" className="block text-slate-400 font-medium">Payment Type *</label>
+                <select
+                  id="payment-type-select"
+                  value={paymentType}
+                  onChange={(e) => setPaymentType(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-202 focus:outline-none"
+                  required
+                >
+                  <option value="INSTALLMENT">INSTALLMENT</option>
+                  <option value="ADVANCE">ADVANCE</option>
+                  <option value="FINAL_PAYMENT">FINAL PAYMENT</option>
+                  <option value="OTHER">OTHER</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Payment date & Reference ID */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label htmlFor="payment-date-input" className="block text-slate-400 font-medium">Payment Date *</label>
+                <input
+                  id="payment-date-input"
+                  type="date"
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-202 focus:outline-none"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor="payment-ref-input" className="block text-slate-400 font-medium">Reference ID</label>
+                <input
+                  id="payment-ref-input"
+                  type="text"
+                  value={referenceId}
+                  onChange={(e) => setReferenceId(e.target.value)}
+                  placeholder="e.g. TXN12345678"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-202 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-1.5">
+              <label htmlFor="payment-notes-input" className="block text-slate-400 font-medium">Notes</label>
+              <textarea
+                id="payment-notes-input"
+                value={paymentNotes}
+                onChange={(e) => setPaymentNotes(e.target.value)}
+                placeholder="Optional notes..."
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-slate-202 focus:outline-none focus:border-indigo-500 transition-colors h-16 resize-none"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 justify-end pt-2 font-semibold">
+              <button
+                type="button"
+                onClick={() => {
+                  setPaymentModalOpen(false);
+                  setPaymentAmount('');
+                  setReferenceId('');
+                  setPaymentNotes('');
+                }}
+                className="px-4 py-2.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-450 hover:text-slate-202 rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={recordingPayment}
+                className="px-4 py-2.5 bg-indigo-650 hover:bg-indigo-500 disabled:bg-slate-900 text-white disabled:text-slate-650 border border-indigo-500/20 disabled:border-slate-800 rounded-xl transition-all flex items-center gap-1.5"
+              >
+                {recordingPayment ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Recording...
+                  </>
+                ) : (
+                  <>
+                    <CreditCard className="w-4 h-4" />
+                    Record Payment
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     )}

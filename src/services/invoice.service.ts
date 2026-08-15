@@ -155,7 +155,10 @@ export class InvoiceService {
 
     // Calculate total payments and remaining balance
     const payments = await Payment.find({
-      invoiceId: invoice._id,
+      $or: [
+        { invoiceId: invoice._id },
+        { projectId: project._id }
+      ],
       status: 'COMPLETED',
     });
     const paidAmount = payments.reduce((sum, p) => sum + p.amount, 0);

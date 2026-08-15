@@ -55,8 +55,6 @@ const ClientSchema = new Schema<IClient>(
     },
     telegramUserId: {
       type: String,
-      index: true,
-      sparse: true,
     },
     telegramUsername: {
       type: String,

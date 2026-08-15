@@ -138,7 +138,7 @@ export class TelegramService {
   /**
    * Send text message to a chat
    */
-  static async sendMessage(chatId: string, text: string, timings?: { telegramAPI: number }): Promise<boolean> {
+  static async sendMessage(chatId: string, text: string, timings?: any): Promise<boolean> {
     if (!this.isConfigured()) {
       console.warn('Telegram Bot token is missing. Cannot send message.');
       return false;
@@ -146,6 +146,12 @@ export class TelegramService {
 
     try {
       const apiStart = performance.now();
+      if (timings) {
+        if (!timings.T3) timings.T3 = apiStart;
+        if (!timings.apiCalls) timings.apiCalls = [];
+        timings.apiCalls.push('sendMessage');
+      }
+
       const response = await fetch(`${TELEGRAM_API}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -157,8 +163,13 @@ export class TelegramService {
       });
 
       const data = await response.json();
+      const apiEnd = performance.now();
+      const apiDuration = Math.round(apiEnd - apiStart);
+      console.log(`TELEGRAM_API_DURATION: ${apiDuration} ms`);
+
       if (timings) {
-        timings.telegramAPI += Math.round(performance.now() - apiStart);
+        timings.telegramAPI += apiDuration;
+        timings.T4 = apiEnd;
       }
       if (data.ok !== true) {
         console.error(`Telegram sendMessage failed for chat ${chatId}:`, data);
@@ -178,7 +189,7 @@ export class TelegramService {
     relativeFilePath: string,
     filename: string,
     caption?: string,
-    timings?: { telegramAPI: number; databaseQuery: number }
+    timings?: any
   ): Promise<boolean> {
     if (!this.isConfigured()) {
       console.warn('Telegram Bot token is missing. Cannot send document.');
@@ -240,14 +251,25 @@ export class TelegramService {
       }
 
       const apiStart = performance.now();
+      if (timings) {
+        if (!timings.T3) timings.T3 = apiStart;
+        if (!timings.apiCalls) timings.apiCalls = [];
+        timings.apiCalls.push('sendDocument');
+      }
+
       const response = await fetch(`${TELEGRAM_API}/sendDocument`, {
         method: 'POST',
         body: formData,
       });
 
       const data = await response.json();
+      const apiEnd = performance.now();
+      const apiDuration = Math.round(apiEnd - apiStart);
+      console.log(`TELEGRAM_API_DURATION: ${apiDuration} ms`);
+
       if (timings) {
-        timings.telegramAPI += Math.round(performance.now() - apiStart);
+        timings.telegramAPI += apiDuration;
+        timings.T4 = apiEnd;
       }
       if (data.ok !== true) {
         console.error(`Telegram sendDocument failed for chat ${chatId}:`, data);
@@ -262,13 +284,20 @@ export class TelegramService {
   /**
    * Process updates received via Telegram Webhook
    */
-  static async handleWebhookUpdate(update: any): Promise<any> {
+  static async handleWebhookUpdate(update: any, T1?: number): Promise<any> {
+    const t1Start = T1 || performance.now();
     const startTotal = performance.now();
-    const timings = {
+    const timings: any = {
       clientLookup: 0,
       databaseQuery: 0,
       telegramAPI: 0,
       handler: 0,
+      T1: t1Start,
+      T2: 0,
+      T3: 0,
+      T4: 0,
+      T5: 0,
+      apiCalls: [],
     };
 
     const dbConnStart = performance.now();
@@ -308,12 +337,16 @@ export class TelegramService {
         handler: timings.handler,
         telegramAPI: timings.telegramAPI,
         total,
+        startTotal,
+        timings,
       };
     }
 
     // Try to find the client associated with this Telegram userId
     const lookupStart = performance.now();
-    let client: any = await Client.findOne({ telegramUserId: userId });
+    let client: any = await Client.findOne({ telegramUserId: userId })
+      .select('clientCode name company email phone address city country telegramUserId telegramChatId telegramConnected')
+      .lean();
     timings.clientLookup = Math.round(performance.now() - lookupStart);
 
     // Handle Deep Linking connection token
@@ -355,6 +388,8 @@ export class TelegramService {
           handler: timings.handler,
           telegramAPI: timings.telegramAPI,
           total,
+          startTotal,
+          timings,
         };
       } catch (error: any) {
         const handlerStart = performance.now();
@@ -371,6 +406,8 @@ export class TelegramService {
           handler: timings.handler,
           telegramAPI: timings.telegramAPI,
           total,
+          startTotal,
+          timings,
         };
       }
     }
@@ -407,6 +444,8 @@ export class TelegramService {
           handler: timings.handler,
           telegramAPI: timings.telegramAPI,
           total,
+          startTotal,
+          timings,
         };
       }
 
@@ -431,6 +470,8 @@ export class TelegramService {
         handler: timings.handler,
         telegramAPI: timings.telegramAPI,
         total,
+        startTotal,
+        timings,
       };
     }
 
@@ -449,6 +490,8 @@ export class TelegramService {
       handler: timings.handler,
       telegramAPI: timings.telegramAPI,
       total,
+      startTotal,
+      timings,
     };
   }
 
@@ -492,7 +535,9 @@ export class TelegramService {
 
       case '/myproject': {
         const dbStart = performance.now();
-        const projects = await Project.find({ clientId: client._id });
+        const projects = await Project.find({ clientId: client._id })
+          .select('name serviceType totalAmount currency status')
+          .lean();
         if (timings) {
           timings.databaseQuery += Math.round(performance.now() - dbStart);
         }
@@ -502,19 +547,34 @@ export class TelegramService {
           return;
         }
 
-        let msg = '<b>💻 Project Budget Details</b>\n\n';
-        for (const p of projects) {
-          const dbStart2 = performance.now();
-          const balances = await PaymentService.calculateProjectBalances(p._id.toString());
-          if (timings) {
-            timings.databaseQuery += Math.round(performance.now() - dbStart2);
-          }
+        const dbStart2 = performance.now();
+        const projectsWithBalances = await Promise.all(
+          projects.map(async (p) => {
+            const payments = await Payment.find({ projectId: p._id, status: 'COMPLETED' })
+              .select('amount')
+              .lean();
+            const paidAmount = payments.reduce((sum, pay) => sum + pay.amount, 0);
+            const outstandingAmount = Math.max(0, p.totalAmount - paidAmount);
+            return {
+              project: p,
+              paidAmount,
+              outstandingAmount,
+            };
+          })
+        );
+        if (timings) {
+          timings.databaseQuery += Math.round(performance.now() - dbStart2);
+        }
 
+        let msg = '<b>💻 Project Budget Details</b>\n\n';
+        for (const item of projectsWithBalances) {
+          const { project: p, paidAmount, outstandingAmount } = item;
+          const currencySymbol = p.currency === 'INR' ? '₹' : (p.currency === 'USD' ? '$' : p.currency);
           msg += `<b>Project:</b> ${p.name}\n` +
                  `<b>Service:</b> ${p.serviceType}\n` +
-                 `<b>Budget:</b> ${p.currency} ${p.totalAmount.toLocaleString('en-IN')}\n` +
-                 `<b>Paid:</b> ${p.currency} ${balances.paidAmount.toLocaleString('en-IN')}\n` +
-                 `<b>Outstanding:</b> ${p.currency} ${balances.outstandingAmount.toLocaleString('en-IN')}\n\n`;
+                 `<b>Budget:</b> ${currencySymbol}${p.totalAmount.toLocaleString('en-IN')}\n` +
+                 `<b>Paid:</b> ${currencySymbol}${paidAmount.toLocaleString('en-IN')}\n` +
+                 `<b>Outstanding:</b> ${currencySymbol}${outstandingAmount.toLocaleString('en-IN')}\n\n`;
         }
         await this.sendMessage(chatId, msg, timings);
         break;
@@ -523,7 +583,9 @@ export class TelegramService {
       case '/payment':
       case '/payments': {
         const dbStart = performance.now();
-        const projects = await Project.find({ clientId: client._id });
+        const projects = await Project.find({ clientId: client._id })
+          .select('name totalAmount currency')
+          .lean();
         if (timings) {
           timings.databaseQuery += Math.round(performance.now() - dbStart);
         }
@@ -533,36 +595,61 @@ export class TelegramService {
           return;
         }
 
-        let msg = '<b>💰 Payment Summary</b>\n\n';
-        for (const p of projects) {
-          const dbStart2 = performance.now();
-          const balances = await PaymentService.calculateProjectBalances(p._id.toString());
-          const recentPayments = await Payment.find({ projectId: p._id, status: 'COMPLETED' }).sort({ paymentDate: -1 }).limit(3);
-          if (timings) {
-            timings.databaseQuery += Math.round(performance.now() - dbStart2);
-          }
+        const dbStart2 = performance.now();
+        const projectsWithPayments = await Promise.all(
+          projects.map(async (p) => {
+            const payments = await Payment.find({ projectId: p._id, status: 'COMPLETED' })
+              .select('amount paymentType paymentMethod paymentNumber paymentDate')
+              .sort({ paymentDate: -1 })
+              .lean();
+            return {
+              project: p,
+              payments,
+            };
+          })
+        );
+        if (timings) {
+          timings.databaseQuery += Math.round(performance.now() - dbStart2);
+        }
 
-          msg += `<b>Project:</b> ${p.name}\n` +
-                 `<b>Total Value:</b> ${p.currency} ${balances.totalAmount.toLocaleString('en-IN')}\n` +
-                 `<b>Paid Amount:</b> ${p.currency} ${balances.paidAmount.toLocaleString('en-IN')}\n` +
-                 `<b>Remaining:</b> ${p.currency} ${balances.outstandingAmount.toLocaleString('en-IN')}\n\n`;
+        let msg = '<b>💳 Payment History</b>\n\n';
+        for (const item of projectsWithPayments) {
+          const { project: p, payments } = item;
+          const paidAmount = payments.reduce((sum, r) => sum + r.amount, 0);
+          const outstandingAmount = Math.max(0, p.totalAmount - paidAmount);
+          const currencySymbol = p.currency === 'INR' ? '₹' : (p.currency === 'USD' ? '$' : p.currency);
 
-          if (recentPayments.length > 0) {
-            msg += `<i>Recent payments:</i>\n`;
-            for (const r of recentPayments) {
-              msg += `- ${r.paymentNumber}: ${p.currency} ${r.amount.toLocaleString('en-IN')} (${new Date(r.paymentDate).toLocaleDateString()})\n`;
+          msg += `<b>Project:</b>\n${p.name}\n\n` +
+                 `<b>Total:</b>\n${currencySymbol}${p.totalAmount.toLocaleString('en-IN')}\n\n` +
+                 `<b>Paid:</b>\n${currencySymbol}${paidAmount.toLocaleString('en-IN')}\n\n` +
+                 `<b>Outstanding:</b>\n${currencySymbol}${outstandingAmount.toLocaleString('en-IN')}\n\n`;
+
+          if (payments.length > 0) {
+            msg += `<b>Transactions:</b>\n\n`;
+            let idx = 1;
+            for (const r of payments) {
+              const pType = r.paymentType || 'INSTALLMENT';
+              msg += `${idx}. ${currencySymbol}${r.amount.toLocaleString('en-IN')}\n` +
+                     `   ${pType}\n` +
+                     `   ${r.paymentMethod}\n` +
+                     `   ${r.paymentNumber}\n\n`;
+              idx++;
             }
-            msg += '\n';
+          } else {
+            msg += `No payments recorded yet.\n\n`;
           }
+          msg += `--------------------------------\n\n`;
         }
         await this.sendMessage(chatId, msg, timings);
         break;
       }
 
-      case '/invoice':
       case '/invoices': {
         const dbStart = performance.now();
-        const invoices = await Invoice.find({ clientId: client._id }).sort({ createdAt: -1 });
+        const invoices = await Invoice.find({ clientId: client._id })
+          .select('invoiceNumber total status invoiceDate currency')
+          .sort({ createdAt: -1 })
+          .lean();
         if (timings) {
           timings.databaseQuery += Math.round(performance.now() - dbStart);
         }
@@ -572,28 +659,64 @@ export class TelegramService {
           return;
         }
 
-        await this.sendMessage(chatId, '<b>📄 Your Invoices</b>\n\nRetrieving your invoices... sending latest PDF...', timings);
-        
-        // Send latest PDF if exists
-        const latestInvoice = invoices[0];
-        if (latestInvoice.pdfPath) {
-          const filename = `${latestInvoice.invoiceNumber}.pdf`;
+        let msg = '<b>📄 Your Invoices</b>\n\n';
+        for (const inv of invoices) {
+          const currencySymbol = inv.currency === 'INR' ? '₹' : (inv.currency === 'USD' ? '$' : inv.currency);
+          msg += `<b>Invoice:</b> ${inv.invoiceNumber}\n` +
+                 `<b>Amount:</b> ${currencySymbol}${inv.total.toLocaleString('en-IN')}\n` +
+                 `<b>Status:</b> <code>${inv.status}</code>\n` +
+                 `<b>Date:</b> ${new Date(inv.invoiceDate).toLocaleDateString()}\n` +
+                 `To download PDF, send:\n<code>/invoice ${inv.invoiceNumber}</code>\n\n` +
+                 `--------------------------------\n\n`;
+        }
+        await this.sendMessage(chatId, msg, timings);
+        break;
+      }
+
+      case '/invoice': {
+        const parts = text.split(' ');
+        if (parts.length < 2) {
+          await this.sendMessage(chatId, 'Please specify the invoice number, e.g., <code>/invoice INV-2026-0001</code>', timings);
+          return;
+        }
+        const invoiceNumber = parts[1].trim().toUpperCase();
+
+        const dbStart = performance.now();
+        const invoice = await Invoice.findOne({ invoiceNumber, clientId: client._id })
+          .select('invoiceNumber total status pdfPath currency')
+          .lean();
+        if (timings) {
+          timings.databaseQuery += Math.round(performance.now() - dbStart);
+        }
+
+        if (!invoice) {
+          await this.sendMessage(chatId, `Invoice <b>${invoiceNumber}</b> not found or access denied.`, timings);
+          return;
+        }
+
+        await this.sendMessage(chatId, `Sending PDF for Invoice <b>${invoiceNumber}</b>...`, timings);
+
+        if (invoice.pdfPath) {
+          const filename = `${invoice.invoiceNumber}.pdf`;
+          const currencySymbol = invoice.currency === 'INR' ? '₹' : (invoice.currency === 'USD' ? '$' : invoice.currency);
           await this.sendDocument(
             chatId,
-            latestInvoice.pdfPath,
+            invoice.pdfPath,
             filename,
-            `Latest Invoice ${latestInvoice.invoiceNumber}\nAmount: ${latestInvoice.currency} ${latestInvoice.total.toLocaleString('en-IN')}\nStatus: ${latestInvoice.status}`,
+            `Invoice ${invoice.invoiceNumber}\nAmount: ${currencySymbol}${invoice.total.toLocaleString('en-IN')}\nStatus: ${invoice.status}`,
             timings
           );
         } else {
-          await this.sendMessage(chatId, `Latest Invoice ${latestInvoice.invoiceNumber} cannot be fetched as PDF is missing.`, timings);
+          await this.sendMessage(chatId, `PDF for Invoice ${invoice.invoiceNumber} is not generated yet.`, timings);
         }
         break;
       }
 
       case '/status': {
         const dbStart = performance.now();
-        const projects = await Project.find({ clientId: client._id });
+        const projects = await Project.find({ clientId: client._id })
+          .select('name totalAmount currency status')
+          .lean();
         if (timings) {
           timings.databaseQuery += Math.round(performance.now() - dbStart);
         }
@@ -603,12 +726,50 @@ export class TelegramService {
           return;
         }
 
-        let msg = '<b>📢 Project Development Status</b>\n\n';
-        for (const p of projects) {
-          msg += `<b>Project:</b> ${p.name}\n` +
-                 `<b>Current Phase:</b> <code>${p.status}</code>\n` +
-                 `<b>Start Date:</b> ${p.startDate ? new Date(p.startDate).toLocaleDateString() : 'N/A'}\n` +
-                 `<b>Expected Completion:</b> ${p.expectedCompletionDate ? new Date(p.expectedCompletionDate).toLocaleDateString() : 'N/A'}\n\n`;
+        const dbStart2 = performance.now();
+        const projectsWithStatus = await Promise.all(
+          projects.map(async (p) => {
+            const payments = await Payment.find({ projectId: p._id, status: 'COMPLETED' })
+              .select('amount')
+              .lean();
+            const paidAmount = payments.reduce((sum, pay) => sum + pay.amount, 0);
+            const outstandingAmount = Math.max(0, p.totalAmount - paidAmount);
+            return {
+              project: p,
+              paidAmount,
+              outstandingAmount,
+            };
+          })
+        );
+        if (timings) {
+          timings.databaseQuery += Math.round(performance.now() - dbStart2);
+        }
+
+        let msg = '';
+        for (const item of projectsWithStatus) {
+          const { project: p, paidAmount, outstandingAmount } = item;
+          let paymentStatus = 'UNPAID';
+          if (paidAmount >= p.totalAmount) {
+            paymentStatus = 'PAID';
+          } else if (paidAmount > 0) {
+            paymentStatus = 'PARTIALLY_PAID';
+          }
+
+          const currencySymbol = p.currency === 'INR' ? '₹' : (p.currency === 'USD' ? '$' : p.currency);
+
+          msg += `📊 <b>Project Status</b>\n\n` +
+                 `${p.name}\n\n` +
+                 `<b>Budget:</b>\n` +
+                 `${currencySymbol}${p.totalAmount.toLocaleString('en-IN')}\n\n` +
+                 `<b>Paid:</b>\n` +
+                 `${currencySymbol}${paidAmount.toLocaleString('en-IN')}\n\n` +
+                 `<b>Outstanding:</b>\n` +
+                 `${currencySymbol}${outstandingAmount.toLocaleString('en-IN')}\n\n` +
+                 `<b>Development:</b>\n` +
+                 `<code>${p.status}</code>\n\n` +
+                 `<b>Payment:</b>\n` +
+                 `<code>${paymentStatus}</code>\n\n` +
+                 `--------------------------------\n\n`;
         }
         await this.sendMessage(chatId, msg, timings);
         break;

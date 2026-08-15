@@ -75,14 +75,15 @@ export class PaymentService {
   ): Promise<IPayment> {
     await dbConnect();
 
-    const { projectId, clientId, amount, paymentMethod, transactionReference, notes, invoiceId } = paymentData;
+    const { projectId, clientId, amount, paymentMethod, paymentType, transactionReference, notes, invoiceId } = paymentData;
 
-    if (!projectId || !clientId || !amount || !paymentMethod) {
+    if (!projectId || !clientId || amount === undefined || amount === null || !paymentMethod) {
       throw new Error('Project, Client, Amount, and Payment Method are required');
     }
 
-    if (amount <= 0) {
-      throw new Error('Payment amount must be greater than zero');
+    const numAmount = Number(amount);
+    if (typeof numAmount !== 'number' || isNaN(numAmount) || !isFinite(numAmount) || numAmount <= 0) {
+      throw new Error('Payment amount must be a valid positive number');
     }
 
     // Verify project and client
@@ -99,10 +100,20 @@ export class PaymentService {
     const balances = await this.calculateProjectBalances(projectId.toString());
     
     // Check if new payment exceeds outstanding balance
-    if (amount > balances.outstandingAmount) {
+    const currencySymbol = project.currency === 'INR' ? '₹' : (project.currency === 'USD' ? '$' : project.currency);
+    if (numAmount > balances.outstandingAmount) {
       throw new Error(
-        `Payment amount (${amount}) exceeds outstanding balance (${balances.outstandingAmount}) for project "${project.name}"`
+        `Payment exceeds outstanding balance. Outstanding: ${currencySymbol}${balances.outstandingAmount.toLocaleString('en-IN')} Maximum payment allowed: ${currencySymbol}${balances.outstandingAmount.toLocaleString('en-IN')}`
       );
+    }
+
+    // Auto-link to existing invoice if not provided
+    let finalInvoiceId = invoiceId;
+    if (!finalInvoiceId) {
+      const invoice = await Invoice.findOne({ projectId });
+      if (invoice) {
+        finalInvoiceId = invoice._id;
+      }
     }
 
     const paymentNumber = await this.generateNextPaymentNumber();
@@ -111,10 +122,11 @@ export class PaymentService {
       paymentNumber,
       clientId,
       projectId,
-      invoiceId,
-      amount,
+      invoiceId: finalInvoiceId,
+      amount: numAmount,
       currency: project.currency,
       paymentMethod,
+      paymentType: paymentType || 'INSTALLMENT',
       paymentDate: paymentData.paymentDate || new Date(),
       transactionReference,
       status: 'COMPLETED', // Payments recorded by admin default to COMPLETED
@@ -144,9 +156,15 @@ export class PaymentService {
       });
     }
 
-    // Update invoice status if this payment is linked to an invoice
-    if (invoiceId) {
-      await this.updateInvoiceStatusFromPayments(invoiceId.toString());
+    // Update invoice status and regenerate invoice PDF if linked
+    if (finalInvoiceId) {
+      await this.updateInvoiceStatusFromPayments(finalInvoiceId.toString());
+      try {
+        const { InvoiceService } = await import('./invoice.service');
+        await InvoiceService.generatePDF(finalInvoiceId.toString());
+      } catch (pdfErr) {
+        console.error('Failed to regenerate invoice PDF after recording payment:', pdfErr);
+      }
     }
 
     return savedPayment;

@@ -111,16 +111,26 @@ export class NotificationService {
 
     const balances = await PaymentService.calculateProjectBalances(projectId);
 
+    let paymentStatus = 'UNPAID';
+    if (balances.paidAmount >= balances.totalAmount) {
+      paymentStatus = 'PAID';
+    } else if (balances.paidAmount > 0) {
+      paymentStatus = 'PARTIALLY PAID';
+    }
+
+    const currencySymbol = project.currency === 'INR' ? '₹' : (project.currency === 'USD' ? '$' : project.currency);
+
     const messageText = 
-      `<b>💳 Payment Received</b>\n\n` +
+      `💰 <b>Payment Received</b>\n\n` +
       `Hello ${client.name},\n\n` +
-      `We have received your payment.\n\n` +
+      `We received your payment of:\n\n` +
+      `<b>${currencySymbol}${payment.amount.toLocaleString('en-IN')}</b>\n\n` +
       `<b>Project:</b>\n${project.name}\n\n` +
-      `<b>Payment Received:</b>\n${project.currency} ${payment.amount.toLocaleString('en-IN')}\n\n` +
-      `<b>Total Project Amount:</b>\n${project.currency} ${balances.totalAmount.toLocaleString('en-IN')}\n\n` +
-      `<b>Total Paid:</b>\n${project.currency} ${balances.paidAmount.toLocaleString('en-IN')}\n\n` +
-      `<b>Remaining:</b>\n${project.currency} ${balances.outstandingAmount.toLocaleString('en-IN')}\n\n` +
-      `<b>Payment Reference:</b>\n${payment.paymentNumber}\n\n` +
+      `<b>Project Total:</b>\n${currencySymbol}${balances.totalAmount.toLocaleString('en-IN')}\n\n` +
+      `<b>Total Paid:</b>\n${currencySymbol}${balances.paidAmount.toLocaleString('en-IN')}\n\n` +
+      `<b>Outstanding:</b>\n${currencySymbol}${balances.outstandingAmount.toLocaleString('en-IN')}\n\n` +
+      `<b>Payment Status:</b>\n${paymentStatus}\n\n` +
+      `<b>Receipt:</b>\n${payment.paymentNumber}\n\n` +
       `Thank you.`;
 
     const notification = new Notification({

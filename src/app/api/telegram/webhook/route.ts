@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { TelegramService } from '@/services/telegram.service';
 
 export async function POST(req: NextRequest) {
+  const T1 = performance.now();
+
   // Security verification
   const secretHeader = req.headers.get('x-telegram-bot-api-secret-token');
   const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
@@ -23,13 +25,36 @@ export async function POST(req: NextRequest) {
       payload: update,
     };
 
-    // Run the bot update command routing in background without holding connection
-    // This prevents timeout retries from Telegram if processing takes time
-    TelegramService.handleWebhookUpdate(update).catch((err) => {
-      console.error('Error handling Telegram webhook update:', err);
-    });
+    // Run the bot update command routing and wait for it to complete
+    const result = await TelegramService.handleWebhookUpdate(update, T1);
 
-    return NextResponse.json({ success: true });
+    const T5 = performance.now();
+    if (result && result.timings) {
+      const timings = result.timings;
+      timings.T2 = timings.T3 ? timings.T3 : performance.now();
+      timings.T5 = T5;
+
+      const processing = Math.round(timings.T2 - timings.T1);
+      const telegramAPI = Math.round(timings.telegramAPI);
+      const totalTiming = Math.round(timings.T5 - timings.T1);
+
+      const webhookToProcessing = Math.round(result.startTotal ? result.startTotal - timings.T1 : 0);
+      const processingToTelegram = timings.T3 && result.startTotal ? Math.round(timings.T3 - result.startTotal) : 0;
+      const telegramResponseToHTTP200 = timings.T4 ? Math.round(timings.T5 - timings.T4) : 0;
+
+      console.log(`[TELEGRAM_TIMING]
+command=${result.command}
+processing=${processing}ms
+telegramAPI=${telegramAPI}ms
+total=${totalTiming}ms
+
+webhookToProcessing=${webhookToProcessing}ms
+processingToTelegram=${processingToTelegram}ms
+telegramAPI=${telegramAPI}ms
+telegramResponseToHTTP200=${telegramResponseToHTTP200}ms`);
+    }
+
+    return NextResponse.json({ success: true, data: result });
   } catch (error: any) {
     console.error('Telegram webhook handler crashed:', error);
     return NextResponse.json(
