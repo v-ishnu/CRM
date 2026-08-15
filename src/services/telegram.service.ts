@@ -156,6 +156,9 @@ export class TelegramService {
       });
 
       const data = await response.json();
+      if (data.ok !== true) {
+        console.error(`Telegram sendMessage failed for chat ${chatId}:`, data);
+      }
       return data.ok === true;
     } catch (error) {
       console.error(`Failed to send Telegram message to ${chatId}:`, error);
@@ -221,6 +224,9 @@ export class TelegramService {
       });
 
       const data = await response.json();
+      if (data.ok !== true) {
+        console.error(`Telegram sendDocument failed for chat ${chatId}:`, data);
+      }
       return data.ok === true;
     } catch (error) {
       console.error(`Failed to send Telegram document to ${chatId}:`, error);
@@ -241,6 +247,12 @@ export class TelegramService {
     const userId = message.from.id.toString();
     const username = message.from.username || '';
     const text = (message.text || '').trim();
+
+    // Safe structured logging of incoming command/message
+    if (text.startsWith('/')) {
+      const commandName = text.split(' ')[0];
+      console.log(`TELEGRAM_COMMAND_RECEIVED\ncommand=${commandName}\ntelegramUserId=${userId}\nchatId=${chatId}`);
+    }
 
     // Check if the user is the Admin
     const adminTelegramId = process.env.ADMIN_TELEGRAM_ID;
@@ -315,7 +327,10 @@ export class TelegramService {
    * Handle Client bot commands
    */
   private static async handleClientCommand(chatId: string, client: any, text: string): Promise<void> {
-    const cmd = text.toLowerCase().split(' ')[0];
+    let cmd = text.toLowerCase().split(' ')[0];
+    if (cmd.includes('@')) {
+      cmd = cmd.split('@')[0];
+    }
 
     switch (cmd) {
       case '/start':
@@ -443,7 +458,10 @@ export class TelegramService {
    */
   private static async handleAdminCommand(chatId: string, text: string): Promise<void> {
     const args = text.split(' ');
-    const cmd = args[0].toLowerCase();
+    let cmd = args[0].toLowerCase();
+    if (cmd.includes('@')) {
+      cmd = cmd.split('@')[0];
+    }
 
     switch (cmd) {
       case '/start':

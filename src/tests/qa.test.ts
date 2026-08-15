@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import mongoose from 'mongoose';
 import fs from 'fs';
 import path from 'path';
@@ -439,6 +439,45 @@ TOTAL STATUS: ${failedCount === 0 ? 'SUCCESS' : 'FAILURE'}
       expect(updatedClient!.telegramConnected).toBe(true);
       expect(updatedClient!.telegramUserId).toBe('1122334455');
       countTest(updatedClient!.telegramConnected === true);
+    });
+
+    it('should successfully route client webhook commands without throwing errors', async () => {
+      const commands = ['/myprofile', '/myproject', '/status', '/invoices'];
+      
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+        return {
+          ok: true,
+          json: async () => ({ ok: true }),
+        } as Response;
+      });
+
+      try {
+        for (const cmd of commands) {
+          const webhookPayload = {
+            update_id: 12345,
+            message: {
+              message_id: 1000,
+              from: {
+                id: 1122334455,
+                username: 'qa_tester_profile',
+                is_bot: false,
+              },
+              chat: {
+                id: 1122334455,
+                type: 'private',
+              },
+              text: cmd,
+              date: Math.floor(Date.now() / 1000),
+            },
+          };
+
+          // Directly await handleWebhookUpdate to capture any crashes
+          await expect(TelegramService.handleWebhookUpdate(webhookPayload)).resolves.not.toThrow();
+        }
+      } finally {
+        fetchSpy.mockRestore();
+      }
+      countTest(true);
     });
 
     it('should persist logs and update state to FAILED when Telegram dispatch fails', async () => {
