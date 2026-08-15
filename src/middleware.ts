@@ -7,13 +7,14 @@ export async function middleware(req: NextRequest) {
   // Define public paths that shouldn't require auth
   const isAuthRoute = pathname.startsWith('/api/auth');
   const isWebhookRoute = pathname.startsWith('/api/telegram/webhook');
+  const isLatencyRoute = pathname.startsWith('/api/telegram/test-latency');
   const isLoginRoute = pathname === '/login';
   
   // Grab session cookie
   const sessionToken = req.cookies.get('session')?.value;
 
   // Let public routes pass
-  if (isAuthRoute || isWebhookRoute) {
+  if (isAuthRoute || isWebhookRoute || isLatencyRoute) {
     return NextResponse.next();
   }
 
@@ -30,7 +31,7 @@ export async function middleware(req: NextRequest) {
 
   // Check if accessing dashboard routes or protected api routes
   const isDashboardRoute = pathname.startsWith('/dashboard') || pathname === '/';
-  const isProtectedRoute = pathname.startsWith('/api/') && !isAuthRoute && !isWebhookRoute;
+  const isProtectedRoute = pathname.startsWith('/api/') && !isAuthRoute && !isWebhookRoute && !isLatencyRoute;
 
   if (isDashboardRoute || isProtectedRoute) {
     if (!sessionToken) {

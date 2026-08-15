@@ -138,13 +138,14 @@ export class TelegramService {
   /**
    * Send text message to a chat
    */
-  static async sendMessage(chatId: string, text: string): Promise<boolean> {
+  static async sendMessage(chatId: string, text: string, timings?: { telegramAPI: number }): Promise<boolean> {
     if (!this.isConfigured()) {
       console.warn('Telegram Bot token is missing. Cannot send message.');
       return false;
     }
 
     try {
+      const apiStart = performance.now();
       const response = await fetch(`${TELEGRAM_API}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -156,6 +157,9 @@ export class TelegramService {
       });
 
       const data = await response.json();
+      if (timings) {
+        timings.telegramAPI += Math.round(performance.now() - apiStart);
+      }
       if (data.ok !== true) {
         console.error(`Telegram sendMessage failed for chat ${chatId}:`, data);
       }
@@ -169,7 +173,13 @@ export class TelegramService {
   /**
    * Send PDF document to a chat
    */
-  static async sendDocument(chatId: string, relativeFilePath: string, filename: string, caption?: string): Promise<boolean> {
+  static async sendDocument(
+    chatId: string,
+    relativeFilePath: string,
+    filename: string,
+    caption?: string,
+    timings?: { telegramAPI: number; databaseQuery: number }
+  ): Promise<boolean> {
     if (!this.isConfigured()) {
       console.warn('Telegram Bot token is missing. Cannot send document.');
       return false;
@@ -183,8 +193,13 @@ export class TelegramService {
         const parts = relativeFilePath.split('/');
         const invoiceId = parts[3]; // /api/invoices/[id]/pdf
         
+        const dbStart = performance.now();
         await dbConnect();
         const invoice = await Invoice.findById(invoiceId);
+        if (timings) {
+          timings.databaseQuery += Math.round(performance.now() - dbStart);
+        }
+
         if (!invoice || !invoice.pdfStoragePath) {
           throw new Error(`Invoice or storage path not found for: ${relativeFilePath}`);
         }
@@ -197,8 +212,14 @@ export class TelegramService {
           // If filesystem fallback fails, check if we can resolve it via MongoDB to support virtual test paths
           const filenameOnly = path.basename(relativeFilePath);
           const invoiceNumber = filenameOnly.replace('.pdf', '');
+          
+          const dbStart = performance.now();
           await dbConnect();
           const invoice = await Invoice.findOne({ invoiceNumber });
+          if (timings) {
+            timings.databaseQuery += Math.round(performance.now() - dbStart);
+          }
+
           if (invoice && invoice.pdfStoragePath) {
             fileBuffer = await StorageService.getInvoicePDF(invoice.pdfStoragePath);
           } else {
@@ -218,12 +239,16 @@ export class TelegramService {
         formData.append('caption', caption);
       }
 
+      const apiStart = performance.now();
       const response = await fetch(`${TELEGRAM_API}/sendDocument`, {
         method: 'POST',
         body: formData,
       });
 
       const data = await response.json();
+      if (timings) {
+        timings.telegramAPI += Math.round(performance.now() - apiStart);
+      }
       if (data.ok !== true) {
         console.error(`Telegram sendDocument failed for chat ${chatId}:`, data);
       }
@@ -237,8 +262,18 @@ export class TelegramService {
   /**
    * Process updates received via Telegram Webhook
    */
-  static async handleWebhookUpdate(update: any): Promise<void> {
+  static async handleWebhookUpdate(update: any): Promise<any> {
+    const startTotal = performance.now();
+    const timings = {
+      clientLookup: 0,
+      databaseQuery: 0,
+      telegramAPI: 0,
+      handler: 0,
+    };
+
+    const dbConnStart = performance.now();
     await dbConnect();
+    timings.databaseQuery += Math.round(performance.now() - dbConnStart);
 
     const message = update?.message;
     if (!message || !message.chat || !message.from) return;
@@ -259,12 +294,27 @@ export class TelegramService {
     const isAdmin = adminTelegramId && userId === adminTelegramId;
 
     if (isAdmin) {
-      await this.handleAdminCommand(chatId, text);
-      return;
+      const handlerStart = performance.now();
+      await this.handleAdminCommand(chatId, text, timings);
+      const handlerTime = performance.now() - handlerStart;
+      timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
+      
+      const total = Math.round(performance.now() - startTotal);
+      console.log(`TELEGRAM_PERF\ncommand=${text.split(' ')[0]}\nclientLookup=${timings.clientLookup}ms\ndatabaseQuery=${timings.databaseQuery}ms\nhandler=${timings.handler}ms\ntelegramAPI=${timings.telegramAPI}ms\ntotal=${total}ms`);
+      return {
+        command: text.split(' ')[0],
+        clientLookup: timings.clientLookup,
+        databaseQuery: timings.databaseQuery,
+        handler: timings.handler,
+        telegramAPI: timings.telegramAPI,
+        total,
+      };
     }
 
     // Try to find the client associated with this Telegram userId
+    const lookupStart = performance.now();
     let client: any = await Client.findOne({ telegramUserId: userId });
+    timings.clientLookup = Math.round(performance.now() - lookupStart);
 
     // Handle Deep Linking connection token
     const isStartCommand = text.startsWith('/start');
@@ -278,35 +328,86 @@ export class TelegramService {
 
     if (isStartCommand && startToken) {
       try {
+        const handlerStart = performance.now();
+        const dbStart = performance.now();
         client = await ClientService.connectTelegram(startToken, {
           telegramUserId: userId,
           telegramUsername: username,
           telegramChatId: chatId,
         });
+        timings.databaseQuery += Math.round(performance.now() - dbStart);
 
         await this.sendMessage(
           chatId,
-          `<b>🎉 Telegram Successfully Connected!</b>\n\nHello <b>${client.name}</b>, your Telegram profile is now securely linked to your account with client code <b>${client.clientCode}</b>.\n\nYou can use the following commands to interact with your account:\n/myprofile - View Profile\n/myproject - View Project Details\n/payments - View Payment Logs\n/invoices - View Billing History\n/status - Check Development Progress`
+          `<b>🎉 Telegram Successfully Connected!</b>\n\nHello <b>${client.name}</b>, your Telegram profile is now securely linked to your account with client code <b>${client.clientCode}</b>.\n\nYou can use the following commands to interact with your account:\n/myprofile - View Profile\n/myproject - View Project Details\n/payments - View Payment Logs\n/invoices - View Billing History\n/status - Check Development Progress`,
+          timings
         );
-        return;
+        
+        const handlerTime = performance.now() - handlerStart;
+        timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
+        
+        const total = Math.round(performance.now() - startTotal);
+        console.log(`TELEGRAM_PERF\ncommand=${text.split(' ')[0]}\nclientLookup=${timings.clientLookup}ms\ndatabaseQuery=${timings.databaseQuery}ms\nhandler=${timings.handler}ms\ntelegramAPI=${timings.telegramAPI}ms\ntotal=${total}ms`);
+        return {
+          command: text.split(' ')[0],
+          clientLookup: timings.clientLookup,
+          databaseQuery: timings.databaseQuery,
+          handler: timings.handler,
+          telegramAPI: timings.telegramAPI,
+          total,
+        };
       } catch (error: any) {
-        await this.sendMessage(chatId, `<b>❌ Connection Failed</b>\n\n${error.message || 'The token is invalid or has expired.'}`);
-        return;
+        const handlerStart = performance.now();
+        await this.sendMessage(chatId, `<b>❌ Connection Failed</b>\n\n${error.message || 'The token is invalid or has expired.'}`, timings);
+        const handlerTime = performance.now() - handlerStart;
+        timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
+        
+        const total = Math.round(performance.now() - startTotal);
+        console.log(`TELEGRAM_PERF\ncommand=${text.split(' ')[0]}\nclientLookup=${timings.clientLookup}ms\ndatabaseQuery=${timings.databaseQuery}ms\nhandler=${timings.handler}ms\ntelegramAPI=${timings.telegramAPI}ms\ntotal=${total}ms`);
+        return {
+          command: text.split(' ')[0],
+          clientLookup: timings.clientLookup,
+          databaseQuery: timings.databaseQuery,
+          handler: timings.handler,
+          telegramAPI: timings.telegramAPI,
+          total,
+        };
       }
     }
 
     // If client is not connected
     if (!client) {
+      const handlerStart = performance.now();
       // Look up by username as fallback if connected flag isn't set, or prompt setup
+      const dbStart = performance.now();
       const clientByUsername = username ? await Client.findOne({ telegramUsername: username }) : null;
+      timings.databaseQuery += Math.round(performance.now() - dbStart);
+      
       if (clientByUsername && !clientByUsername.telegramConnected) {
         // Link them
         clientByUsername.telegramConnected = true;
         clientByUsername.telegramUserId = userId;
         clientByUsername.telegramChatId = chatId;
+        
+        const dbStart2 = performance.now();
         client = await clientByUsername.save();
-        await this.sendMessage(chatId, `<b>🎉 Welcome back, ${client.name}!</b>\n\nYour account has been matched. Use /help to see commands.`);
-        return;
+        timings.databaseQuery += Math.round(performance.now() - dbStart2);
+        
+        await this.sendMessage(chatId, `<b>🎉 Welcome back, ${client.name}!</b>\n\nYour account has been matched. Use /help to see commands.`, timings);
+        
+        const handlerTime = performance.now() - handlerStart;
+        timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
+        
+        const total = Math.round(performance.now() - startTotal);
+        console.log(`TELEGRAM_PERF\ncommand=${text.split(' ')[0]}\nclientLookup=${timings.clientLookup}ms\ndatabaseQuery=${timings.databaseQuery}ms\nhandler=${timings.handler}ms\ntelegramAPI=${timings.telegramAPI}ms\ntotal=${total}ms`);
+        return {
+          command: text.split(' ')[0],
+          clientLookup: timings.clientLookup,
+          databaseQuery: timings.databaseQuery,
+          handler: timings.handler,
+          telegramAPI: timings.telegramAPI,
+          total,
+        };
       }
 
       await this.sendMessage(
@@ -314,19 +415,52 @@ export class TelegramService {
         `<b>👋 Welcome to Dr Debuggers.</b>\n\n` +
         `Your Telegram account is not connected to a client account yet.\n\n` +
         `Please ask the administrator for your secure connection link.\n\n` +
-        `<i>Your Telegram User ID:</i> <code>${userId}</code>`
+        `<i>Your Telegram User ID:</i> <code>${userId}</code>`,
+        timings
       );
-      return;
+      
+      const handlerTime = performance.now() - handlerStart;
+      timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
+      
+      const total = Math.round(performance.now() - startTotal);
+      console.log(`TELEGRAM_PERF\ncommand=${text.split(' ')[0]}\nclientLookup=${timings.clientLookup}ms\ndatabaseQuery=${timings.databaseQuery}ms\nhandler=${timings.handler}ms\ntelegramAPI=${timings.telegramAPI}ms\ntotal=${total}ms`);
+      return {
+        command: text.split(' ')[0],
+        clientLookup: timings.clientLookup,
+        databaseQuery: timings.databaseQuery,
+        handler: timings.handler,
+        telegramAPI: timings.telegramAPI,
+        total,
+      };
     }
 
     // Standard client commands
-    await this.handleClientCommand(chatId, client, text);
+    const handlerStart = performance.now();
+    await this.handleClientCommand(chatId, client, text, timings);
+    const handlerTime = performance.now() - handlerStart;
+    timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
+    
+    const total = Math.round(performance.now() - startTotal);
+    console.log(`TELEGRAM_PERF\ncommand=${text.split(' ')[0]}\nclientLookup=${timings.clientLookup}ms\ndatabaseQuery=${timings.databaseQuery}ms\nhandler=${timings.handler}ms\ntelegramAPI=${timings.telegramAPI}ms\ntotal=${total}ms`);
+    return {
+      command: text.split(' ')[0],
+      clientLookup: timings.clientLookup,
+      databaseQuery: timings.databaseQuery,
+      handler: timings.handler,
+      telegramAPI: timings.telegramAPI,
+      total,
+    };
   }
 
   /**
    * Handle Client bot commands
    */
-  private static async handleClientCommand(chatId: string, client: any, text: string): Promise<void> {
+  private static async handleClientCommand(
+    chatId: string,
+    client: any,
+    text: string,
+    timings?: { telegramAPI: number; databaseQuery: number }
+  ): Promise<void> {
     let cmd = text.toLowerCase().split(' ')[0];
     if (cmd.includes('@')) {
       cmd = cmd.split('@')[0];
@@ -337,7 +471,8 @@ export class TelegramService {
       case '/help':
         await this.sendMessage(
           chatId,
-          `<b>👋 Hello, ${client.name}!</b>\n\nHere are the available commands:\n/myprofile - View Profile Information\n/myproject - View Project Budgets\n/payments - View Payments List\n/invoices - View Invoices & PDF\n/status - Check Current Phase`
+          `<b>👋 Hello, ${client.name}!</b>\n\nHere are the available commands:\n/myprofile - View Profile Information\n/myproject - View Project Budgets\n/payments - View Payments List\n/invoices - View Invoices & PDF\n/status - Check Current Phase`,
+          timings
         );
         break;
 
@@ -350,42 +485,62 @@ export class TelegramService {
           `<b>Company:</b> ${client.company || 'N/A'}\n` +
           `<b>Email:</b> ${client.email}\n` +
           `<b>Phone:</b> ${client.phone || 'N/A'}\n` +
-          `<b>Address:</b> ${client.address || ''}, ${client.city || ''}, ${client.country || ''}`
+          `<b>Address:</b> ${client.address || ''}, ${client.city || ''}, ${client.country || ''}`,
+          timings
         );
         break;
 
       case '/myproject': {
+        const dbStart = performance.now();
         const projects = await Project.find({ clientId: client._id });
+        if (timings) {
+          timings.databaseQuery += Math.round(performance.now() - dbStart);
+        }
+
         if (projects.length === 0) {
-          await this.sendMessage(chatId, 'No active projects found for your account.');
+          await this.sendMessage(chatId, 'No active projects found for your account.', timings);
           return;
         }
 
         let msg = '<b>💻 Project Budget Details</b>\n\n';
         for (const p of projects) {
+          const dbStart2 = performance.now();
           const balances = await PaymentService.calculateProjectBalances(p._id.toString());
+          if (timings) {
+            timings.databaseQuery += Math.round(performance.now() - dbStart2);
+          }
+
           msg += `<b>Project:</b> ${p.name}\n` +
                  `<b>Service:</b> ${p.serviceType}\n` +
                  `<b>Budget:</b> ${p.currency} ${p.totalAmount.toLocaleString('en-IN')}\n` +
                  `<b>Paid:</b> ${p.currency} ${balances.paidAmount.toLocaleString('en-IN')}\n` +
                  `<b>Outstanding:</b> ${p.currency} ${balances.outstandingAmount.toLocaleString('en-IN')}\n\n`;
         }
-        await this.sendMessage(chatId, msg);
+        await this.sendMessage(chatId, msg, timings);
         break;
       }
 
       case '/payment':
       case '/payments': {
+        const dbStart = performance.now();
         const projects = await Project.find({ clientId: client._id });
+        if (timings) {
+          timings.databaseQuery += Math.round(performance.now() - dbStart);
+        }
+
         if (projects.length === 0) {
-          await this.sendMessage(chatId, 'No projects found.');
+          await this.sendMessage(chatId, 'No projects found.', timings);
           return;
         }
 
         let msg = '<b>💰 Payment Summary</b>\n\n';
         for (const p of projects) {
+          const dbStart2 = performance.now();
           const balances = await PaymentService.calculateProjectBalances(p._id.toString());
           const recentPayments = await Payment.find({ projectId: p._id, status: 'COMPLETED' }).sort({ paymentDate: -1 }).limit(3);
+          if (timings) {
+            timings.databaseQuery += Math.round(performance.now() - dbStart2);
+          }
 
           msg += `<b>Project:</b> ${p.name}\n` +
                  `<b>Total Value:</b> ${p.currency} ${balances.totalAmount.toLocaleString('en-IN')}\n` +
@@ -400,19 +555,24 @@ export class TelegramService {
             msg += '\n';
           }
         }
-        await this.sendMessage(chatId, msg);
+        await this.sendMessage(chatId, msg, timings);
         break;
       }
 
       case '/invoice':
       case '/invoices': {
+        const dbStart = performance.now();
         const invoices = await Invoice.find({ clientId: client._id }).sort({ createdAt: -1 });
+        if (timings) {
+          timings.databaseQuery += Math.round(performance.now() - dbStart);
+        }
+
         if (invoices.length === 0) {
-          await this.sendMessage(chatId, 'No invoices generated yet.');
+          await this.sendMessage(chatId, 'No invoices generated yet.', timings);
           return;
         }
 
-        await this.sendMessage(chatId, '<b>📄 Your Invoices</b>\n\nRetrieving your invoices... sending latest PDF...');
+        await this.sendMessage(chatId, '<b>📄 Your Invoices</b>\n\nRetrieving your invoices... sending latest PDF...', timings);
         
         // Send latest PDF if exists
         const latestInvoice = invoices[0];
@@ -422,18 +582,24 @@ export class TelegramService {
             chatId,
             latestInvoice.pdfPath,
             filename,
-            `Latest Invoice ${latestInvoice.invoiceNumber}\nAmount: ${latestInvoice.currency} ${latestInvoice.total.toLocaleString('en-IN')}\nStatus: ${latestInvoice.status}`
+            `Latest Invoice ${latestInvoice.invoiceNumber}\nAmount: ${latestInvoice.currency} ${latestInvoice.total.toLocaleString('en-IN')}\nStatus: ${latestInvoice.status}`,
+            timings
           );
         } else {
-          await this.sendMessage(chatId, `Latest Invoice ${latestInvoice.invoiceNumber} cannot be fetched as PDF is missing.`);
+          await this.sendMessage(chatId, `Latest Invoice ${latestInvoice.invoiceNumber} cannot be fetched as PDF is missing.`, timings);
         }
         break;
       }
 
       case '/status': {
+        const dbStart = performance.now();
         const projects = await Project.find({ clientId: client._id });
+        if (timings) {
+          timings.databaseQuery += Math.round(performance.now() - dbStart);
+        }
+
         if (projects.length === 0) {
-          await this.sendMessage(chatId, 'No active projects.');
+          await this.sendMessage(chatId, 'No active projects.', timings);
           return;
         }
 
@@ -444,19 +610,23 @@ export class TelegramService {
                  `<b>Start Date:</b> ${p.startDate ? new Date(p.startDate).toLocaleDateString() : 'N/A'}\n` +
                  `<b>Expected Completion:</b> ${p.expectedCompletionDate ? new Date(p.expectedCompletionDate).toLocaleDateString() : 'N/A'}\n\n`;
         }
-        await this.sendMessage(chatId, msg);
+        await this.sendMessage(chatId, msg, timings);
         break;
       }
 
       default:
-        await this.sendMessage(chatId, 'Unknown command. Use /help to see the available commands.');
+        await this.sendMessage(chatId, 'Unknown command. Use /help to see the available commands.', timings);
     }
   }
 
   /**
    * Handle Admin bot commands
    */
-  private static async handleAdminCommand(chatId: string, text: string): Promise<void> {
+  private static async handleAdminCommand(
+    chatId: string,
+    text: string,
+    timings?: { telegramAPI: number; databaseQuery: number }
+  ): Promise<void> {
     const args = text.split(' ');
     let cmd = args[0].toLowerCase();
     if (cmd.includes('@')) {
@@ -474,14 +644,20 @@ export class TelegramService {
           `/client &lt;clientCode&gt; - Show client profile details\n` +
           `/payments - Show recent payments\n` +
           `/pending - Show pending/unpaid invoices\n` +
-          `/invoices - Show all invoices`
+          `/invoices - Show all invoices`,
+          timings
         );
         break;
 
       case '/clients': {
+        const dbStart = performance.now();
         const clients = await Client.find().limit(10).sort({ createdAt: -1 });
+        if (timings) {
+          timings.databaseQuery += Math.round(performance.now() - dbStart);
+        }
+
         if (clients.length === 0) {
-          await this.sendMessage(chatId, 'No clients registered.');
+          await this.sendMessage(chatId, 'No clients registered.', timings);
           return;
         }
 
@@ -490,31 +666,46 @@ export class TelegramService {
           msg += `Code: <code>${c.clientCode}</code> | <b>${c.name}</b>\n` +
                  `Status: ${c.status} | Telegram: ${c.telegramConnected ? '✅ Connected' : '❌ Linked'}\n\n`;
         }
-        await this.sendMessage(chatId, msg);
+        await this.sendMessage(chatId, msg, timings);
         break;
       }
 
       case '/client': {
         if (args.length < 2) {
-          await this.sendMessage(chatId, 'Please specify clientCode: <code>/client CLIENT-CODE</code>');
+          await this.sendMessage(chatId, 'Please specify clientCode: <code>/client CLIENT-CODE</code>', timings);
           return;
         }
 
         const code = args[1].toUpperCase().trim();
+        const dbStart = performance.now();
         const c = await Client.findOne({ clientCode: code });
+        if (timings) {
+          timings.databaseQuery += Math.round(performance.now() - dbStart);
+        }
+
         if (!c) {
-          await this.sendMessage(chatId, `Client with code <b>${code}</b> not found.`);
+          await this.sendMessage(chatId, `Client with code <b>${code}</b> not found.`, timings);
           return;
         }
 
         // Projects
+        const dbStart2 = performance.now();
         const projects = await Project.find({ clientId: c._id });
+        if (timings) {
+          timings.databaseQuery += Math.round(performance.now() - dbStart2);
+        }
+
         let projectsStr = '';
         let totalRevenue = 0;
         let totalPaid = 0;
         
         for (const p of projects) {
+          const dbStart3 = performance.now();
           const bal = await PaymentService.calculateProjectBalances(p._id.toString());
+          if (timings) {
+            timings.databaseQuery += Math.round(performance.now() - dbStart3);
+          }
+
           totalRevenue += p.totalAmount;
           totalPaid += bal.paidAmount;
           projectsStr += `- ${p.name} (${p.status}): ${p.currency} ${p.totalAmount.toLocaleString('en-IN')}\n`;
@@ -534,15 +725,21 @@ export class TelegramService {
           `- Total Project Value: Rs. ${totalRevenue.toLocaleString('en-IN')}\n` +
           `- Total Paid: Rs. ${totalPaid.toLocaleString('en-IN')}\n` +
           `- Outstanding Balance: Rs. ${outstanding.toLocaleString('en-IN')}\n\n` +
-          `<b>Projects:</b>\n${projectsStr || 'No projects.'}`
+          `<b>Projects:</b>\n${projectsStr || 'No projects.'}`,
+          timings
         );
         break;
       }
 
       case '/payments': {
+        const dbStart = performance.now();
         const payments = await Payment.find().populate('clientId', 'name').sort({ paymentDate: -1 }).limit(10);
+        if (timings) {
+          timings.databaseQuery += Math.round(performance.now() - dbStart);
+        }
+
         if (payments.length === 0) {
-          await this.sendMessage(chatId, 'No payments recorded.');
+          await this.sendMessage(chatId, 'No payments recorded.', timings);
           return;
         }
 
@@ -552,14 +749,19 @@ export class TelegramService {
                  `Amount: ${p.currency} ${p.amount.toLocaleString('en-IN')} | Ref: ${p.transactionReference || 'N/A'}\n` +
                  `Date: ${new Date(p.paymentDate).toLocaleDateString()} | Status: ${p.status}\n\n`;
         }
-        await this.sendMessage(chatId, msg);
+        await this.sendMessage(chatId, msg, timings);
         break;
       }
 
       case '/pending': {
+        const dbStart = performance.now();
         const invoices = await Invoice.find({ status: { $ne: 'PAID' } }).populate('clientId', 'name').limit(10);
+        if (timings) {
+          timings.databaseQuery += Math.round(performance.now() - dbStart);
+        }
+
         if (invoices.length === 0) {
-          await this.sendMessage(chatId, 'No outstanding invoices.');
+          await this.sendMessage(chatId, 'No outstanding invoices.', timings);
           return;
         }
 
@@ -569,14 +771,19 @@ export class TelegramService {
                  `Total: ${inv.currency} ${inv.total.toLocaleString('en-IN')} | Due: ${inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : 'N/A'}\n` +
                  `Status: ${inv.status}\n\n`;
         }
-        await this.sendMessage(chatId, msg);
+        await this.sendMessage(chatId, msg, timings);
         break;
       }
 
       case '/invoices': {
+        const dbStart = performance.now();
         const invoices = await Invoice.find().populate('clientId', 'name').sort({ createdAt: -1 }).limit(10);
+        if (timings) {
+          timings.databaseQuery += Math.round(performance.now() - dbStart);
+        }
+
         if (invoices.length === 0) {
-          await this.sendMessage(chatId, 'No invoices generated.');
+          await this.sendMessage(chatId, 'No invoices generated.', timings);
           return;
         }
 
@@ -586,12 +793,12 @@ export class TelegramService {
                  `Total: ${inv.currency} ${inv.total.toLocaleString('en-IN')} | Date: ${new Date(inv.invoiceDate).toLocaleDateString()}\n` +
                  `Status: ${inv.status}\n\n`;
         }
-        await this.sendMessage(chatId, msg);
+        await this.sendMessage(chatId, msg, timings);
         break;
       }
 
       default:
-        await this.sendMessage(chatId, 'Unknown command. Use /admin to view the menu.');
+        await this.sendMessage(chatId, 'Unknown command. Use /admin to view the menu.', timings);
     }
   }
 }

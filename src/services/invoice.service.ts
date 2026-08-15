@@ -147,9 +147,9 @@ export class InvoiceService {
     const project = invoice.projectId as any;
 
     // Get company details from env with fallbacks
-    const compName = process.env.COMPANY_NAME || 'Antigravity Development';
-    const compAddress = process.env.COMPANY_ADDRESS || '123 Tech Park, Suite 400';
-    const compEmail = process.env.COMPANY_EMAIL || 'billing@example.com';
+    const compName = process.env.COMPANY_NAME || 'Dr. Debuggers';
+    const compAddress = process.env.COMPANY_ADDRESS || 'Ramkrishna Nagar, Patna, 200027';
+    const compEmail = process.env.COMPANY_EMAIL || 'work.debuggers@gmail.com';
     const compPhone = process.env.COMPANY_PHONE || '+1 (555) 019-9000';
     const compWebsite = process.env.COMPANY_WEBSITE || 'www.example.com';
 
@@ -176,10 +176,10 @@ export class InvoiceService {
       doc.on('end', async () => {
         try {
           const pdfBuffer = Buffer.concat(chunks);
-          
+
           const year = new Date(invoice.invoiceDate).getFullYear();
           const storagePath = `invoices/${year}/${invoice.invoiceNumber}.pdf`;
-          
+
           // Upload to Supabase Storage
           await StorageService.uploadInvoicePDF(pdfBuffer, storagePath);
 
@@ -205,8 +205,9 @@ export class InvoiceService {
       doc.fillColor(primaryColor).fontSize(20).text(compName, 50, 50, { bold: true } as any);
       doc.fontSize(9).fillColor(textColor);
       doc.text(compAddress, 50, 75);
-      doc.text(`Email: ${compEmail}  |  Phone: ${compPhone}`, 50, 90);
-      doc.text(`Website: ${compWebsite}`, 50, 105);
+      doc.text(`Email: ${compEmail}`);
+      // | Phone: ${compPhone}`, 50, 90
+      // doc.text(`Website: ${compWebsite}`, 50, 105);
 
       // INVOICE text right-aligned
       doc.fillColor(secondaryColor).fontSize(28).text('INVOICE', 400, 48, { align: 'right' } as any);
@@ -257,7 +258,7 @@ export class InvoiceService {
         doc.text(item.quantity.toString(), 350, y + 8, { width: 40, align: 'right' } as any);
         doc.text(`${invoice.currency === 'INR' ? 'Rs. ' : '$ '}${item.unitPrice.toLocaleString('en-IN')}`, 400, y + 8, { width: 70, align: 'right' } as any);
         doc.text(`${invoice.currency === 'INR' ? 'Rs. ' : '$ '}${item.amount.toLocaleString('en-IN')}`, 480, y + 8, { width: 60, align: 'right' } as any);
-        
+
         y += 28;
         doc.moveTo(50, y).lineTo(550, y).strokeColor(lightGray).lineWidth(0.5).stroke();
       }
