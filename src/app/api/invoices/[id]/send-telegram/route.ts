@@ -51,8 +51,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // Regenerate PDF if missing before dispatch
-    if (!invoice.pdfPath) {
-      invoice.pdfPath = `/invoices/${invoice.invoiceNumber}.pdf`;
+    if (!invoice.pdfPath || !invoice.pdfStoragePath) {
+      invoice.pdfPath = `/api/invoices/${invoice._id}/pdf`;
       await invoice.save();
     }
     await InvoiceService.generatePDF(id);

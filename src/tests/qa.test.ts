@@ -21,6 +21,7 @@ import { InvoiceService } from '@/services/invoice.service';
 import { NotificationService } from '@/services/notification.service';
 import { TelegramService } from '@/services/telegram.service';
 import { AuditService } from '@/services/audit.service';
+import { StorageService } from '@/services/storage.service';
 
 // JWT helper
 import { signJWT } from '@/lib/auth/jwt';
@@ -304,13 +305,15 @@ TOTAL STATUS: ${failedCount === 0 ? 'SUCCESS' : 'FAILURE'}
       countTest(uniqueInvoiceNumbers.size === 5);
     });
 
-    it('should generate a physical invoice PDF and confirm it starts with %PDF header', async () => {
-      const filepath = await InvoiceService.generatePDF(testInvoiceId);
-      const fullpath = path.join(process.cwd(), 'public', filepath);
-      
-      expect(fs.existsSync(fullpath)).toBe(true);
-      
-      const fileBuffer = fs.readFileSync(fullpath);
+    it('should generate a virtual invoice PDF in memory, upload to Supabase and confirm it starts with %PDF header', async () => {
+      const generatedInvoice = await InvoiceService.generatePDF(testInvoiceId);
+      expect(generatedInvoice.pdfPath).toBe(`/api/invoices/${testInvoiceId}/pdf`);
+
+      const invoice = await Invoice.findById(testInvoiceId);
+      expect(invoice!.pdfStoragePath).toBeDefined();
+      expect(invoice!.pdfBucket).toBeDefined();
+
+      const fileBuffer = await StorageService.getInvoicePDF(invoice!.pdfStoragePath!);
       // Validate PDF signature %PDF (first 4 bytes are "%PDF")
       const isPDF = fileBuffer.toString('utf-8', 0, 4) === '%PDF';
       expect(isPDF).toBe(true);

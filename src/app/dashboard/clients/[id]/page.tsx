@@ -17,6 +17,7 @@ import {
   Copy,
   Check,
   Plus,
+  Trash2,
   Download,
   Loader2,
   Calendar,
@@ -110,6 +111,9 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [processingInvs, setProcessingInvs] = useState<Record<string, boolean>>({});
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [confirmClientCode, setConfirmClientCode] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   const fetchClientDetails = async () => {
     try {
@@ -156,6 +160,36 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
       navigator.clipboard.writeText(telegramLink);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleDeleteClient = async () => {
+    if (confirmClientCode !== data?.client.clientCode) return;
+    setDeleting(true);
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      const res = await fetch(`/api/clients/${id}`, {
+        method: 'DELETE',
+      });
+      const json = await res.json();
+      if (json.success) {
+        setActionSuccess('Client deleted successfully. Redirecting to clients list...');
+        setDeleteModalOpen(false);
+        setTimeout(() => {
+          window.location.href = '/dashboard/clients';
+        }, 1500);
+      } else {
+        setActionError(json.error?.message || 'Failed to delete client.');
+        setDeleteModalOpen(false);
+      }
+    } catch (err) {
+      console.error('Failed to delete client:', err);
+      setActionError('An error occurred while deleting the client.');
+      setDeleteModalOpen(false);
+    } finally {
+      setDeleting(false);
+      setConfirmClientCode('');
     }
   };
 
@@ -357,6 +391,24 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
                 )}
               </div>
             )}
+          </div>
+
+          {/* Danger Zone */}
+          <div className="bg-[#0d0d12]/60 border border-red-950/45 p-6 rounded-2xl">
+            <h2 className="text-sm font-bold text-red-400 uppercase tracking-wider mb-2 flex items-center">
+              <Trash2 className="w-4 h-4 mr-2 text-red-500" />
+              Danger Zone
+            </h2>
+            <p className="text-xs text-slate-550 mb-4 leading-relaxed">
+              Permanently delete this client profile, linked projects, invoices, payments, audit logs, and Supabase Storage PDFs. This action is irreversible.
+            </p>
+            <button
+              onClick={() => setDeleteModalOpen(true)}
+              className="w-full py-2.5 bg-red-950/20 hover:bg-red-900/30 border border-red-900/40 hover:border-red-500/50 text-red-450 hover:text-red-300 font-semibold rounded-xl text-xs transition-all flex items-center justify-center gap-1.5"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete Client
+            </button>
           </div>
         </div>
 
@@ -574,6 +626,80 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
           </div>
         </div>
       </div>
+    {/* Delete Client Confirmation Modal */}
+    {deleteModalOpen && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+        <div className="bg-slate-950 border border-slate-850 rounded-2xl max-w-md w-full p-6 space-y-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+          <div className="space-y-2">
+            <h3 className="text-lg font-bold text-red-405 flex items-center">
+              <AlertCircle className="w-5 h-5 mr-2 text-red-500" />
+              Delete Client?
+            </h3>
+            <p className="text-sm text-slate-400">
+              You are about to permanently delete client <strong>{client.name}</strong> (<code>{client.clientCode}</code>).
+            </p>
+          </div>
+
+          <div className="p-4 bg-red-950/20 border border-red-900/30 rounded-xl space-y-2 text-xs text-red-300">
+            <p className="font-semibold text-red-400">This action will permanently delete:</p>
+            <ul className="list-disc list-inside space-y-1 text-red-350/85">
+              <li>Client profile details</li>
+              <li>Projects & Project records</li>
+              <li>Payments & Payment transactions</li>
+              <li>Invoices & invoice metadata</li>
+              <li>Telegram connection & username linking</li>
+              <li>All active/expired connection tokens</li>
+              <li>All associated client activity logs</li>
+              <li>Invoice PDF files from Supabase Storage</li>
+            </ul>
+            <p className="font-semibold text-red-400 mt-2">This action cannot be undone.</p>
+          </div>
+
+          <div className="space-y-2 text-xs">
+            <label htmlFor="client-code-confirm" className="block text-slate-450">
+              Type <code className="bg-slate-900 border border-slate-800 px-1 py-0.5 rounded text-slate-200 uppercase font-bold">{client.clientCode}</code> to confirm deletion:
+            </label>
+            <input
+              id="client-code-confirm"
+              type="text"
+              value={confirmClientCode}
+              onChange={(e) => setConfirmClientCode(e.target.value)}
+              placeholder={client.clientCode}
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-slate-200 uppercase tracking-widest placeholder-slate-650 focus:outline-none focus:border-red-500 transition-colors"
+            />
+          </div>
+
+          <div className="flex gap-3 justify-end text-xs font-semibold">
+            <button
+              onClick={() => {
+                setDeleteModalOpen(false);
+                setConfirmClientCode('');
+              }}
+              className="px-4 py-2.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-450 hover:text-slate-200 rounded-xl transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDeleteClient}
+              disabled={confirmClientCode !== client.clientCode || deleting}
+              className="px-4 py-2.5 bg-red-650 hover:bg-red-650 disabled:bg-slate-900 text-white disabled:text-slate-600 border border-red-500/20 disabled:border-slate-800 rounded-xl transition-all flex items-center gap-1.5 disabled:cursor-not-allowed"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4" />
+                  Delete Permanently
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </div>
   );
 }

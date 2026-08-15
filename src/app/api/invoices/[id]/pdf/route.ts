@@ -1,9 +1,8 @@
-import fs from 'fs';
-import path from 'path';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/lib/db/connect';
 import Invoice from '@/models/Invoice';
 import { InvoiceService } from '@/services/invoice.service';
+import { StorageService } from '@/services/storage.service';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -29,23 +28,22 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       );
     }
 
-    const pdfFullPath = path.join(process.cwd(), 'public', 'invoices', `${invoice.invoiceNumber}.pdf`);
-
-    // Regenerate on-demand if missing
-    if (!fs.existsSync(pdfFullPath)) {
-      await InvoiceService.generatePDF(id);
+    // Regenerate on-demand if missing in storage metadata
+    if (!invoice.pdfStoragePath) {
+      const generatedInvoice = await InvoiceService.generatePDF(id);
+      invoice.pdfStoragePath = generatedInvoice.pdfStoragePath;
     }
 
-    if (!fs.existsSync(pdfFullPath)) {
+    if (!invoice.pdfStoragePath) {
       return NextResponse.json(
         { success: false, error: { code: 'FILE_NOT_FOUND', message: 'Invoice PDF file could not be generated' } },
         { status: 500 }
       );
     }
 
-    const fileBuffer = fs.readFileSync(pdfFullPath);
+    const fileBuffer = await StorageService.getInvoicePDF(invoice.pdfStoragePath);
 
-    return new Response(fileBuffer, {
+    return new Response(new Uint8Array(fileBuffer), {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="${invoice.invoiceNumber}.pdf"`,

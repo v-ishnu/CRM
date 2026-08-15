@@ -1,11 +1,10 @@
-import fs from 'fs';
-import path from 'path';
 import PDFDocument from 'pdfkit';
 import Invoice, { IInvoice, IInvoiceItem } from '@/models/Invoice';
 import Project from '@/models/Project';
 import Client from '@/models/Client';
 import Payment from '@/models/Payment';
 import { AuditService } from './audit.service';
+import { StorageService } from './storage.service';
 import { dbConnect } from '@/lib/db/connect';
 
 export class InvoiceService {
@@ -100,17 +99,8 @@ export class InvoiceService {
     while (attempts < 5) {
       try {
         const invoiceNumber = await this.generateNextInvoiceNumber();
-        const pdfRelativePath = `/invoices/${invoiceNumber}.pdf`;
-        const pdfFullPath = path.join(process.cwd(), 'public', 'invoices', `${invoiceNumber}.pdf`);
-        
-        // Ensure dir exists
-        const dir = path.dirname(pdfFullPath);
-        if (!fs.existsSync(dir)) {
-          fs.mkdirSync(dir, { recursive: true });
-        }
-
         invoice.invoiceNumber = invoiceNumber;
-        invoice.pdfPath = pdfRelativePath;
+        invoice.pdfPath = `/api/invoices/${invoice._id}/pdf`;
 
         savedInvoice = await invoice.save();
         break; // Success
@@ -142,7 +132,7 @@ export class InvoiceService {
   /**
    * PDF generator engine using pdfkit
    */
-  static async generatePDF(invoiceId: string): Promise<string> {
+  static async generatePDF(invoiceId: string): Promise<IInvoice> {
     await dbConnect();
 
     const invoice = await Invoice.findById(invoiceId)
@@ -155,12 +145,6 @@ export class InvoiceService {
 
     const client = invoice.clientId as any;
     const project = invoice.projectId as any;
-
-    const pdfFullPath = path.join(process.cwd(), 'public', 'invoices', `${invoice.invoiceNumber}.pdf`);
-    const dir = path.dirname(pdfFullPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
 
     // Get company details from env with fallbacks
     const compName = process.env.COMPANY_NAME || 'Antigravity Development';
@@ -177,12 +161,39 @@ export class InvoiceService {
     const paidAmount = payments.reduce((sum, p) => sum + p.amount, 0);
     const balanceDue = Math.max(0, invoice.total - paidAmount);
 
-    return new Promise((resolve, reject) => {
-      const doc = new PDFDocument({ margin: 50, size: 'A4' });
-      const writeStream = fs.createWriteStream(pdfFullPath);
+    const chunks: Buffer[] = [];
+    const doc = new PDFDocument({ margin: 50, size: 'A4' });
 
-      doc.on('error', (err) => reject(err));
-      doc.pipe(writeStream);
+    return new Promise<IInvoice>((resolve, reject) => {
+      doc.on('data', (chunk) => {
+        chunks.push(Buffer.from(chunk));
+      });
+
+      doc.on('error', (err) => {
+        reject(err);
+      });
+
+      doc.on('end', async () => {
+        try {
+          const pdfBuffer = Buffer.concat(chunks);
+          
+          const year = new Date(invoice.invoiceDate).getFullYear();
+          const storagePath = `invoices/${year}/${invoice.invoiceNumber}.pdf`;
+          
+          // Upload to Supabase Storage
+          await StorageService.uploadInvoicePDF(pdfBuffer, storagePath);
+
+          // Update MongoDB with storage paths
+          invoice.pdfStoragePath = storagePath;
+          invoice.pdfBucket = process.env.SUPABASE_INVOICE_BUCKET || 'invoices';
+          invoice.pdfPath = `/api/invoices/${invoice._id}/pdf`;
+          const savedInvoice = await invoice.save();
+
+          resolve(savedInvoice);
+        } catch (uploadError) {
+          reject(uploadError);
+        }
+      });
 
       // Colors
       const primaryColor = '#1e1e2f';
@@ -300,9 +311,6 @@ export class InvoiceService {
       doc.text('Thank you for your business!', 50, 480, { align: 'center', width: 500 } as any);
 
       doc.end();
-
-      writeStream.on('finish', () => resolve(invoice.pdfPath!));
-      writeStream.on('error', (err) => reject(err));
     });
   }
 

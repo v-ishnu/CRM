@@ -21,6 +21,8 @@ export interface IInvoice extends Document {
   total: number;
   status: 'DRAFT' | 'ISSUED' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE' | 'CANCELLED';
   pdfPath?: string;
+  pdfStoragePath?: string;
+  pdfBucket?: string;
   telegramSent: boolean;
   emailSent: boolean;
   notes?: string;
@@ -125,6 +127,12 @@ const InvoiceSchema = new Schema<IInvoice>(
       required: true,
     },
     pdfPath: {
+      type: String,
+    },
+    pdfStoragePath: {
+      type: String,
+    },
+    pdfBucket: {
       type: String,
     },
     telegramSent: {

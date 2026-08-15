@@ -7,6 +7,7 @@ import Payment from '@/models/Payment';
 import { ClientService } from './client.service';
 import { PaymentService } from './payment.service';
 import { AuditService } from './audit.service';
+import { StorageService } from './storage.service';
 import { dbConnect } from '@/lib/db/connect';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -172,13 +173,40 @@ export class TelegramService {
     }
 
     try {
-      const fullPath = path.join(process.cwd(), 'public', relativeFilePath);
-      if (!fs.existsSync(fullPath)) {
-        throw new Error(`File not found at: ${fullPath}`);
+      let fileBuffer: Buffer;
+
+      // Check if relativeFilePath is a dynamic API route instead of a local disk file
+      if (relativeFilePath.startsWith('/api/invoices/')) {
+        const parts = relativeFilePath.split('/');
+        const invoiceId = parts[3]; // /api/invoices/[id]/pdf
+        
+        await dbConnect();
+        const invoice = await Invoice.findById(invoiceId);
+        if (!invoice || !invoice.pdfStoragePath) {
+          throw new Error(`Invoice or storage path not found for: ${relativeFilePath}`);
+        }
+        
+        fileBuffer = await StorageService.getInvoicePDF(invoice.pdfStoragePath);
+      } else {
+        // Fallback to filesystem (e.g. for legacy files, local testing or standard attachments)
+        const fullPath = path.join(process.cwd(), 'public', relativeFilePath);
+        if (!fs.existsSync(fullPath)) {
+          // If filesystem fallback fails, check if we can resolve it via MongoDB to support virtual test paths
+          const filenameOnly = path.basename(relativeFilePath);
+          const invoiceNumber = filenameOnly.replace('.pdf', '');
+          await dbConnect();
+          const invoice = await Invoice.findOne({ invoiceNumber });
+          if (invoice && invoice.pdfStoragePath) {
+            fileBuffer = await StorageService.getInvoicePDF(invoice.pdfStoragePath);
+          } else {
+            throw new Error(`File not found at: ${fullPath} and could not be resolved from storage.`);
+          }
+        } else {
+          fileBuffer = fs.readFileSync(fullPath);
+        }
       }
 
-      const fileBuffer = fs.readFileSync(fullPath);
-      const blob = new Blob([fileBuffer], { type: 'application/pdf' });
+      const blob = new Blob([new Uint8Array(fileBuffer)], { type: 'application/pdf' });
       
       const formData = new FormData();
       formData.append('chat_id', chatId);
