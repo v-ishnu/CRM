@@ -129,3 +129,48 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     );
   }
 }
+
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const actor = req.headers.get('x-user-email') || 'admin';
+  const userRole = req.headers.get('x-user-role');
+
+  if (userRole !== 'ADMIN') {
+    return NextResponse.json(
+      { success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } },
+      { status: 403 }
+    );
+  }
+
+  try {
+    await dbConnect();
+    const { id } = await params;
+
+    const client = await Client.findById(id);
+    if (!client) {
+      return NextResponse.json(
+        { success: false, error: { code: 'CLIENT_NOT_FOUND', message: 'Client not found' } },
+        { status: 404 }
+      );
+    }
+
+    await Client.deleteOne({ _id: id });
+    await Project.deleteMany({ clientId: id });
+    await Invoice.deleteMany({ clientId: id });
+    await Payment.deleteMany({ clientId: id });
+
+    await AuditService.logAction(actor, 'CLIENT_DELETED', 'Client', id, {
+      clientCode: client.clientCode,
+      name: client.name,
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: 'Client deleted successfully',
+    });
+  } catch (error: any) {
+    return NextResponse.json(
+      { success: false, error: { code: 'SERVER_ERROR', message: error.message } },
+      { status: 500 }
+    );
+  }
+}

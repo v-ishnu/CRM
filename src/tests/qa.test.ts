@@ -31,7 +31,7 @@ import { POST as loginHandler } from '@/app/api/auth/login/route';
 import { POST as logoutHandler } from '@/app/api/auth/logout/route';
 import { GET as getDashboard } from '@/app/api/dashboard/route';
 import { GET as getClients, POST as createClientRoute } from '@/app/api/clients/route';
-import { GET as getClientDetail, PUT as updateClientRoute } from '@/app/api/clients/[id]/route';
+import { GET as getClientDetail, PUT as updateClientRoute, DELETE as deleteClientRoute } from '@/app/api/clients/[id]/route';
 import { POST as connectClientRoute } from '@/app/api/clients/[id]/connect/route';
 import { GET as getProjects, POST as createProjectRoute } from '@/app/api/projects/route';
 import { GET as getProjectDetail, PUT as updateProjectRoute } from '@/app/api/projects/[id]/route';
@@ -423,11 +423,16 @@ TOTAL STATUS: ${failedCount === 0 ? 'SUCCESS' : 'FAILURE'}
       const response = await telegramWebhook(req);
       expect(response.status).toBe(200);
 
-      // Wait for background promise execution to settle
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      // Poll database for up to 3 seconds to verify client is connected asynchronously
+      let updatedClient = null;
+      for (let i = 0; i < 30; i++) {
+        updatedClient = await Client.findById(testClientId);
+        if (updatedClient && updatedClient.telegramConnected) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
 
-      // Verify client is now connected
-      const updatedClient = await Client.findById(testClientId);
       expect(updatedClient!.telegramConnected).toBe(true);
       expect(updatedClient!.telegramUserId).toBe('1122334455');
       countTest(updatedClient!.telegramConnected === true);
@@ -455,6 +460,88 @@ TOTAL STATUS: ${failedCount === 0 ? 'SUCCESS' : 'FAILURE'}
 
       await Client.deleteOne({ _id: mockFailClient._id });
       countTest(notification.status === 'FAILED');
+    });
+  });
+
+  // 8. Client Deletion and GET 404 Regression Tests
+  describe('Client Deletion & 404 Resolution', () => {
+    let regressionClientId: string;
+
+    it('should return 200 and details for an existing client', async () => {
+      const client = new Client({
+        clientCode: 'QA-CL-REGRESS',
+        name: 'Regress Client',
+        email: 'qa_regress@example.com',
+      });
+      await client.save();
+      regressionClientId = client._id.toString();
+
+      const req = new NextRequest(`http://localhost/api/clients/${regressionClientId}`, {
+        method: 'GET',
+        headers: {
+          'x-user-role': 'ADMIN',
+          'x-user-email': 'qa_admin@example.com',
+        },
+      });
+
+      const response = await getClientDetail(req, { params: Promise.resolve({ id: regressionClientId }) });
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.success).toBe(true);
+      expect(data.data.client.name).toBe('Regress Client');
+      countTest(response.status === 200);
+    });
+
+    it('should allow deletion of a client and return 200 status', async () => {
+      const req = new NextRequest(`http://localhost/api/clients/${regressionClientId}`, {
+        method: 'DELETE',
+        headers: {
+          'x-user-role': 'ADMIN',
+          'x-user-email': 'qa_admin@example.com',
+        },
+      });
+
+      const response = await deleteClientRoute(req, { params: Promise.resolve({ id: regressionClientId }) });
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.success).toBe(true);
+      expect(data.message).toContain('Client deleted successfully');
+      countTest(response.status === 200);
+    });
+
+    it('should return 404 when querying the deleted client directly', async () => {
+      const req = new NextRequest(`http://localhost/api/clients/${regressionClientId}`, {
+        method: 'GET',
+        headers: {
+          'x-user-role': 'ADMIN',
+          'x-user-email': 'qa_admin@example.com',
+        },
+      });
+
+      const response = await getClientDetail(req, { params: Promise.resolve({ id: regressionClientId }) });
+      expect(response.status).toBe(404);
+      const data = await response.json();
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('CLIENT_NOT_FOUND');
+      countTest(response.status === 404);
+    });
+
+    it('should exclude the deleted client from the clients list', async () => {
+      const req = new NextRequest('http://localhost/api/clients', {
+        method: 'GET',
+        headers: {
+          'x-user-role': 'ADMIN',
+          'x-user-email': 'qa_admin@example.com',
+        },
+      });
+
+      const response = await getClients(req);
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.success).toBe(true);
+      const clientCodes = data.clients.map((c: any) => c.clientCode);
+      expect(clientCodes).not.toContain('QA-CL-REGRESS');
+      countTest(!clientCodes.includes('QA-CL-REGRESS'));
     });
   });
 });

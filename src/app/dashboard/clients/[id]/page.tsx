@@ -117,9 +117,12 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
       const json = await res.json();
       if (json.success) {
         setData(json.data);
+      } else {
+        setData(null);
       }
     } catch (err) {
       console.error('Failed to load client details:', err);
+      setData(null);
     } finally {
       setLoading(false);
     }

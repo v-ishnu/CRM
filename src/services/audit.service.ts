@@ -4,7 +4,7 @@ import { dbConnect } from '@/lib/db/connect';
 export class AuditService {
   static async logAction(
     actor: string,
-    action: 'CLIENT_CREATED' | 'CLIENT_UPDATED' | 'PROJECT_CREATED' | 'PAYMENT_CREATED' | 'PAYMENT_UPDATED' | 'INVOICE_CREATED' | 'INVOICE_SENT' | 'TELEGRAM_SENT' | 'PROJECT_STATUS_CHANGED',
+    action: 'CLIENT_CREATED' | 'CLIENT_UPDATED' | 'CLIENT_DELETED' | 'PROJECT_CREATED' | 'PAYMENT_CREATED' | 'PAYMENT_UPDATED' | 'INVOICE_CREATED' | 'INVOICE_SENT' | 'TELEGRAM_SENT' | 'PROJECT_STATUS_CHANGED',
     entityType: 'Client' | 'Project' | 'Payment' | 'Invoice' | 'Notification' | 'Auth',
     entityId?: any,
     metadata?: Record<string, any>

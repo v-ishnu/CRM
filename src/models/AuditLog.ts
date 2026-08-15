@@ -2,7 +2,7 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 
 export interface IAuditLog extends Document {
   actor: string;
-  action: 'CLIENT_CREATED' | 'CLIENT_UPDATED' | 'PROJECT_CREATED' | 'PAYMENT_CREATED' | 'PAYMENT_UPDATED' | 'INVOICE_CREATED' | 'INVOICE_SENT' | 'TELEGRAM_SENT' | 'PROJECT_STATUS_CHANGED';
+  action: 'CLIENT_CREATED' | 'CLIENT_UPDATED' | 'CLIENT_DELETED' | 'PROJECT_CREATED' | 'PAYMENT_CREATED' | 'PAYMENT_UPDATED' | 'INVOICE_CREATED' | 'INVOICE_SENT' | 'TELEGRAM_SENT' | 'PROJECT_STATUS_CHANGED';
   entityType: 'Client' | 'Project' | 'Payment' | 'Invoice' | 'Notification' | 'Auth';
   entityId?: mongoose.Types.ObjectId | string;
   metadata?: Record<string, any>;
@@ -22,6 +22,7 @@ const AuditLogSchema = new Schema<IAuditLog>(
       enum: [
         'CLIENT_CREATED',
         'CLIENT_UPDATED',
+        'CLIENT_DELETED',
         'PROJECT_CREATED',
         'PAYMENT_CREATED',
         'PAYMENT_UPDATED',

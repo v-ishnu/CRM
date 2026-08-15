@@ -26,7 +26,15 @@ export class TelegramService {
   static async setWebhook(appUrl: string): Promise<boolean> {
     if (!this.isConfigured()) return false;
     
-    const webhookUrl = `${appUrl}/api/telegram/webhook`;
+    let webhookUrl = appUrl.trim();
+    if (webhookUrl.endsWith('/api/telegram/webhook')) {
+      // already has suffix
+    } else {
+      if (webhookUrl.endsWith('/')) {
+        webhookUrl = webhookUrl.slice(0, -1);
+      }
+      webhookUrl = `${webhookUrl}/api/telegram/webhook`;
+    }
     const secretToken = process.env.TELEGRAM_WEBHOOK_SECRET || 'secret';
     
     try {
@@ -219,10 +227,18 @@ export class TelegramService {
     let client: any = await Client.findOne({ telegramUserId: userId });
 
     // Handle Deep Linking connection token
-    if (text.startsWith('/start ')) {
-      const token = text.substring(7).trim();
+    const isStartCommand = text.startsWith('/start');
+    let startToken: string | null = null;
+    if (isStartCommand) {
+      const parts = text.split(' ');
+      if (parts.length > 1) {
+        startToken = parts[1].trim();
+      }
+    }
+
+    if (isStartCommand && startToken) {
       try {
-        client = await ClientService.connectTelegram(token, {
+        client = await ClientService.connectTelegram(startToken, {
           telegramUserId: userId,
           telegramUsername: username,
           telegramChatId: chatId,
