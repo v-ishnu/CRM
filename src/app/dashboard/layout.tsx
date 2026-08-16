@@ -61,7 +61,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   };
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-slate-100 flex flex-col md:flex-row font-sans antialiased">
+    <div className="h-[100dvh] min-h-[100dvh] overflow-hidden bg-[#09090b] text-slate-100 flex flex-col md:flex-row font-sans antialiased">
       {/* Mobile Top Bar */}
       <div className="md:hidden flex items-center justify-between px-6 py-4 bg-[#0d0d12] border-b border-slate-800 shrink-0">
         <div className="flex items-center space-x-2">
@@ -144,8 +144,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <main className="flex-1 p-6 md:p-8 overflow-y-auto max-w-7xl w-full mx-auto">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
+        <main className="flex-1 p-4 sm:p-6 md:p-8 overflow-y-auto max-w-7xl w-full mx-auto min-h-0 flex flex-col">
           {children}
         </main>
       </div>

@@ -415,4 +415,95 @@ describe('Public Inquiry & Human Handoff Fallback System', () => {
     expect(activeInquiries.length).toBe(1);
     expect(activeInquiries[0]._id.toString()).not.toBe(sarahInq!._id.toString());
   });
+
+  // TEST 13: Admin sends media attachment (e.g. PDF document / image)
+  it('TEST 13: Admin sends media attachment from CRM Dashboard to inquiry lead', async () => {
+    const activeInq = await Inquiry.findOne({
+      telegramUserId: publicUser2TelegramId,
+      status: { $ne: 'CLOSED' },
+    });
+    expect(activeInq).toBeDefined();
+
+    const sampleBuffer = Buffer.from('PDF_SAMPLE_TEST_CONTENT');
+    const updated = await InquiryService.sendAdminReply(
+      activeInq!._id.toString(),
+      'admin@drdebuggers.com',
+      'Admin Vishnu',
+      'Here is the project proposal document.',
+      {
+        buffer: sampleBuffer,
+        fileName: 'proposal.pdf',
+        mimeType: 'application/pdf',
+        size: sampleBuffer.length,
+      }
+    );
+
+    expect(updated).toBeDefined();
+    const lastMsg = updated.messages[updated.messages.length - 1];
+    expect(lastMsg.sender).toBe('ADMIN');
+    expect(lastMsg.text).toBe('Here is the project proposal document.');
+    expect(lastMsg.attachments).toBeDefined();
+    expect(lastMsg.attachments?.length).toBe(1);
+    expect(lastMsg.attachments![0].fileName).toBe('proposal.pdf');
+    expect(lastMsg.attachments![0].type).toBe('DOCUMENT');
+    expect(lastMsg.attachments![0].mimeType).toBe('application/pdf');
+  });
+
+  // TEST 14: Client in HUMAN mode sends photo/document attachment
+  it('TEST 14: Client in HUMAN mode sends photo/document attachment -> stored in messages', async () => {
+    const activeInq = await Inquiry.findOne({
+      telegramUserId: publicUser2TelegramId,
+      status: { $ne: 'CLOSED' },
+    });
+    activeInq!.conversationMode = 'HUMAN';
+    await activeInq!.save();
+
+    const update = {
+      update_id: Math.floor(Math.random() * 1000000),
+      message: {
+        chat: { id: Number(publicUser2TelegramId) },
+        from: { id: Number(publicUser2TelegramId), username: 'sarah_lead', first_name: 'Sarah' },
+        caption: 'Look at this design screenshot',
+        photo: [
+          { file_id: 'photo_thumb_123', file_size: 1024 },
+          { file_id: 'photo_highres_456', file_size: 8192 },
+        ],
+      },
+    };
+
+    const res = await TelegramService.handleWebhookUpdate(update);
+    expect(res?.inquiryMode).toBe('HUMAN');
+
+    const refreshed = await Inquiry.findById(activeInq!._id);
+    const lastMsg = refreshed!.messages[refreshed!.messages.length - 1];
+    expect(lastMsg.sender).toBe('CLIENT');
+    expect(lastMsg.text).toBe('Look at this design screenshot');
+    expect(lastMsg.attachments?.length).toBe(1);
+    expect(lastMsg.attachments![0].type).toBe('IMAGE');
+    expect(lastMsg.attachments![0].telegramFileId).toBe('photo_highres_456');
+  });
+
+  // TEST 15: File size validation (>20MB)
+  it('TEST 15: File size validation rejects files exceeding 20MB', async () => {
+    const activeInq = await Inquiry.findOne({
+      telegramUserId: publicUser2TelegramId,
+      status: { $ne: 'CLOSED' },
+    });
+
+    const fakeLargeBuffer = Buffer.alloc(10); // Small allocation for test, simulated size
+    await expect(
+      InquiryService.sendAdminReply(
+        activeInq!._id.toString(),
+        'admin@drdebuggers.com',
+        'Admin Vishnu',
+        'Large file test',
+        {
+          buffer: fakeLargeBuffer,
+          fileName: 'massive_video.mp4',
+          mimeType: 'video/mp4',
+          size: 25 * 1024 * 1024, // 25 MB
+        }
+      )
+    ).rejects.toThrow('File is too large');
+  });
 });

@@ -1,11 +1,22 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
+export interface IInquiryAttachment {
+  type: 'IMAGE' | 'DOCUMENT' | 'VIDEO' | 'AUDIO';
+  fileName: string;
+  mimeType: string;
+  fileUrl?: string;
+  storagePath?: string;
+  telegramFileId?: string;
+  size?: number;
+}
+
 export interface IInquiryMessage {
   sender: 'CLIENT' | 'BOT' | 'ADMIN' | 'SYSTEM';
   text: string;
   timestamp: Date;
   adminEmail?: string;
   adminName?: string;
+  attachments?: IInquiryAttachment[];
 }
 
 export interface IInquiry extends Document {
@@ -27,6 +38,42 @@ export interface IInquiry extends Document {
   createdAt: Date;
   updatedAt: Date;
 }
+
+const InquiryAttachmentSchema = new Schema<IInquiryAttachment>(
+  {
+    type: {
+      type: String,
+      enum: ['IMAGE', 'DOCUMENT', 'VIDEO', 'AUDIO'],
+      required: true,
+    },
+    fileName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    mimeType: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    fileUrl: {
+      type: String,
+      trim: true,
+    },
+    storagePath: {
+      type: String,
+      trim: true,
+    },
+    telegramFileId: {
+      type: String,
+      trim: true,
+    },
+    size: {
+      type: Number,
+    },
+  },
+  { _id: false }
+);
 
 const InquiryMessageSchema = new Schema<IInquiryMessage>(
   {
@@ -51,6 +98,10 @@ const InquiryMessageSchema = new Schema<IInquiryMessage>(
     adminName: {
       type: String,
       trim: true,
+    },
+    attachments: {
+      type: [InquiryAttachmentSchema],
+      default: [],
     },
   },
   { _id: false }

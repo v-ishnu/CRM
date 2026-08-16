@@ -333,6 +333,86 @@ export class TelegramService {
   }
 
   /**
+   * Send media (Photo, Document, Video, Audio) to a Telegram chat using multipart/form-data
+   */
+  static async sendMediaRaw(
+    chatId: string,
+    type: 'IMAGE' | 'DOCUMENT' | 'VIDEO' | 'AUDIO',
+    file: Buffer | string,
+    fileName: string,
+    mimeType: string,
+    caption?: string,
+    options: { reply_markup?: any; parse_mode?: string } = {}
+  ): Promise<{ success: boolean; messageId?: number; fileId?: string; error?: string }> {
+    if (!this.isConfigured()) {
+      return { success: false, error: 'Telegram bot token is not configured' };
+    }
+
+    let endpoint = 'sendDocument';
+    let fieldKey = 'document';
+    if (type === 'IMAGE') {
+      endpoint = 'sendPhoto';
+      fieldKey = 'photo';
+    } else if (type === 'VIDEO') {
+      endpoint = 'sendVideo';
+      fieldKey = 'video';
+    } else if (type === 'AUDIO') {
+      endpoint = 'sendAudio';
+      fieldKey = 'audio';
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append('chat_id', chatId);
+      if (caption) {
+        formData.append('caption', caption);
+        formData.append('parse_mode', options.parse_mode || 'HTML');
+      }
+      if (options.reply_markup) {
+        formData.append(
+          'reply_markup',
+          typeof options.reply_markup === 'string'
+            ? options.reply_markup
+            : JSON.stringify(options.reply_markup)
+        );
+      }
+
+      if (Buffer.isBuffer(file)) {
+        const blob = new Blob([file as any], { type: mimeType || 'application/octet-stream' });
+        formData.append(fieldKey, blob, fileName || 'file');
+      } else if (typeof file === 'string') {
+        formData.append(fieldKey, file);
+      }
+
+      const response = await fetch(`${TELEGRAM_API}/${endpoint}`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (data.ok === true) {
+        let fileId: string | undefined;
+        if (type === 'IMAGE' && Array.isArray(data.result?.photo) && data.result.photo.length > 0) {
+          fileId = data.result.photo[data.result.photo.length - 1].file_id;
+        } else if (type === 'DOCUMENT' && data.result?.document) {
+          fileId = data.result.document.file_id;
+        } else if (type === 'VIDEO' && data.result?.video) {
+          fileId = data.result.video.file_id;
+        } else if (type === 'AUDIO' && data.result?.audio) {
+          fileId = data.result.audio.file_id;
+        }
+
+        return { success: true, messageId: data.result?.message_id, fileId };
+      }
+
+      return { success: false, error: data.description || `Failed to send Telegram ${type.toLowerCase()}` };
+    } catch (err: any) {
+      console.error(`sendMediaRaw (${type}) error:`, err);
+      return { success: false, error: err.message || 'Network error' };
+    }
+  }
+
+  /**
    * Answer a Telegram callback query to clear button loading state and optionally show a toast/alert
    */
   static async answerCallbackQuery(
@@ -1462,9 +1542,23 @@ export class TelegramService {
     const chatId = String(message.chat.id);
     const userId = String(message.from.id);
     const username = message.from.username || '';
-    const text = (message.text || '').trim();
+    const text = (message.text || message.caption || '').trim();
     const isCommand = text.startsWith('/');
-    const messageType = message.photo ? 'photo' : (message.document ? 'document' : 'text');
+    let messageType: 'text' | 'photo' | 'document' | 'video' | 'audio' = 'text';
+    let rawAttachment: any = null;
+    if (message.photo && Array.isArray(message.photo) && message.photo.length > 0) {
+      messageType = 'photo';
+      rawAttachment = message.photo[message.photo.length - 1];
+    } else if (message.document) {
+      messageType = 'document';
+      rawAttachment = message.document;
+    } else if (message.video) {
+      messageType = 'video';
+      rawAttachment = message.video;
+    } else if (message.audio || message.voice) {
+      messageType = 'audio';
+      rawAttachment = message.audio || message.voice;
+    }
 
     // Safe structured logging of incoming command/message
     if (isCommand) {
@@ -1827,7 +1921,15 @@ export class TelegramService {
 
     const { InquiryService } = await import('./inquiry.service');
     const fullName = [message.from.first_name, message.from.last_name].filter(Boolean).join(' ') || username;
-    const inqResult = await InquiryService.handlePublicMessage(userId, chatId, username, fullName, text, messageType);
+    const inqResult = await InquiryService.handlePublicMessage(
+      userId,
+      chatId,
+      username,
+      fullName,
+      text,
+      messageType,
+      rawAttachment
+    );
 
     const handlerTime = performance.now() - handlerStart;
     timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));

@@ -1,9 +1,45 @@
+import path from 'path';
 import { dbConnect } from '@/lib/db/connect';
-import Inquiry, { IInquiry } from '@/models/Inquiry';
+import Inquiry, { IInquiry, IInquiryAttachment } from '@/models/Inquiry';
 import Client from '@/models/Client';
 import { TelegramService } from '@/services/telegram.service';
 import { AuditService } from '@/services/audit.service';
 import { ClientService } from '@/services/client.service';
+import { StorageService } from '@/services/storage.service';
+
+export const MAX_INQUIRY_ATTACHMENT_SIZE_MB = 20;
+export const MAX_INQUIRY_ATTACHMENT_SIZE_BYTES = MAX_INQUIRY_ATTACHMENT_SIZE_MB * 1024 * 1024;
+
+export const ALLOWED_ATTACHMENT_MIME_TYPES = [
+  // Images
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  // Documents
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+  'application/zip',
+  'application/x-zip-compressed',
+  // Video
+  'video/mp4',
+  'video/webm',
+  // Audio
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/ogg',
+  'audio/wav',
+  'audio/webm',
+];
+
+export function getAttachmentTypeFromMime(mimeType: string): 'IMAGE' | 'DOCUMENT' | 'VIDEO' | 'AUDIO' {
+  if (mimeType.startsWith('image/')) return 'IMAGE';
+  if (mimeType.startsWith('video/')) return 'VIDEO';
+  if (mimeType.startsWith('audio/')) return 'AUDIO';
+  return 'DOCUMENT';
+}
 
 export class InquiryService {
   /**
@@ -160,7 +196,8 @@ export class InquiryService {
     username: string,
     name: string,
     text: string,
-    messageType: 'text' | 'photo' | 'document' = 'text'
+    messageType: 'text' | 'photo' | 'document' | 'video' | 'audio' = 'text',
+    rawAttachment?: any
   ): Promise<{ responseSent: boolean; mode: string }> {
     await dbConnect();
 
@@ -179,10 +216,43 @@ export class InquiryService {
     // Store message, notify admin, and do NOT send automated response.
     // =========================================================================
     if (inquiry.conversationMode === 'HUMAN') {
+      const clientAttachments: IInquiryAttachment[] = [];
+      if (rawAttachment) {
+        let attType: 'IMAGE' | 'DOCUMENT' | 'VIDEO' | 'AUDIO' = 'DOCUMENT';
+        let fileName = rawAttachment.file_name || `${messageType}_${rawAttachment.file_id || Date.now()}`;
+        let mime = 'application/octet-stream';
+        const size = rawAttachment.file_size;
+        const fileId = rawAttachment.file_id;
+
+        if (messageType === 'photo') {
+          attType = 'IMAGE';
+          fileName = fileName.includes('.') ? fileName : `${fileName}.jpg`;
+          mime = 'image/jpeg';
+        } else if (messageType === 'video') {
+          attType = 'VIDEO';
+          mime = 'video/mp4';
+        } else if (messageType === 'audio') {
+          attType = 'AUDIO';
+          mime = 'audio/mpeg';
+        } else if (messageType === 'document') {
+          attType = 'DOCUMENT';
+          mime = rawAttachment.mime_type || 'application/octet-stream';
+        }
+
+        clientAttachments.push({
+          type: attType,
+          fileName,
+          mimeType: mime,
+          telegramFileId: fileId,
+          size,
+        });
+      }
+
       inquiry.messages.push({
         sender: 'CLIENT',
-        text: trimmedText || `[Sent ${messageType}]`,
+        text: trimmedText || (rawAttachment ? `[Sent ${messageType}]` : ''),
         timestamp: new Date(),
+        attachments: clientAttachments,
       });
       inquiry.lastMessageAt = new Date();
       await inquiry.save();
@@ -196,6 +266,7 @@ export class InquiryService {
           inquiryNumber: inquiry.inquiryNumber,
           telegramUserId,
           messageType,
+          hasAttachment: clientAttachments.length > 0,
         }
       );
 
@@ -398,13 +469,19 @@ export class InquiryService {
   }
 
   /**
-   * Admin sends reply to lead from the CRM Dashboard
+   * Admin sends reply (text and/or attachment) to lead from the CRM Dashboard
    */
   static async sendAdminReply(
     inquiryId: string,
     adminEmail: string,
     adminName: string,
-    messageText: string
+    messageText: string = '',
+    attachment?: {
+      buffer: Buffer;
+      fileName: string;
+      mimeType: string;
+      size: number;
+    }
   ): Promise<IInquiry> {
     await dbConnect();
 
@@ -413,9 +490,89 @@ export class InquiryService {
       throw new Error('Inquiry not found');
     }
 
-    const trimmed = messageText.trim();
-    if (!trimmed) {
-      throw new Error('Message text cannot be empty');
+    const trimmed = (messageText || '').trim();
+    if (!trimmed && !attachment) {
+      throw new Error('Message cannot be empty. Please enter text or attach a file.');
+    }
+
+    let attachmentRecord: IInquiryAttachment | undefined = undefined;
+
+    if (attachment) {
+      if (attachment.size > MAX_INQUIRY_ATTACHMENT_SIZE_BYTES) {
+        throw new Error(`File is too large. Maximum allowed size is ${MAX_INQUIRY_ATTACHMENT_SIZE_MB} MB.`);
+      }
+
+      const mime = (attachment.mimeType || 'application/octet-stream').toLowerCase();
+      const attType = getAttachmentTypeFromMime(mime);
+      const ext = path.extname(attachment.fileName) || (attType === 'IMAGE' ? '.jpg' : '.dat');
+      const uniqueFileName = `inq_${inquiry.inquiryNumber}_${Date.now()}${ext}`;
+      const storagePath = `inquiries/${inquiry.inquiryNumber}/${uniqueFileName}`;
+
+      let fileUrl: string | undefined = undefined;
+
+      // Upload to StorageService if configured
+      try {
+        if (StorageService.isConfigured() || process.env.NODE_ENV === 'test') {
+          await StorageService.uploadFile(attachment.buffer, storagePath, mime);
+          try {
+            fileUrl = await StorageService.getSignedUrl(storagePath, 86400 * 7); // 7 days signed URL
+          } catch {
+            fileUrl = undefined;
+          }
+        }
+      } catch (storageErr) {
+        console.error('Storage upload warning for inquiry attachment:', storageErr);
+      }
+
+      // Deliver attachment to Telegram
+      // Telegram caption limit is 1024 chars
+      let caption: string | undefined = undefined;
+      let sendSeparateText = false;
+      if (trimmed) {
+        if (trimmed.length <= 1000) {
+          caption = `👨‍💻 <b>Dr. Debuggers Team:</b>\n\n${trimmed}`;
+        } else {
+          caption = `👨‍💻 <b>Dr. Debuggers Team:</b> (Attachment)`;
+          sendSeparateText = true;
+        }
+      }
+
+      const mediaResult = await TelegramService.sendMediaRaw(
+        inquiry.telegramChatId,
+        attType,
+        attachment.buffer,
+        attachment.fileName,
+        mime,
+        caption
+      );
+
+      if (!mediaResult.success && TelegramService.isConfigured() && process.env.NODE_ENV !== 'test') {
+        throw new Error(mediaResult.error || 'Failed to deliver attachment via Telegram');
+      }
+
+      if (sendSeparateText && trimmed) {
+        await TelegramService.sendMessageRaw(
+          inquiry.telegramChatId,
+          `👨‍💻 <b>Dr. Debuggers Team:</b>\n\n${trimmed}`
+        );
+      }
+
+      attachmentRecord = {
+        type: attType,
+        fileName: attachment.fileName,
+        mimeType: mime,
+        fileUrl,
+        storagePath,
+        telegramFileId: mediaResult.fileId,
+        size: attachment.size,
+      };
+    } else {
+      // Text-only message
+      const telegramMessage = `👨‍💻 <b>Dr. Debuggers Team:</b>\n\n${trimmed}`;
+      const sendResult = await TelegramService.sendMessageRaw(inquiry.telegramChatId, telegramMessage);
+      if (!sendResult.success && TelegramService.isConfigured() && process.env.NODE_ENV !== 'test') {
+        throw new Error(sendResult.error || 'Failed to deliver Telegram message');
+      }
     }
 
     inquiry.messages.push({
@@ -424,6 +581,7 @@ export class InquiryService {
       timestamp: new Date(),
       adminEmail,
       adminName,
+      attachments: attachmentRecord ? [attachmentRecord] : [],
     });
 
     if (inquiry.status === 'NEW' || inquiry.status === 'HUMAN_HANDOFF') {
@@ -431,10 +589,6 @@ export class InquiryService {
     }
     inquiry.lastMessageAt = new Date();
     await inquiry.save();
-
-    // Deliver reply to client via Telegram
-    const telegramMessage = `👨‍💻 <b>Dr. Debuggers Team:</b>\n\n${trimmed}`;
-    await TelegramService.sendMessageRaw(inquiry.telegramChatId, telegramMessage);
 
     await AuditService.logAction(
       adminEmail,
@@ -445,6 +599,7 @@ export class InquiryService {
         inquiryNumber: inquiry.inquiryNumber,
         telegramUserId: inquiry.telegramUserId,
         adminName,
+        hasAttachment: !!attachmentRecord,
       }
     );
 
@@ -608,7 +763,7 @@ export class InquiryService {
     }
 
     // Check if client with this Telegram ID or Email already exists
-    let existingClient = await Client.findOne({
+    const existingClient = await Client.findOne({
       $or: [
         { telegramUserId: inquiry.telegramUserId },
         { email: clientData.email.toLowerCase().trim() },
