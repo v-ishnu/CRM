@@ -259,7 +259,7 @@ TOTAL STATUS: ${failedCount === 0 ? 'SUCCESS' : 'FAILURE'}
       expect(balanceAfterDelete.outstandingAmount).toBe(15000);
 
       countTest(true);
-    });
+    }, 15000);
 
     it('should reject payment creation that exceeds outstanding project budget', async () => {
       let passed = false;

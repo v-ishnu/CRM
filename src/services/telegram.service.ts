@@ -10,6 +10,7 @@ import RequestResponse from '@/models/RequestResponse';
 import TeamMember from '@/models/TeamMember';
 import Task from '@/models/Task';
 import TeamPayment from '@/models/TeamPayment';
+import User from '@/models/User';
 import { ClientService } from './client.service';
 import { PaymentService } from './payment.service';
 import { AuditService } from './audit.service';
@@ -17,6 +18,15 @@ import { StorageService } from './storage.service';
 import { TeamMemberService } from './team-member.service';
 import { TaskService } from './task.service';
 import { dbConnect } from '@/lib/db/connect';
+
+export type TelegramIdentityType = 'ADMIN' | 'TEAM_MEMBER' | 'CLIENT' | 'CONFLICT' | 'UNLINKED';
+
+export interface TelegramIdentity {
+  type: TelegramIdentityType;
+  user?: any;
+  teamMember?: any;
+  client?: any;
+}
 
 declare global {
   // eslint-disable-next-line no-var
@@ -60,7 +70,7 @@ export class TelegramService {
         body: JSON.stringify({
           url: webhookUrl,
           secret_token: secretToken,
-          allowed_updates: ['message'],
+          allowed_updates: ['message', 'callback_query'],
         }),
       });
       
@@ -242,9 +252,13 @@ export class TelegramService {
   }
 
   /**
-   * Answer a Telegram callback query
+   * Answer a Telegram callback query to clear button loading state and optionally show a toast/alert
    */
-  static async answerCallbackQuery(callbackQueryId: string, text?: string): Promise<boolean> {
+  static async answerCallbackQuery(
+    callbackQueryId: string,
+    text?: string,
+    showAlert: boolean = false
+  ): Promise<boolean> {
     if (!this.isConfigured()) return false;
     try {
       const res = await fetch(`${TELEGRAM_API}/answerCallbackQuery`, {
@@ -252,8 +266,8 @@ export class TelegramService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           callback_query_id: callbackQueryId,
-          text: text || '',
-          show_alert: false,
+          text: text || undefined,
+          show_alert: showAlert,
         }),
       });
       const data = await res.json();
@@ -262,6 +276,155 @@ export class TelegramService {
       console.error('answerCallbackQuery error:', err);
       return false;
     }
+  }
+
+  /**
+   * Edit text and reply markup of an existing Telegram message
+   */
+  static async editMessageText(
+    chatId: string | number,
+    messageId: number,
+    text: string,
+    options: { reply_markup?: any; parse_mode?: string } = {}
+  ): Promise<boolean> {
+    if (!this.isConfigured()) return false;
+    try {
+      const response = await fetch(`${TELEGRAM_API}/editMessageText`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          message_id: messageId,
+          text,
+          parse_mode: options.parse_mode || 'HTML',
+          reply_markup: options.reply_markup,
+        }),
+      });
+      const data = await response.json();
+      return !!data.ok;
+    } catch (error) {
+      console.error('Failed to edit Telegram message text:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Edit only the inline keyboard markup of an existing message
+   */
+  static async editMessageReplyMarkup(
+    chatId: string | number,
+    messageId: number,
+    replyMarkup?: any
+  ): Promise<boolean> {
+    if (!this.isConfigured()) return false;
+    try {
+      const response = await fetch(`${TELEGRAM_API}/editMessageReplyMarkup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          message_id: messageId,
+          reply_markup: replyMarkup || { inline_keyboard: [] },
+        }),
+      });
+      const data = await response.json();
+      return !!data.ok;
+    } catch (error) {
+      console.error('Failed to edit Telegram reply markup:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Reply keyboard for Client role
+   */
+  static getClientReplyKeyboard() {
+    return {
+      keyboard: [
+        [{ text: '📊 Profile' }, { text: '📁 Projects' }],
+        [{ text: '💰 Payments' }, { text: '🧾 Invoices' }],
+        [{ text: '📈 Status' }],
+      ],
+      resize_keyboard: true,
+      one_time_keyboard: false,
+    };
+  }
+
+  /**
+   * Reply keyboard for Team Member role
+   */
+  static getTeamMemberReplyKeyboard() {
+    return {
+      keyboard: [
+        [{ text: '📋 My Tasks' }, { text: '💰 My Payments' }],
+        [{ text: '📁 My Projects' }, { text: '👤 My Profile' }],
+        [{ text: '❓ Help' }],
+      ],
+      resize_keyboard: true,
+      one_time_keyboard: false,
+    };
+  }
+
+  /**
+   * Centralized Telegram identity resolver.
+   * Priority: ADMIN -> Conflict Detection -> TEAM_MEMBER -> CLIENT -> UNLINKED
+   */
+  static async resolveTelegramIdentity(
+    telegramUserId: string,
+    chatId?: string
+  ): Promise<TelegramIdentity> {
+    await dbConnect();
+    const strUserId = String(telegramUserId);
+    const strChatId = chatId ? String(chatId) : undefined;
+
+    // 1. Admin Verification
+    const adminTelegramId = process.env.ADMIN_TELEGRAM_ID;
+    if (adminTelegramId && (strUserId === String(adminTelegramId) || strChatId === String(adminTelegramId))) {
+      return { type: 'ADMIN', user: { telegramUserId: strUserId, role: 'ADMIN' } };
+    }
+
+    // Also check User model for Admin with matching Telegram ID
+    const adminUser = await User.findOne({
+      role: 'ADMIN',
+      $or: [
+        { email: 'admin@drdebuggers.com' }, // Default admin fallback
+      ],
+    }).lean();
+
+    // 2. Lookup TeamMember & Client concurrently
+    const [teamMember, client] = await Promise.all([
+      TeamMember.findOne({
+        $or: [
+          { telegramUserId: strUserId },
+          ...(strChatId ? [{ telegramChatId: strChatId }] : []),
+        ],
+      }).lean(),
+      Client.findOne({
+        telegramConnected: true,
+        $or: [
+          { telegramUserId: strUserId },
+          ...(strChatId ? [{ telegramChatId: strChatId }] : []),
+        ],
+      }).lean(),
+    ]);
+
+    // 3. Conflict Detection: Account linked as both TeamMember and Client
+    if (teamMember && client) {
+      return { type: 'CONFLICT', teamMember, client, user: adminUser };
+    }
+
+    // 4. Team Member
+    if (teamMember) {
+      return { type: 'TEAM_MEMBER', teamMember };
+    }
+
+    // 5. Client
+    if (client) {
+      return { type: 'CLIENT', client };
+    }
+
+    // 6. Unlinked
+    return { type: 'UNLINKED' };
   }
 
   /**
@@ -289,8 +452,14 @@ export class TelegramService {
     const inlineKeyboard = {
       inline_keyboard: [
         [
-          { text: '⚡ Start Working', callback_data: `task_prog:${task._id}` },
-          { text: '✅ Mark Done', callback_data: `task_done:${task._id}` },
+          { text: '⚡ Start Working', callback_data: `team_task:start:${task._id}` },
+          { text: '✅ Mark Done', callback_data: `team_task:complete:${task._id}` },
+        ],
+        [
+          { text: '📋 View Details', callback_data: `team_task:details:${task._id}` },
+          ...(task.requiredCredentialIds && task.requiredCredentialIds.length > 0 && !task.credentialAccessRevoked
+            ? [{ text: '🔐 Credentials', callback_data: `team_task:credentials:${task._id}` }]
+            : []),
         ],
       ],
     };
@@ -356,7 +525,344 @@ export class TelegramService {
   }
 
   /**
-   * Handle Team Member Telegram Commands (/tasks, /help, /mypayments)
+   * Handle incoming callback queries from inline keyboards
+   */
+  static async handleCallbackQuery(
+    cb: any,
+    timings?: any
+  ): Promise<{ action: string; success: boolean }> {
+    const cbId = cb.id;
+    const fromUserId = String(cb.from?.id);
+    const cbData = (cb.data || '').trim();
+    const message = cb.message;
+    const cbChatId = String(message?.chat?.id || fromUserId);
+    const messageId = message?.message_id;
+
+    console.log(`[TELEGRAM_CALLBACK_RECEIVED]\ncallbackId=${cbId}\nuserId=${fromUserId}\ndata=${cbData}`);
+
+    // Resolve user identity
+    const identity = await this.resolveTelegramIdentity(fromUserId, cbChatId);
+
+    if (
+      cbData.startsWith('team_task:') ||
+      cbData.startsWith('task_prog:') ||
+      cbData.startsWith('task_done:')
+    ) {
+      return await this.handleTeamTaskCallback(
+        cbId,
+        fromUserId,
+        cbChatId,
+        messageId,
+        cbData,
+        identity,
+        message,
+        timings
+      );
+    }
+
+    await this.answerCallbackQuery(cbId, 'Action received.');
+    return { action: cbData, success: true };
+  }
+
+  /**
+   * Handle Team Task action buttons
+   */
+  private static async handleTeamTaskCallback(
+    cbId: string,
+    fromUserId: string,
+    chatId: string,
+    messageId: number | undefined,
+    cbData: string,
+    identity: TelegramIdentity,
+    message: any,
+    timings?: any
+  ): Promise<{ action: string; success: boolean }> {
+    let action = 'unknown';
+    let taskId = '';
+
+    if (cbData.startsWith('team_task:start:')) {
+      action = 'start';
+      taskId = cbData.replace('team_task:start:', '');
+    } else if (cbData.startsWith('task_prog:')) {
+      action = 'start';
+      taskId = cbData.replace('task_prog:', '');
+    } else if (cbData.startsWith('team_task:complete:')) {
+      action = 'complete';
+      taskId = cbData.replace('team_task:complete:', '');
+    } else if (cbData.startsWith('task_done:')) {
+      action = 'complete';
+      taskId = cbData.replace('task_done:', '');
+    } else if (cbData.startsWith('team_task:details:')) {
+      action = 'details';
+      taskId = cbData.replace('team_task:details:', '');
+    } else if (cbData.startsWith('team_task:credentials:')) {
+      action = 'credentials';
+      taskId = cbData.replace('team_task:credentials:', '');
+    }
+
+    // 1. Role Authorization
+    if (identity.type !== 'TEAM_MEMBER' && identity.type !== 'ADMIN') {
+      await this.answerCallbackQuery(cbId, 'You are not authorized for this task.', true);
+      await AuditService.logAction(
+        fromUserId,
+        'TASK_ACTION_DENIED',
+        'Task',
+        taskId,
+        { reason: 'UNAUTHORIZED_ROLE', telegramUserId: fromUserId, action }
+      );
+      return { action, success: false };
+    }
+
+    if (identity.type === 'TEAM_MEMBER' && identity.teamMember.status === 'DEACTIVATED') {
+      await this.answerCallbackQuery(cbId, 'Your account is deactivated.', true);
+      await AuditService.logAction(
+        identity.teamMember.email,
+        'TASK_ACTION_DENIED',
+        'Task',
+        taskId,
+        { reason: 'DEACTIVATED', telegramUserId: fromUserId, action }
+      );
+      return { action, success: false };
+    }
+
+    // 2. Load Task
+    await dbConnect();
+    const task = await Task.findById(taskId).populate('projectId', 'name projectCode currency');
+    if (!task) {
+      await this.answerCallbackQuery(cbId, 'Task not found.', true);
+      return { action, success: false };
+    }
+
+    // 3. Assignee Authorization (Team members can only execute actions on their own assigned tasks)
+    if (identity.type === 'TEAM_MEMBER') {
+      const isAssigned = task.assignedTo?.toString() === identity.teamMember._id.toString();
+      if (!isAssigned) {
+        await this.answerCallbackQuery(cbId, 'You are not authorized for this task.', true);
+        await AuditService.logAction(
+          identity.teamMember.email,
+          'TASK_ACTION_DENIED',
+          'Task',
+          task._id.toString(),
+          {
+            taskCode: task.taskCode,
+            assignedTo: task.assignedTo?.toString(),
+            attemptedBy: identity.teamMember._id.toString(),
+            telegramUserId: fromUserId,
+            action,
+            reason: 'NOT_ASSIGNED_TO_TASK',
+          }
+        );
+        return { action, success: false };
+      }
+    }
+
+    const memberName = identity.teamMember?.name || 'Administrator';
+    const memberEmail = identity.teamMember?.email || 'admin';
+    const memberId = identity.teamMember?._id || 'admin';
+    const pName = (task.projectId as any)?.name || 'Project';
+    const pCode = (task.projectId as any)?.projectCode || '';
+
+    // Log callback action
+    await AuditService.logAction(
+      memberEmail,
+      'TEAM_MEMBER_CALLBACK_ACTION',
+      'Task',
+      task._id.toString(),
+      { action, taskCode: task.taskCode, telegramUserId: fromUserId }
+    );
+
+    // 4. Action Execution
+    switch (action) {
+      case 'start': {
+        if (task.status === 'IN_PROGRESS') {
+          await this.answerCallbackQuery(cbId, 'Task is already in progress.');
+          return { action, success: true };
+        }
+        if (task.status === 'COMPLETED') {
+          await this.answerCallbackQuery(cbId, 'Task is already completed.', true);
+          return { action, success: false };
+        }
+        if (task.status === 'CANCELLED') {
+          await this.answerCallbackQuery(cbId, 'Task is cancelled.', true);
+          return { action, success: false };
+        }
+
+        task.status = 'IN_PROGRESS';
+        await task.save();
+
+        await AuditService.logAction(
+          memberEmail,
+          'TASK_STARTED',
+          'Task',
+          task._id.toString(),
+          {
+            taskCode: task.taskCode,
+            projectId: task.projectId?._id || task.projectId,
+            teamMemberId: memberId,
+            telegramUserId: fromUserId,
+          }
+        );
+
+        await this.answerCallbackQuery(cbId, 'Task started.');
+
+        // Update message
+        const priorityIcon = task.priority === 'URGENT' ? '🚨' : (task.priority === 'HIGH' ? '🔴' : (task.priority === 'MEDIUM' ? '🟡' : '🟢'));
+        const updatedText = `⚡ <b>Task In Progress</b>\n\n` +
+          `<b>Project:</b> ${pName} (<code>${pCode}</code>)\n` +
+          `<b>Task:</b> ${task.title} (<code>${task.taskCode}</code>)\n` +
+          `<b>Priority:</b> ${priorityIcon} ${task.priority}\n` +
+          `<b>Status:</b> <code>IN_PROGRESS</code>\n\n` +
+          (task.description ? `<i>${task.description}</i>\n\n` : '') +
+          `<i>Status updated by ${memberName}</i>`;
+
+        const buttons: any[] = [
+          [{ text: '✅ Mark Done', callback_data: `team_task:complete:${task._id}` }],
+          [{ text: '📋 View Details', callback_data: `team_task:details:${task._id}` }],
+        ];
+        if (task.requiredCredentialIds && task.requiredCredentialIds.length > 0 && !task.credentialAccessRevoked) {
+          buttons[1].push({ text: '🔐 Credentials', callback_data: `team_task:credentials:${task._id}` });
+        }
+
+        if (messageId) {
+          await this.editMessageText(chatId, messageId, updatedText, {
+            reply_markup: { inline_keyboard: buttons },
+          });
+        }
+        return { action, success: true };
+      }
+
+      case 'complete': {
+        if (task.status === 'COMPLETED') {
+          await this.answerCallbackQuery(cbId, 'Task is already completed.', true);
+          return { action, success: true };
+        }
+        if (task.status === 'CANCELLED') {
+          await this.answerCallbackQuery(cbId, 'Task is cancelled.', true);
+          return { action, success: false };
+        }
+
+        task.status = 'COMPLETED';
+        task.completedAt = new Date();
+        await task.save();
+
+        await AuditService.logAction(
+          memberEmail,
+          'TASK_COMPLETED',
+          'Task',
+          task._id.toString(),
+          {
+            taskCode: task.taskCode,
+            projectId: task.projectId?._id || task.projectId,
+            teamMemberId: memberId,
+            telegramUserId: fromUserId,
+          }
+        );
+
+        await this.answerCallbackQuery(cbId, 'Task marked as completed.');
+
+        // Update message to remove active start/complete buttons
+        const updatedText = `✅ <b>Task Completed!</b>\n\n` +
+          `<b>Project:</b> ${pName} (<code>${pCode}</code>)\n` +
+          `<b>Task:</b> ${task.title} (<code>${task.taskCode}</code>)\n` +
+          `<b>Status:</b> <code>COMPLETED</code>\n` +
+          `<b>Completed At:</b> ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}\n\n` +
+          `Great work, ${memberName}!`;
+
+        if (messageId) {
+          await this.editMessageText(chatId, messageId, updatedText, {
+            reply_markup: {
+              inline_keyboard: [[{ text: '📋 View Details', callback_data: `team_task:details:${task._id}` }]],
+            },
+          });
+        }
+
+        // Notify Admin of completed task
+        const adminChatId = process.env.ADMIN_TELEGRAM_ID;
+        if (adminChatId) {
+          await this.sendMessageRaw(
+            adminChatId,
+            `✅ <b>Task Completed by Team Member</b>\n\n` +
+            `<b>Team Member:</b> ${memberName}\n` +
+            `<b>Task:</b> ${task.title} (<code>${task.taskCode}</code>)\n` +
+            `<b>Project:</b> ${pName} (<code>${pCode}</code>)\n` +
+            `<b>Status:</b> <b>COMPLETED</b>`
+          );
+        }
+        return { action, success: true };
+      }
+
+      case 'details': {
+        await this.answerCallbackQuery(cbId, 'Loading task details...');
+        const priorityIcon = task.priority === 'URGENT' ? '🚨' : (task.priority === 'HIGH' ? '🔴' : (task.priority === 'MEDIUM' ? '🟡' : '🟢'));
+        const dueStr = task.dueDate ? new Date(task.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No due date';
+        const credCount = task.requiredCredentialIds?.length || 0;
+
+        const detailsMsg = `📋 <b>Task Details: ${task.title}</b>\n\n` +
+          `<b>Task Code:</b> <code>${task.taskCode}</code>\n` +
+          `<b>Project:</b> ${pName} (<code>${pCode}</code>)\n` +
+          `<b>Priority:</b> ${priorityIcon} ${task.priority}\n` +
+          `<b>Status:</b> <code>${task.status}</code>\n` +
+          `<b>Due Date:</b> ${dueStr}\n` +
+          (task.agreedAmount ? `<b>Agreed Payout:</b> ₹${task.agreedAmount.toLocaleString('en-IN')}\n` : '') +
+          `<b>Required Credentials:</b> ${credCount > 0 ? `${credCount} attached` : 'None'}\n\n` +
+          `<b>Description:</b>\n${task.description || 'No description provided.'}`;
+
+        const buttons: any[] = [];
+        if (task.status === 'TODO') {
+          buttons.push([
+            { text: '⚡ Start Working', callback_data: `team_task:start:${task._id}` },
+            { text: '✅ Mark Done', callback_data: `team_task:complete:${task._id}` },
+          ]);
+        } else if (task.status === 'IN_PROGRESS') {
+          buttons.push([{ text: '✅ Mark Done', callback_data: `team_task:complete:${task._id}` }]);
+        }
+        if (credCount > 0 && !task.credentialAccessRevoked) {
+          buttons.push([{ text: '🔐 Required Credentials', callback_data: `team_task:credentials:${task._id}` }]);
+        }
+
+        await this.sendMessageRaw(chatId, detailsMsg, {
+          reply_markup: buttons.length > 0 ? { inline_keyboard: buttons } : undefined,
+        });
+        return { action, success: true };
+      }
+
+      case 'credentials': {
+        if (!identity.teamMember?.permissions?.includes('VIEW_CREDENTIALS') && identity.type !== 'ADMIN') {
+          await this.answerCallbackQuery(cbId, 'You do not have permission to view credentials.', true);
+          await AuditService.logAction(
+            memberEmail,
+            'TASK_ACTION_DENIED',
+            'Task',
+            task._id.toString(),
+            { reason: 'NO_VIEW_CREDENTIALS_PERMISSION', telegramUserId: fromUserId }
+          );
+          return { action, success: false };
+        }
+
+        if (task.credentialAccessRevoked) {
+          await this.answerCallbackQuery(cbId, 'Credential access for this task has been revoked.', true);
+          return { action, success: false };
+        }
+
+        try {
+          const { CredentialSharingService } = await import('./credential-sharing.service');
+          await CredentialSharingService.shareTaskCredentials(task._id.toString(), memberEmail);
+          await this.answerCallbackQuery(cbId, '🔐 Credentials dispatched to your chat.');
+          return { action, success: true };
+        } catch (err: any) {
+          await this.answerCallbackQuery(cbId, err.message || 'Failed to retrieve credentials.', true);
+          return { action, success: false };
+        }
+      }
+
+      default:
+        await this.answerCallbackQuery(cbId, 'Unknown task action.', true);
+        return { action, success: false };
+    }
+  }
+
+  /**
+   * Handle Team Member Telegram Messages (Commands & Reply Keyboard buttons)
    */
   private static async handleTeamMemberCommand(
     chatId: string,
@@ -364,21 +870,42 @@ export class TelegramService {
     teamMember: any,
     timings?: any
   ): Promise<void> {
-    let cmd = text.toLowerCase().split(' ')[0];
+    const raw = text.trim();
+    let cmd = raw.toLowerCase().split(' ')[0];
     if (cmd.includes('@')) cmd = cmd.split('@')[0];
+
+    // Normalize reply keyboard button text
+    if (raw === '📋 My Tasks' || raw === 'My Tasks') cmd = '/tasks';
+    else if (raw === '💰 My Payments' || raw === 'My Payments') cmd = '/mypayments';
+    else if (raw === '📁 My Projects' || raw === 'My Projects') cmd = '/myprojects';
+    else if (raw === '👤 My Profile' || raw === 'My Profile') cmd = '/myprofile';
+    else if (raw === '❓ Help' || raw === 'Help') cmd = '/help';
+
+    // Log team command
+    await AuditService.logAction(
+      teamMember.email,
+      'TEAM_MEMBER_COMMAND',
+      'TeamMember',
+      teamMember._id.toString(),
+      { command: cmd, rawText: raw }
+    );
 
     switch (cmd) {
       case '/start':
       case '/help':
-        await this.sendMessage(
+        await this.sendMessageRaw(
           chatId,
-          `<b>👋 Hello, ${teamMember.name}!</b>\n\n` +
-          `<b>Role:</b> ${teamMember.role}\n\n` +
-          `Available team commands:\n` +
-          `/tasks - View your assigned tasks with interactive actions\n` +
+          `<b>👋 Welcome, ${teamMember.name}!</b>\n\n` +
+          `You are connected as a <b>Team Member</b>.\n\n` +
+          `<b>Your Role:</b> <code>${teamMember.role}</code>\n` +
+          `<b>Status:</b> <code>${teamMember.status}</code>\n\n` +
+          `<b>Available commands:</b>\n` +
+          `/tasks - View your assigned tasks\n` +
           `/mypayments - View your compensation & payment history\n` +
-          `/help - Show this help menu`,
-          timings
+          `/myprojects - View projects you are assigned to\n` +
+          `/myprofile - View your profile details\n` +
+          `/help - Show this guide`,
+          { reply_markup: this.getTeamMemberReplyKeyboard() }
         );
         break;
 
@@ -396,7 +923,11 @@ export class TelegramService {
         if (timings) timings.databaseQuery += Math.round(performance.now() - dbStart);
 
         if (tasks.length === 0) {
-          await this.sendMessage(chatId, `📋 <b>Your Tasks</b>\n\nYou currently have no active tasks assigned. Great job!`, timings);
+          await this.sendMessageRaw(
+            chatId,
+            `📋 <b>Your Assigned Tasks</b>\n\nYou currently have no active tasks assigned. Great job!`,
+            { reply_markup: this.getTeamMemberReplyKeyboard() }
+          );
           return;
         }
 
@@ -418,21 +949,69 @@ export class TelegramService {
                  `   ${icon} <b>${t.priority}</b> | Status: <code>${t.status}</code> | Due: ${dueStr}\n\n`;
         }
 
-        // Add inline buttons for the first 3 pending tasks
-        const actionTasks = tasks.filter((t: any) => t.status !== 'COMPLETED').slice(0, 3);
-        const inlineKeyboard = actionTasks.length > 0 ? {
-          inline_keyboard: actionTasks.map((t: any) => [
-            { text: `⚡ ${t.title.slice(0, 15)} (In Progress)`, callback_data: `task_prog:${t._id}` },
-            { text: `✅ Mark Done`, callback_data: `task_done:${t._id}` },
-          ]),
-        } : undefined;
+        // Inline keyboard for active tasks (up to 4)
+        const activeTasks = tasks.slice(0, 4);
+        const keyboardRows: any[] = [];
 
-        await this.sendMessageRaw(chatId, msg, { reply_markup: inlineKeyboard });
+        for (const t of activeTasks) {
+          const row: any[] = [];
+          if (t.status === 'TODO') {
+            row.push({ text: `⚡ Start: ${t.taskCode}`, callback_data: `team_task:start:${t._id}` });
+            row.push({ text: `✅ Done`, callback_data: `team_task:complete:${t._id}` });
+          } else if (t.status === 'IN_PROGRESS') {
+            row.push({ text: `✅ Mark Done: ${t.taskCode}`, callback_data: `team_task:complete:${t._id}` });
+          }
+          row.push({ text: `📋 Details`, callback_data: `team_task:details:${t._id}` });
+          if (t.requiredCredentialIds && t.requiredCredentialIds.length > 0 && !t.credentialAccessRevoked) {
+            row.push({ text: `🔐 Creds`, callback_data: `team_task:credentials:${t._id}` });
+          }
+          keyboardRows.push(row);
+        }
+
+        await this.sendMessageRaw(chatId, msg, {
+          reply_markup: { inline_keyboard: keyboardRows },
+        });
         break;
       }
 
-      case '/mypayments':
-      case '/payments': {
+      case '/myprojects':
+      case '/projects': {
+        const dbStart = performance.now();
+        const projects = await Project.find({
+          teamMemberIds: teamMember._id,
+        })
+          .select('name projectCode serviceType status totalAmount currency')
+          .lean();
+        if (timings) timings.databaseQuery += Math.round(performance.now() - dbStart);
+
+        if (projects.length === 0) {
+          await this.sendMessageRaw(
+            chatId,
+            `📁 <b>Your Projects</b>\n\nYou are not currently assigned to any projects.`,
+            { reply_markup: this.getTeamMemberReplyKeyboard() }
+          );
+          return;
+        }
+
+        let msg = `📁 <b>Your Assigned Projects (${projects.length})</b>\n\n`;
+        for (let i = 0; i < projects.length; i++) {
+          const p: any = projects[i];
+          const activeTasksCount = await Task.countDocuments({
+            projectId: p._id,
+            assignedTo: teamMember._id,
+            status: { $in: ['TODO', 'IN_PROGRESS'] },
+          });
+
+          msg += `<b>${i + 1}. ${p.name}</b>\n` +
+                 `   <b>Code:</b> <code>${p.projectCode}</code> | <b>Type:</b> ${p.serviceType}\n` +
+                 `   <b>Status:</b> <code>${p.status}</code> | <b>Active Tasks:</b> ${activeTasksCount}\n\n`;
+        }
+
+        await this.sendMessageRaw(chatId, msg, { reply_markup: this.getTeamMemberReplyKeyboard() });
+        break;
+      }
+
+      case '/mypayments': {
         const dbStart = performance.now();
         const payments = await TeamPayment.find({
           teamMemberId: teamMember._id,
@@ -452,11 +1031,10 @@ export class TelegramService {
         }
 
         if (payments.length === 0) {
-          await this.sendMessage(
+          await this.sendMessageRaw(
             chatId,
-            `💰 <b>Your Payments</b>\n\n` +
-            `No payment records found yet for your account.`,
-            timings
+            `💰 <b>Your Payments</b>\n\nNo payment records found yet for your account.`,
+            { reply_markup: this.getTeamMemberReplyKeyboard() }
           );
           return;
         }
@@ -479,15 +1057,34 @@ export class TelegramService {
                  `   Date: ${dateStr} | Ref: <code>${p.paymentNumber}</code>\n\n`;
         }
 
-        await this.sendMessageRaw(chatId, msg);
+        await this.sendMessageRaw(chatId, msg, { reply_markup: this.getTeamMemberReplyKeyboard() });
+        break;
+      }
+
+      case '/myprofile':
+      case '/profile': {
+        const perms = teamMember.permissions && teamMember.permissions.length > 0
+          ? teamMember.permissions.join(', ')
+          : 'Standard Access';
+
+        const msg = `👤 <b>Team Member Profile</b>\n\n` +
+          `<b>Name:</b> ${teamMember.name}\n` +
+          `<b>Email:</b> ${teamMember.email}\n` +
+          `<b>Phone:</b> ${teamMember.phone || 'N/A'}\n` +
+          `<b>Role:</b> <code>${teamMember.role}</code>\n` +
+          `<b>Status:</b> <code>${teamMember.status}</code>\n` +
+          `<b>Telegram:</b> Connected ✅\n` +
+          `<b>Permissions:</b> ${perms}`;
+
+        await this.sendMessageRaw(chatId, msg, { reply_markup: this.getTeamMemberReplyKeyboard() });
         break;
       }
 
       default:
-        await this.sendMessage(
+        await this.sendMessageRaw(
           chatId,
-          `Unknown team command. Use /tasks to view your assigned tasks, /mypayments for payments, or /help for guidance.`,
-          timings
+          `Unknown team command. Use /tasks to view your assigned tasks, /mypayments for payments, /myprojects for assigned projects, or /help for guidance.`,
+          { reply_markup: this.getTeamMemberReplyKeyboard() }
         );
         break;
     }
@@ -642,43 +1239,21 @@ export class TelegramService {
 
     // 1. Handle interactive Inline Keyboard callbacks (e.g. from /tasks)
     if (update?.callback_query) {
-      const cb = update.callback_query;
-      const cbId = cb.id;
-      const cbData = cb.data || '';
-      const fromUserId = String(cb.from?.id);
-      const cbChatId = String(cb.message?.chat?.id || fromUserId);
-
-      if (cbData.startsWith('task_prog:') || cbData.startsWith('task_done:')) {
-        const isProg = cbData.startsWith('task_prog:');
-        const taskId = cbData.replace(isProg ? 'task_prog:' : 'task_done:', '');
-        
-        const teamMember = await TeamMember.findOne({ telegramUserId: fromUserId });
-        if (!teamMember || teamMember.status === 'DEACTIVATED') {
-          await this.answerCallbackQuery(cbId, '❌ Unauthorized or account deactivated.');
-          return { command: 'callback', total: 0 };
-        }
-
-        const task = await Task.findById(taskId);
-        if (!task) {
-          await this.answerCallbackQuery(cbId, '❌ Task not found.');
-          return { command: 'callback', total: 0 };
-        }
-
-        if (task.assignedTo?.toString() !== teamMember._id.toString() && teamMember.role !== 'ADMIN') {
-          await this.answerCallbackQuery(cbId, '❌ You are not assigned to this task.');
-          return { command: 'callback', total: 0 };
-        }
-
-        const newStatus = isProg ? 'IN_PROGRESS' : 'COMPLETED';
-        await TaskService.updateTaskStatus(taskId, newStatus, teamMember.name, true);
-
-        await this.answerCallbackQuery(cbId, `✅ Task marked as ${newStatus}!`);
-        await this.sendMessage(cbChatId, `📋 <b>Task Updated</b>\n\nTask <b>${task.title}</b> is now marked as <b>${newStatus}</b>.`);
-        return { command: 'callback', total: 0 };
-      }
+      const cbResult = await this.handleCallbackQuery(update.callback_query, timings);
+      return {
+        command: 'callback',
+        action: cbResult.action,
+        clientLookup: 0,
+        databaseQuery: timings.databaseQuery,
+        handler: timings.handler,
+        telegramAPI: timings.telegramAPI,
+        total: Math.round(performance.now() - startTotal),
+        startTotal,
+        timings,
+      };
     }
 
-    const message = update?.message;
+    const message = update?.message || update?.edited_message;
     if (!message || !message.chat || !message.from) return;
 
     const chatId = String(message.chat.id);
@@ -692,30 +1267,6 @@ export class TelegramService {
     if (isCommand) {
       const commandName = text.split(' ')[0];
       console.log(`TELEGRAM_COMMAND_RECEIVED\ncommand=${commandName}\ntelegramUserId=${userId}\nchatId=${chatId}`);
-    }
-
-    // Check if the user is the Admin
-    const adminTelegramId = process.env.ADMIN_TELEGRAM_ID;
-    const isAdmin = adminTelegramId && userId === String(adminTelegramId);
-
-    if (isAdmin && isCommand) {
-      const handlerStart = performance.now();
-      await this.handleAdminCommand(chatId, text, timings);
-      const handlerTime = performance.now() - handlerStart;
-      timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
-      
-      const total = Math.round(performance.now() - startTotal);
-      console.log(`TELEGRAM_PERF\ncommand=${text.split(' ')[0]}\nclientLookup=${timings.clientLookup}ms\ndatabaseQuery=${timings.databaseQuery}ms\nhandler=${timings.handler}ms\ntelegramAPI=${timings.telegramAPI}ms\ntotal=${total}ms`);
-      return {
-        command: text.split(' ')[0],
-        clientLookup: timings.clientLookup,
-        databaseQuery: timings.databaseQuery,
-        handler: timings.handler,
-        telegramAPI: timings.telegramAPI,
-        total,
-        startTotal,
-        timings,
-      };
     }
 
     // Handle Deep Linking connection token (both Team and Client)
@@ -741,10 +1292,10 @@ export class TelegramService {
           });
           timings.databaseQuery += Math.round(performance.now() - dbStart);
 
-          await this.sendMessage(
+          await this.sendMessageRaw(
             chatId,
             `<b>🎉 Telegram Successfully Connected!</b>\n\nHello <b>${member.name}</b>, your Telegram profile is now securely linked to your team account as <b>${member.role}</b>.\n\nYou can use:\n/tasks - View your assigned tasks\n/help - Show help menu`,
-            timings
+            { reply_markup: this.getTeamMemberReplyKeyboard() }
           );
 
           const handlerTime = performance.now() - handlerStart;
@@ -789,17 +1340,16 @@ export class TelegramService {
           });
           timings.databaseQuery += Math.round(performance.now() - dbStart);
 
-          await this.sendMessage(
+          await this.sendMessageRaw(
             chatId,
             `<b>🎉 Telegram Successfully Connected!</b>\n\nHello <b>${connectedClient.name}</b>, your Telegram profile is now securely linked to your account with client code <b>${connectedClient.clientCode}</b>.\n\nYou can use the following commands to interact with your account:\n/myprofile - View Profile\n/myproject - View Project Details\n/payments - View Payment Logs\n/invoices - View Billing History\n/status - Check Development Progress`,
-            timings
+            { reply_markup: this.getClientReplyKeyboard() }
           );
           
           const handlerTime = performance.now() - handlerStart;
           timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
           
           const total = Math.round(performance.now() - startTotal);
-          console.log(`TELEGRAM_PERF\ncommand=${text.split(' ')[0]}\nclientLookup=${timings.clientLookup}ms\ndatabaseQuery=${timings.databaseQuery}ms\nhandler=${timings.handler}ms\ntelegramAPI=${timings.telegramAPI}ms\ntotal=${total}ms`);
           return {
             command: text.split(' ')[0],
             clientLookup: timings.clientLookup,
@@ -817,7 +1367,6 @@ export class TelegramService {
           timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
           
           const total = Math.round(performance.now() - startTotal);
-          console.log(`TELEGRAM_PERF\ncommand=${text.split(' ')[0]}\nclientLookup=${timings.clientLookup}ms\ndatabaseQuery=${timings.databaseQuery}ms\nhandler=${timings.handler}ms\ntelegramAPI=${timings.telegramAPI}ms\ntotal=${total}ms`);
           return {
             command: text.split(' ')[0],
             clientLookup: timings.clientLookup,
@@ -832,104 +1381,36 @@ export class TelegramService {
       }
     }
 
-    // Check if user is a Team Member
-    const dbTeamLookup = performance.now();
-    const teamMember: any = await TeamMember.findOne({
-      $or: [
-        { telegramUserId: userId },
-        { telegramChatId: chatId },
-      ]
-    }).lean();
-    timings.databaseQuery += Math.round(performance.now() - dbTeamLookup);
-
-    if (teamMember) {
-      if (teamMember.status === 'DEACTIVATED') {
-        await this.sendMessage(chatId, '❌ <b>Account Deactivated</b>\n\nYour team member account is deactivated. Please contact an administrator.', timings);
-        return { command: 'deactivated', total: 0 };
-      }
-
-      if (isCommand) {
-        const handlerStart = performance.now();
-        await this.handleTeamMemberCommand(chatId, text, teamMember, timings);
-        const handlerTime = performance.now() - handlerStart;
-        timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
-        const total = Math.round(performance.now() - startTotal);
-        return {
-          command: text.split(' ')[0],
-          clientLookup: timings.clientLookup,
-          databaseQuery: timings.databaseQuery,
-          handler: timings.handler,
-          telegramAPI: timings.telegramAPI,
-          total,
-          startTotal,
-          timings,
-        };
-      }
-    }
-
-    // Try to find the client associated with this Telegram userId or chatId
+    // Centralized Identity Resolution
     const lookupStart = performance.now();
-    let client: any = await Client.findOne({
-      $or: [
-        { telegramUserId: userId },
-        { telegramChatId: chatId },
-      ]
-    })
-      .select('clientCode name company email phone address city country telegramUserId telegramChatId telegramConnected')
-      .lean();
+    const identity = await this.resolveTelegramIdentity(userId, chatId);
     timings.clientLookup = Math.round(performance.now() - lookupStart);
 
-    // If client is not connected
-    if (!client) {
-      const handlerStart = performance.now();
-      // Look up by username as fallback if connected flag isn't set, or prompt setup
-      const dbStart = performance.now();
-      const clientByUsername = username ? await Client.findOne({ telegramUsername: username }) : null;
-      timings.databaseQuery += Math.round(performance.now() - dbStart);
-      
-      if (clientByUsername && !clientByUsername.telegramConnected) {
-        // Link them
-        clientByUsername.telegramConnected = true;
-        clientByUsername.telegramUserId = userId;
-        clientByUsername.telegramChatId = chatId;
-        
-        const dbStart2 = performance.now();
-        client = await clientByUsername.save();
-        timings.databaseQuery += Math.round(performance.now() - dbStart2);
-        
-        await this.sendMessage(chatId, `<b>🎉 Welcome back, ${client.name}!</b>\n\nYour account has been matched. Use /help to see commands.`, timings);
-        
-        const handlerTime = performance.now() - handlerStart;
-        timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
-        
-        const total = Math.round(performance.now() - startTotal);
-        console.log(`TELEGRAM_PERF\ncommand=${text.split(' ')[0]}\nclientLookup=${timings.clientLookup}ms\ndatabaseQuery=${timings.databaseQuery}ms\nhandler=${timings.handler}ms\ntelegramAPI=${timings.telegramAPI}ms\ntotal=${total}ms`);
-        return {
-          command: text.split(' ')[0],
-          clientLookup: timings.clientLookup,
-          databaseQuery: timings.databaseQuery,
-          handler: timings.handler,
-          telegramAPI: timings.telegramAPI,
-          total,
-          startTotal,
-          timings,
-        };
-      }
+    // 1. Conflict Check
+    if (identity.type === 'CONFLICT') {
+      await AuditService.logAction(
+        userId,
+        'TELEGRAM_ACCOUNT_CONFLICT',
+        'Auth',
+        undefined,
+        { telegramUserId: userId, chatId, teamMemberId: identity.teamMember?._id, clientId: identity.client?._id }
+      );
 
       await this.sendMessage(
         chatId,
-        `<b>👋 Welcome to Dr Debuggers.</b>\n\n` +
-        `Your Telegram account is not connected to a client account yet.\n\n` +
-        `Please ask the administrator for your secure connection link.\n\n` +
-        `<i>Your Telegram User ID:</i> <code>${userId}</code>`,
+        `⚠️ <b>Account Link Conflict</b>\n\nYour Telegram account is linked to multiple account types (Client & Team Member). Please contact the administrator to resolve your account configuration.\n\n<i>Your Telegram User ID:</i> <code>${userId}</code>`,
         timings
       );
-      
+      return { command: 'conflict', total: Math.round(performance.now() - startTotal) };
+    }
+
+    // 2. Admin Router
+    if (identity.type === 'ADMIN') {
+      const handlerStart = performance.now();
+      await this.handleAdminCommand(chatId, text, timings);
       const handlerTime = performance.now() - handlerStart;
       timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
-      
       const total = Math.round(performance.now() - startTotal);
-      console.log(`TELEGRAM_PERF\ncommand=${text.split(' ')[0]}\nclientLookup=${timings.clientLookup}ms\ndatabaseQuery=${timings.databaseQuery}ms\nhandler=${timings.handler}ms\ntelegramAPI=${timings.telegramAPI}ms\ntotal=${total}ms`);
       return {
         command: text.split(' ')[0],
         clientLookup: timings.clientLookup,
@@ -942,105 +1423,201 @@ export class TelegramService {
       };
     }
 
-    // Standard client commands vs active request responses
-    const handlerStart = performance.now();
-    let targetRequest: any = null;
-    let pending: any[] = [];
-
-    if (!isCommand) {
-      const dbStart = performance.now();
-
-      // 1. Reply-To original request message support
-      if (message.reply_to_message?.message_id) {
-        const replyMsgId = String(message.reply_to_message.message_id);
-        targetRequest = await DataRequest.findOne({
-          clientId: client._id,
-          telegramMessageId: replyMsgId,
-        });
+    // 3. Team Member Router
+    if (identity.type === 'TEAM_MEMBER') {
+      const teamMember = identity.teamMember;
+      if (teamMember.status === 'DEACTIVATED') {
+        await this.sendMessage(chatId, '❌ <b>Account Deactivated</b>\n\nYour team member account is deactivated. Please contact an administrator.', timings);
+        return { command: 'deactivated', total: Math.round(performance.now() - startTotal) };
       }
 
-      // 2. Explicit Request ID in text
-      if (!targetRequest && text) {
-        const reqIdMatch = text.match(/REQ-\d{4}-\d{4}/i);
-        if (reqIdMatch) {
-          const matchedId = reqIdMatch[0].toUpperCase();
+      const handlerStart = performance.now();
+      await this.handleTeamMemberCommand(chatId, text, teamMember, timings);
+      const handlerTime = performance.now() - handlerStart;
+      timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
+      const total = Math.round(performance.now() - startTotal);
+
+      const raw = text.trim();
+      let cmdName = isCommand ? text.split(' ')[0] : 'text';
+      if (raw === '📋 My Tasks' || raw === 'My Tasks') cmdName = '/tasks';
+      else if (raw === '💰 My Payments' || raw === 'My Payments') cmdName = '/mypayments';
+      else if (raw === '📁 My Projects' || raw === 'My Projects') cmdName = '/myprojects';
+      else if (raw === '👤 My Profile' || raw === 'My Profile') cmdName = '/myprofile';
+      else if (raw === '❓ Help' || raw === 'Help') cmdName = '/help';
+
+      return {
+        command: cmdName,
+        clientLookup: timings.clientLookup,
+        databaseQuery: timings.databaseQuery,
+        handler: timings.handler,
+        telegramAPI: timings.telegramAPI,
+        total,
+        startTotal,
+        timings,
+      };
+    }
+
+    // 4. Client Router
+    if (identity.type === 'CLIENT') {
+      const client = identity.client;
+      const rawText = text.trim();
+      const isClientReplyButton = [
+        '📊 Profile', 'Profile',
+        '📁 Projects', 'Projects',
+        '💰 Payments', 'Payments',
+        '🧾 Invoices', 'Invoices',
+        '📈 Status', 'Status',
+      ].includes(rawText);
+
+      const handlerStart = performance.now();
+      let targetRequest: any = null;
+      let pending: any[] = [];
+
+      if (!isCommand && !isClientReplyButton) {
+        const dbStart = performance.now();
+
+        // 0. In-memory active selection
+        if (!targetRequest && global.activeClientRequests && global.activeClientRequests[chatId]) {
+          const activeReqId = global.activeClientRequests[chatId];
           targetRequest = await DataRequest.findOne({
             clientId: client._id,
-            requestId: matchedId,
+            requestId: activeReqId,
           });
         }
-      }
 
-      // 3. Query all active requests for this client
-      pending = await DataRequest.find({
-        clientId: client._id,
-        status: { $in: ['PENDING', 'SENT', 'OPENED'] },
-      }).sort({ createdAt: -1 });
+        // 1. Reply-To original request message support
+        if (!targetRequest && message.reply_to_message?.message_id) {
+          const replyMsgId = String(message.reply_to_message.message_id);
+          targetRequest = await DataRequest.findOne({
+            clientId: client._id,
+            telegramMessageId: replyMsgId,
+          });
+        }
 
-      timings.databaseQuery += Math.round(performance.now() - dbStart);
+        // 2. Explicit Request ID in text
+        if (!targetRequest && text) {
+          const reqIdMatch = text.match(/REQ-\d{4}-\d{4}/i);
+          if (reqIdMatch) {
+            const matchedId = reqIdMatch[0].toUpperCase();
+            targetRequest = await DataRequest.findOne({
+              clientId: client._id,
+              requestId: matchedId,
+            });
+          }
+        }
 
-      // 4. Intelligent match based on incoming message type
-      if (!targetRequest && pending.length > 0) {
-        const isCredentialFormat = text.includes(':') && (
-          /service/i.test(text) || /user/i.test(text) || /pass/i.test(text)
-        );
+        // Query all active requests for this client
+        pending = await DataRequest.find({
+          clientId: client._id,
+          status: { $in: ['PENDING', 'SENT', 'OPENED'] },
+        }).sort({ createdAt: -1 });
 
-        if (isCredentialFormat) {
-          targetRequest = pending.find(r => r.type === 'CREDENTIAL') || pending[0];
-        } else if (message.photo) {
-          targetRequest = pending.find(r => r.type === 'IMAGE') || pending[0];
-        } else if (message.document) {
-          targetRequest = pending.find(r => r.type === 'DOCUMENT') || pending[0];
-        } else {
-          targetRequest = pending[0]; // Most recent active request
+        timings.databaseQuery += Math.round(performance.now() - dbStart);
+
+        // Intelligent match based on incoming message type
+        if (!targetRequest && pending.length > 0) {
+          const isCredentialFormat = text.includes(':') && (
+            /service/i.test(text) || /user/i.test(text) || /pass/i.test(text)
+          );
+
+          if (isCredentialFormat) {
+            targetRequest = pending.find(r => r.type === 'CREDENTIAL') || pending[0];
+          } else if (message.photo) {
+            targetRequest = pending.find(r => r.type === 'IMAGE') || pending[0];
+          } else if (message.document) {
+            targetRequest = pending.find(r => r.type === 'DOCUMENT') || pending[0];
+          } else {
+            targetRequest = pending[0];
+          }
         }
       }
-    }
 
-    const routerPath = isCommand ? 'command' : (targetRequest ? 'request-response' : 'fallback');
+      const routerPath = (isCommand || isClientReplyButton) ? 'command' : (targetRequest ? 'request-response' : 'fallback');
 
-    // Safe Diagnostic Logging (Never includes passwords or credentials)
-    console.log(`[REQUEST_DEBUG]
-updateId=${updateId || 'null'}
-telegramUserId=${userId}
-chatId=${chatId}
-messageType=${messageType}
-isCommand=${isCommand}
-command=${isCommand ? text.split(' ')[0] : 'null'}
-clientFound=${!!client}
-clientId=${client?._id ? String(client._id) : 'null'}
-activeRequestFound=${!!targetRequest}
-activeRequestId=${targetRequest?.requestId || 'null'}
-activeRequestType=${targetRequest?.type || 'null'}
-activeRequestStatus=${targetRequest?.status || 'null'}
-routerPath=${routerPath}`);
+      console.log(`[REQUEST_DEBUG]\nupdateId=${updateId || 'null'}\ntelegramUserId=${userId}\nchatId=${chatId}\nmessageType=${messageType}\nisCommand=${isCommand}\ncommand=${isCommand ? text.split(' ')[0] : 'null'}\nclientFound=${!!client}\nclientId=${client?._id ? String(client._id) : 'null'}\nactiveRequestFound=${!!targetRequest}\nactiveRequestId=${targetRequest?.requestId || 'null'}\nrouterPath=${routerPath}`);
 
-    if (isCommand) {
-      // Direct command routing
-      await this.handleClientCommand(chatId, client, text, timings);
-    } else {
-      const hasActiveRequest = !!targetRequest;
-
-      if (hasActiveRequest) {
+      if (isCommand || isClientReplyButton) {
+        await this.handleClientCommand(chatId, client, text, timings);
+      } else if (targetRequest) {
         await this.handleClientResponse(chatId, client, message, targetRequest, pending, timings);
       } else {
-        // Fallback for non-command text when no active request exists
-        await this.sendMessage(
+        await this.sendMessageRaw(
           chatId,
-          `<b>👋 Welcome to Dr Debuggers.</b>\n\n` +
-          `You do not have any pending requests to respond to. Type /help to see available commands.`,
-          timings
+          `<b>👋 Welcome to Dr Debuggers.</b>\n\nYou do not have any pending requests to respond to. Type /help to see available commands.`,
+          { reply_markup: this.getClientReplyKeyboard() }
         );
       }
+
+      const handlerTime = performance.now() - handlerStart;
+      timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
+      const total = Math.round(performance.now() - startTotal);
+
+      let clientCmdName = isCommand ? text.split(' ')[0] : 'response';
+      if (rawText === '📊 Profile' || rawText === 'Profile') clientCmdName = '/myprofile';
+      else if (rawText === '📁 Projects' || rawText === 'Projects') clientCmdName = '/myproject';
+      else if (rawText === '💰 Payments' || rawText === 'Payments') clientCmdName = '/payments';
+      else if (rawText === '🧾 Invoices' || rawText === 'Invoices') clientCmdName = '/invoices';
+      else if (rawText === '📈 Status' || rawText === 'Status') clientCmdName = '/status';
+
+      return {
+        command: clientCmdName,
+        clientLookup: timings.clientLookup,
+        databaseQuery: timings.databaseQuery,
+        handler: timings.handler,
+        telegramAPI: timings.telegramAPI,
+        total,
+        startTotal,
+        timings,
+      };
     }
+
+    // 5. Unlinked User Fallback
+    const handlerStart = performance.now();
+    const dbStart = performance.now();
+    const clientByUsername = username ? await Client.findOne({ telegramUsername: username }) : null;
+    timings.databaseQuery += Math.round(performance.now() - dbStart);
+
+    if (clientByUsername && !clientByUsername.telegramConnected) {
+      clientByUsername.telegramConnected = true;
+      clientByUsername.telegramUserId = userId;
+      clientByUsername.telegramChatId = chatId;
+      await clientByUsername.save();
+
+      await this.sendMessageRaw(
+        chatId,
+        `<b>🎉 Welcome back, ${clientByUsername.name}!</b>\n\nYour account has been matched. Use /help to see commands.`,
+        { reply_markup: this.getClientReplyKeyboard() }
+      );
+
+      const handlerTime = performance.now() - handlerStart;
+      timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
+      const total = Math.round(performance.now() - startTotal);
+      return {
+        command: text.split(' ')[0],
+        clientLookup: timings.clientLookup,
+        databaseQuery: timings.databaseQuery,
+        handler: timings.handler,
+        telegramAPI: timings.telegramAPI,
+        total,
+        startTotal,
+        timings,
+      };
+    }
+
+    await this.sendMessage(
+      chatId,
+      `<b>👋 Welcome to Dr Debuggers.</b>\n\n` +
+      `Your Telegram account is not connected yet.\n\n` +
+      `Please ask the administrator for your secure connection link.\n\n` +
+      `<i>Your Telegram User ID:</i> <code>${userId}</code>`,
+      timings
+    );
 
     const handlerTime = performance.now() - handlerStart;
     timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
-    
     const total = Math.round(performance.now() - startTotal);
-    console.log(`TELEGRAM_PERF\ncommand=${text.split(' ')[0] || 'response'}\nclientLookup=${timings.clientLookup}ms\ndatabaseQuery=${timings.databaseQuery}ms\nhandler=${timings.handler}ms\ntelegramAPI=${timings.telegramAPI}ms\ntotal=${total}ms`);
     return {
-      command: text.split(' ')[0] || 'response',
+      command: text.split(' ')[0],
       clientLookup: timings.clientLookup,
       databaseQuery: timings.databaseQuery,
       handler: timings.handler,
@@ -1060,18 +1637,26 @@ routerPath=${routerPath}`);
     text: string,
     timings?: { telegramAPI: number; databaseQuery: number }
   ): Promise<void> {
-    let cmd = text.toLowerCase().split(' ')[0];
+    const raw = text.trim();
+    let cmd = raw.toLowerCase().split(' ')[0];
     if (cmd.includes('@')) {
       cmd = cmd.split('@')[0];
     }
 
+    // Normalize reply keyboard button text
+    if (raw === '📊 Profile' || raw === 'Profile') cmd = '/myprofile';
+    else if (raw === '📁 Projects' || raw === 'Projects') cmd = '/myproject';
+    else if (raw === '💰 Payments' || raw === 'Payments') cmd = '/payments';
+    else if (raw === '🧾 Invoices' || raw === 'Invoices') cmd = '/invoices';
+    else if (raw === '📈 Status' || raw === 'Status') cmd = '/status';
+
     switch (cmd) {
       case '/start':
       case '/help':
-        await this.sendMessage(
+        await this.sendMessageRaw(
           chatId,
           `<b>👋 Hello, ${client.name}!</b>\n\nHere are the available commands:\n/myprofile - View Profile Information\n/myproject - View Project Budgets\n/payments - View Payments List\n/invoices - View Invoices & PDF\n/status - Check Current Phase`,
-          timings
+          { reply_markup: this.getClientReplyKeyboard() }
         );
         break;
 

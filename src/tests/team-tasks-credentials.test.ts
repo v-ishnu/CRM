@@ -378,30 +378,91 @@ describe('Team Members, Task Management & Secure Telegram Credential Sharing', (
     });
   });
 
-  describe('5. Telegram Webhook Routing for Team Members', () => {
-    it('handles interactive task callback query from team member', async () => {
-      // Ensure Alice is Active and has project membership
-      await TeamMember.findByIdAndUpdate(devMember._id, { status: 'ACTIVE' });
+  describe('5. Telegram Webhook Routing, Identity Resolution & Task Callbacks', () => {
+    beforeAll(async () => {
+      await TeamMember.findByIdAndUpdate(devMember._id, {
+        telegramUserId: '77889911',
+        telegramChatId: '77889911',
+        telegramUsername: 'alicedev',
+        status: 'ACTIVE',
+      });
+      devMember.telegramUserId = '77889911';
+
+      await Client.findByIdAndUpdate(testClient._id, {
+        telegramUserId: '77889922',
+        telegramChatId: '77889922',
+        telegramConnected: true,
+      });
+      testClient.telegramUserId = '77889922';
+    });
+
+    it('accurately resolves telegram identity for ADMIN, TEAM_MEMBER, CLIENT, CONFLICT, and UNLINKED', async () => {
+      process.env.ADMIN_TELEGRAM_ID = '99999999';
+
+      // 1. ADMIN
+      const adminIdent = await TelegramService.resolveTelegramIdentity('99999999');
+      expect(adminIdent.type).toBe('ADMIN');
+
+      // 2. TEAM_MEMBER
+      const memberIdent = await TelegramService.resolveTelegramIdentity(devMember.telegramUserId);
+      expect(memberIdent.type).toBe('TEAM_MEMBER');
+      expect(memberIdent.teamMember?.email).toBe(devMember.email);
+
+      // 3. CLIENT
+      const clientIdent = await TelegramService.resolveTelegramIdentity(testClient.telegramUserId);
+      expect(clientIdent.type).toBe('CLIENT');
+      expect(clientIdent.client?.clientCode).toBe(testClient.clientCode);
+
+      // 4. UNLINKED
+      const unlinkedIdent = await TelegramService.resolveTelegramIdentity('123000999');
+      expect(unlinkedIdent.type).toBe('UNLINKED');
+
+      // 5. CONFLICT
+      const conflictUserId = '777000111';
+      const conflictClient = await Client.create({
+        clientCode: 'CL-CON-01',
+        name: 'Conflict Client',
+        email: 'conflict_client@example.com',
+        telegramUserId: conflictUserId,
+        telegramConnected: true,
+      });
+      const conflictMember = await TeamMember.create({
+        name: 'Conflict Member',
+        email: 'conflict_member@example.com',
+        role: 'DEVELOPER',
+        telegramUserId: conflictUserId,
+        status: 'ACTIVE',
+      });
+
+      const conflictIdent = await TelegramService.resolveTelegramIdentity(conflictUserId);
+      expect(conflictIdent.type).toBe('CONFLICT');
+
+      // Cleanup conflict test records
+      await Client.deleteOne({ _id: conflictClient._id });
+      await TeamMember.deleteOne({ _id: conflictMember._id });
+    });
+
+    it('handles structured team_task:start callback query from authorized team member', async () => {
+      await TeamMember.findByIdAndUpdate(devMember._id, { telegramUserId: '77889911', status: 'ACTIVE' });
       await Project.findByIdAndUpdate(testProject._id, { $addToSet: { teamMemberIds: devMember._id } });
 
       const task = await TaskService.createTask(
         {
-          title: 'Test Task: Configure Webhook',
+          title: 'Test Task: Start Action',
           projectId: testProject._id.toString(),
           assignedTo: devMember._id.toString(),
-          priority: 'MEDIUM',
+          priority: 'HIGH',
         },
         'test-runner'
       );
 
-      // Simulate Telegram inline callback query update
       const update = {
         update_id: Math.floor(Math.random() * 1000000),
         callback_query: {
-          id: 'cb_test_123',
+          id: 'cb_start_01',
           from: { id: 77889911, username: 'alicedev' },
-          message: { chat: { id: 77889911 } },
-          data: `task_prog:${task._id}`,
+          message: { chat: { id: 77889911 }, message_id: 101 },
+          data: `team_task:start:${task._id}`,
         },
       };
 
@@ -410,6 +471,180 @@ describe('Team Members, Task Management & Secure Telegram Credential Sharing', (
 
       const updatedTask = await Task.findById(task._id);
       expect(updatedTask?.status).toBe('IN_PROGRESS');
+
+      // Verify audit log
+      const startLog = await AuditLog.findOne({
+        action: 'TASK_STARTED',
+        entityId: { $in: [task._id, task._id.toString()] },
+      });
+      expect(startLog).not.toBeNull();
+      expect(startLog?.actor).toBe(devMember.email);
+
+      // Verify idempotency: starting already in-progress task does not error
+      const repeatRes = await TelegramService.handleWebhookUpdate({
+        ...update,
+        update_id: Math.floor(Math.random() * 1000000),
+      });
+      expect(repeatRes?.command).toBe('callback');
+    });
+
+    it('handles structured team_task:complete callback query and records completedAt', async () => {
+      const task = await TaskService.createTask(
+        {
+          title: 'Test Task: Complete Action',
+          projectId: testProject._id.toString(),
+          assignedTo: devMember._id.toString(),
+          priority: 'URGENT',
+        },
+        'test-runner'
+      );
+
+      const update = {
+        update_id: Math.floor(Math.random() * 1000000),
+        callback_query: {
+          id: 'cb_comp_01',
+          from: { id: 77889911, username: 'alicedev' },
+          message: { chat: { id: 77889911 }, message_id: 102 },
+          data: `team_task:complete:${task._id}`,
+        },
+      };
+
+      const res = await TelegramService.handleWebhookUpdate(update);
+      expect(res?.command).toBe('callback');
+
+      const updatedTask = await Task.findById(task._id);
+      expect(updatedTask?.status).toBe('COMPLETED');
+      expect(updatedTask?.completedAt).toBeDefined();
+
+      // Verify audit log
+      const compLog = await AuditLog.findOne({
+        action: 'TASK_COMPLETED',
+        entityId: { $in: [task._id, task._id.toString()] },
+      });
+      expect(compLog).not.toBeNull();
+      expect(compLog?.actor).toBe(devMember.email);
+    });
+
+    it('rejects callback queries from unauthorized team member and logs TASK_ACTION_DENIED', async () => {
+      // Create another team member with unique email and unique telegram ID
+      const randSuffix = Math.floor(Math.random() * 1000000);
+      const randUserId = String(Math.floor(Math.random() * 800000 + 100000));
+      const otherMember = await TeamMember.create({
+        name: 'Bob Other',
+        email: `bob_other_${randSuffix}@example.com`,
+        role: 'DEVELOPER',
+        telegramUserId: randUserId,
+        status: 'ACTIVE',
+      });
+
+      const task = await TaskService.createTask(
+        {
+          title: 'Alice Task: Unauthorized Test',
+          projectId: testProject._id.toString(),
+          assignedTo: devMember._id.toString(),
+          priority: 'MEDIUM',
+        },
+        'test-runner'
+      );
+
+      // Bob attempts Alice's task
+      const update = {
+        update_id: Math.floor(Math.random() * 1000000),
+        callback_query: {
+          id: 'cb_denied_01',
+          from: { id: Number(randUserId), username: 'bobother' },
+          message: { chat: { id: Number(randUserId) }, message_id: 103 },
+          data: `team_task:start:${task._id}`,
+        },
+      };
+
+      await TelegramService.handleWebhookUpdate(update);
+
+      // Task status should remain unchanged
+      const taskCheck = await Task.findById(task._id);
+      expect(taskCheck?.status).toBe('TODO');
+
+      // Verify denied audit log
+      const deniedLog = await AuditLog.findOne({
+        action: 'TASK_ACTION_DENIED',
+        entityId: { $in: [task._id, task._id.toString()] },
+        actor: otherMember.email,
+      });
+      expect(deniedLog).not.toBeNull();
+      expect(deniedLog?.metadata?.reason).toBe('NOT_ASSIGNED_TO_TASK');
+
+      // Cleanup
+      await TeamMember.deleteOne({ _id: otherMember._id });
+    });
+
+    it('handles role-based text commands and custom reply keyboard for Team Member', async () => {
+      // 1. Team member /start
+      const startRes = await TelegramService.handleWebhookUpdate({
+        update_id: Math.floor(Math.random() * 1000000),
+        message: {
+          chat: { id: 77889911 },
+          from: { id: 77889911, username: 'alicedev' },
+          text: '/start',
+        },
+      });
+      expect(startRes?.command).toBe('/start');
+
+      // 2. Team member reply button "📋 My Tasks"
+      const tasksRes = await TelegramService.handleWebhookUpdate({
+        update_id: Math.floor(Math.random() * 1000000),
+        message: {
+          chat: { id: 77889911 },
+          from: { id: 77889911, username: 'alicedev' },
+          text: '📋 My Tasks',
+        },
+      });
+      expect(tasksRes?.command).toBe('/tasks');
+
+      // 3. Team member reply button "💰 My Payments"
+      const paymentsRes = await TelegramService.handleWebhookUpdate({
+        update_id: Math.floor(Math.random() * 1000000),
+        message: {
+          chat: { id: 77889911 },
+          from: { id: 77889911, username: 'alicedev' },
+          text: '💰 My Payments',
+        },
+      });
+      expect(paymentsRes?.command).toBe('/mypayments');
+
+      // 4. Team member reply button "📁 My Projects"
+      const projectsRes = await TelegramService.handleWebhookUpdate({
+        update_id: Math.floor(Math.random() * 1000000),
+        message: {
+          chat: { id: 77889911 },
+          from: { id: 77889911, username: 'alicedev' },
+          text: '📁 My Projects',
+        },
+      });
+      expect(projectsRes?.command).toBe('/myprojects');
+
+      // 5. Team member reply button "👤 My Profile"
+      const profileRes = await TelegramService.handleWebhookUpdate({
+        update_id: Math.floor(Math.random() * 1000000),
+        message: {
+          chat: { id: 77889911 },
+          from: { id: 77889911, username: 'alicedev' },
+          text: '👤 My Profile',
+        },
+      });
+      expect(profileRes?.command).toBe('/myprofile');
+    });
+
+    it('prevents client from accessing team member commands', async () => {
+      // Client sends /tasks -> routes to client handler and returns unknown command response
+      const clientTasksRes = await TelegramService.handleWebhookUpdate({
+        update_id: Math.floor(Math.random() * 1000000),
+        message: {
+          chat: { id: 77889922 },
+          from: { id: 77889922, username: 'test_client_team' },
+          text: '/tasks',
+        },
+      });
+      expect(clientTasksRes?.command).toBe('/tasks');
     });
   });
 });
