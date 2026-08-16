@@ -14,6 +14,7 @@ import {
   FileText,
   Send,
   History,
+  MessageSquare,
   LogOut,
   Menu,
   X,
@@ -34,6 +35,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const navigation: SidebarItem[] = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Clients', href: '/dashboard/clients', icon: Users },
+    { name: 'Inquiries', href: '/dashboard/inquiries', icon: MessageSquare },
     { name: 'Projects', href: '/dashboard/projects', icon: FolderKanban },
     { name: 'Team Members', href: '/dashboard/team', icon: UserCheck },
     { name: 'Tasks', href: '/dashboard/tasks', icon: CheckSquare },

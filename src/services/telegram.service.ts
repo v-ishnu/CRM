@@ -655,6 +655,23 @@ export class TelegramService {
         );
       }
 
+      if (cbData.startsWith('inq:take:') || cbData.startsWith('inq:close:')) {
+        const { InquiryService } = await import('./inquiry.service');
+        if (cbData.startsWith('inq:take:')) {
+          const inqId = cbData.replace('inq:take:', '');
+          await this.answerCallbackQuery(cbId, 'Inquiry taken.');
+          await InquiryService.takeInquiry(inqId, fromUserId, 'Admin', 'admin@drdebuggers.com');
+          await this.sendMessageRaw(cbChatId, `✅ <b>Inquiry Assigned</b>\nYou have taken inquiry.`);
+          return { action: 'inquiry_take', success: true };
+        } else if (cbData.startsWith('inq:close:')) {
+          const inqId = cbData.replace('inq:close:', '');
+          await this.answerCallbackQuery(cbId, 'Inquiry closed.');
+          await InquiryService.closeInquiry(inqId, 'admin');
+          await this.sendMessageRaw(cbChatId, `✅ <b>Inquiry Closed</b>\nInquiry has been closed.`);
+          return { action: 'inquiry_close', success: true };
+        }
+      }
+
       await this.answerCallbackQuery(cbId, 'Action received.');
       return { action: cbData, success: true };
     } catch (err: any) {
@@ -1775,7 +1792,7 @@ export class TelegramService {
       };
     }
 
-    // 5. Unlinked User Fallback
+    // 5. Unlinked User / Public Inquiry Flow
     const handlerStart = performance.now();
     const dbStart = performance.now();
     const clientByUsername = username ? await Client.findOne({ telegramUsername: username }) : null;
@@ -1808,20 +1825,17 @@ export class TelegramService {
       };
     }
 
-    await this.sendMessage(
-      chatId,
-      `<b>👋 Welcome to Dr Debuggers.</b>\n\n` +
-      `Your Telegram account is not connected yet.\n\n` +
-      `Please ask the administrator for your secure connection link.\n\n` +
-      `<i>Your Telegram User ID:</i> <code>${userId}</code>`,
-      timings
-    );
+    const { InquiryService } = await import('./inquiry.service');
+    const fullName = [message.from.first_name, message.from.last_name].filter(Boolean).join(' ') || username;
+    const inqResult = await InquiryService.handlePublicMessage(userId, chatId, username, fullName, text, messageType);
 
     const handlerTime = performance.now() - handlerStart;
     timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
     const total = Math.round(performance.now() - startTotal);
+
     return {
-      command: text.split(' ')[0],
+      command: isCommand ? text.split(' ')[0] : 'inquiry',
+      inquiryMode: inqResult.mode,
       clientLookup: timings.clientLookup,
       databaseQuery: timings.databaseQuery,
       handler: timings.handler,

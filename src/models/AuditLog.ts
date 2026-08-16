@@ -60,8 +60,16 @@ export interface IAuditLog extends Document {
     | 'TEAM_PAYMENT_UPDATED'
     | 'TEAM_PAYMENT_MARKED_PAID'
     | 'TEAM_PAYMENT_CANCELLED'
-    | 'TEAM_PAYMENT_NOTIFICATION_RETRY';
-  entityType: 'Client' | 'Project' | 'Payment' | 'Invoice' | 'Notification' | 'Auth' | 'DataRequest' | 'RequestResponse' | 'Credential' | 'TeamMember' | 'Task' | 'TeamPayment';
+    | 'TEAM_PAYMENT_NOTIFICATION_RETRY'
+    | 'INQUIRY_CREATED'
+    | 'INQUIRY_HANDOFF'
+    | 'INQUIRY_ASSIGNED'
+    | 'INQUIRY_ADMIN_MESSAGE'
+    | 'INQUIRY_CLIENT_MESSAGE'
+    | 'INQUIRY_CONVERTED_TO_CLIENT'
+    | 'INQUIRY_CLOSED'
+    | 'INQUIRY_BOT_RESUMED';
+  entityType: 'Client' | 'Project' | 'Payment' | 'Invoice' | 'Notification' | 'Auth' | 'DataRequest' | 'RequestResponse' | 'Credential' | 'TeamMember' | 'Task' | 'TeamPayment' | 'Inquiry';
   entityId?: mongoose.Types.ObjectId | string;
   metadata?: Record<string, any>;
   timestamp: Date;
@@ -136,13 +144,21 @@ const AuditLogSchema = new Schema<IAuditLog>(
         'TEAM_PAYMENT_MARKED_PAID',
         'TEAM_PAYMENT_CANCELLED',
         'TEAM_PAYMENT_NOTIFICATION_RETRY',
+        'INQUIRY_CREATED',
+        'INQUIRY_HANDOFF',
+        'INQUIRY_ASSIGNED',
+        'INQUIRY_ADMIN_MESSAGE',
+        'INQUIRY_CLIENT_MESSAGE',
+        'INQUIRY_CONVERTED_TO_CLIENT',
+        'INQUIRY_CLOSED',
+        'INQUIRY_BOT_RESUMED',
       ],
       required: true,
       index: true,
     },
     entityType: {
       type: String,
-      enum: ['Client', 'Project', 'Payment', 'Invoice', 'Notification', 'Auth', 'DataRequest', 'RequestResponse', 'Credential', 'TeamMember', 'Task', 'TeamPayment'],
+      enum: ['Client', 'Project', 'Payment', 'Invoice', 'Notification', 'Auth', 'DataRequest', 'RequestResponse', 'Credential', 'TeamMember', 'Task', 'TeamPayment', 'Inquiry'],
       required: true,
       index: true,
     },
