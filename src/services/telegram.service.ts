@@ -4,11 +4,21 @@ import Client from '@/models/Client';
 import Project from '@/models/Project';
 import Invoice from '@/models/Invoice';
 import Payment from '@/models/Payment';
+import DataRequest from '@/models/DataRequest';
+import Credential from '@/models/Credential';
+import RequestResponse from '@/models/RequestResponse';
 import { ClientService } from './client.service';
 import { PaymentService } from './payment.service';
 import { AuditService } from './audit.service';
 import { StorageService } from './storage.service';
 import { dbConnect } from '@/lib/db/connect';
+
+declare global {
+  // eslint-disable-next-line no-var
+  var activeClientRequests: Record<string, string> | undefined;
+  // eslint-disable-next-line no-var
+  var processedTelegramUpdates: Set<number> | undefined;
+}
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
@@ -139,9 +149,17 @@ export class TelegramService {
    * Send text message to a chat
    */
   static async sendMessage(chatId: string, text: string, timings?: any): Promise<boolean> {
+    const res = await this.sendMessageWithResult(chatId, text, timings);
+    return res.ok;
+  }
+
+  /**
+   * Send text message to a chat and return message ID
+   */
+  static async sendMessageWithResult(chatId: string, text: string, timings?: any): Promise<{ ok: boolean; messageId?: string }> {
     if (!this.isConfigured()) {
       console.warn('Telegram Bot token is missing. Cannot send message.');
-      return false;
+      return { ok: false };
     }
 
     try {
@@ -173,11 +191,13 @@ export class TelegramService {
       }
       if (data.ok !== true) {
         console.error(`Telegram sendMessage failed for chat ${chatId}:`, data);
+        return { ok: false };
       }
-      return data.ok === true;
+      const messageId = data.result?.message_id ? String(data.result.message_id) : undefined;
+      return { ok: true, messageId };
     } catch (error) {
       console.error(`Failed to send Telegram message to ${chatId}:`, error);
-      return false;
+      return { ok: false };
     }
   }
 
@@ -307,22 +327,48 @@ export class TelegramService {
     const message = update?.message;
     if (!message || !message.chat || !message.from) return;
 
-    const chatId = message.chat.id.toString();
-    const userId = message.from.id.toString();
+    // Idempotency: Prevent duplicate processing of retried Telegram webhook updates
+    const updateId = update?.update_id;
+    if (updateId) {
+      global.processedTelegramUpdates = global.processedTelegramUpdates || new Set<number>();
+      if (global.processedTelegramUpdates.has(updateId)) {
+        console.log(`[DEDUPLICATION] Telegram update ${updateId} already processed. Skipping.`);
+        return {
+          command: 'duplicate',
+          clientLookup: 0,
+          databaseQuery: 0,
+          handler: 0,
+          telegramAPI: 0,
+          total: 0,
+          startTotal,
+          timings,
+        };
+      }
+      global.processedTelegramUpdates.add(updateId);
+      if (global.processedTelegramUpdates.size > 1000) {
+        const first = global.processedTelegramUpdates.values().next().value;
+        if (first !== undefined) global.processedTelegramUpdates.delete(first);
+      }
+    }
+
+    const chatId = String(message.chat.id);
+    const userId = String(message.from.id);
     const username = message.from.username || '';
     const text = (message.text || '').trim();
+    const isCommand = text.startsWith('/');
+    const messageType = message.photo ? 'photo' : (message.document ? 'document' : 'text');
 
     // Safe structured logging of incoming command/message
-    if (text.startsWith('/')) {
+    if (isCommand) {
       const commandName = text.split(' ')[0];
       console.log(`TELEGRAM_COMMAND_RECEIVED\ncommand=${commandName}\ntelegramUserId=${userId}\nchatId=${chatId}`);
     }
 
     // Check if the user is the Admin
     const adminTelegramId = process.env.ADMIN_TELEGRAM_ID;
-    const isAdmin = adminTelegramId && userId === adminTelegramId;
+    const isAdmin = adminTelegramId && userId === String(adminTelegramId);
 
-    if (isAdmin) {
+    if (isAdmin && isCommand) {
       const handlerStart = performance.now();
       await this.handleAdminCommand(chatId, text, timings);
       const handlerTime = performance.now() - handlerStart;
@@ -342,12 +388,23 @@ export class TelegramService {
       };
     }
 
-    // Try to find the client associated with this Telegram userId
+    // Try to find the client associated with this Telegram userId or chatId
     const lookupStart = performance.now();
-    let client: any = await Client.findOne({ telegramUserId: userId })
+    let client: any = await Client.findOne({
+      $or: [
+        { telegramUserId: userId },
+        { telegramChatId: chatId },
+      ]
+    })
       .select('clientCode name company email phone address city country telegramUserId telegramChatId telegramConnected')
       .lean();
     timings.clientLookup = Math.round(performance.now() - lookupStart);
+
+    console.log('[DEBUG] webhook client lookup:', { userId, clientFound: !!client, clientCode: client?.clientCode, telegramUserId: client?.telegramUserId });
+    if (!client) {
+      const allClients = await Client.find({});
+      console.log('[DEBUG] all clients in DB:', allClients.map(c => ({ id: c._id, code: c.clientCode, telegramConnected: c.telegramConnected, telegramUserId: c.telegramUserId })));
+    }
 
     // Handle Deep Linking connection token
     const isStartCommand = text.startsWith('/start');
@@ -475,16 +532,105 @@ export class TelegramService {
       };
     }
 
-    // Standard client commands
+    // Standard client commands vs active request responses
     const handlerStart = performance.now();
-    await this.handleClientCommand(chatId, client, text, timings);
+    let targetRequest: any = null;
+    let pending: any[] = [];
+
+    if (!isCommand) {
+      const dbStart = performance.now();
+
+      // 1. Reply-To original request message support
+      if (message.reply_to_message?.message_id) {
+        const replyMsgId = String(message.reply_to_message.message_id);
+        targetRequest = await DataRequest.findOne({
+          clientId: client._id,
+          telegramMessageId: replyMsgId,
+        });
+      }
+
+      // 2. Explicit Request ID in text
+      if (!targetRequest && text) {
+        const reqIdMatch = text.match(/REQ-\d{4}-\d{4}/i);
+        if (reqIdMatch) {
+          const matchedId = reqIdMatch[0].toUpperCase();
+          targetRequest = await DataRequest.findOne({
+            clientId: client._id,
+            requestId: matchedId,
+          });
+        }
+      }
+
+      // 3. Query all active requests for this client
+      pending = await DataRequest.find({
+        clientId: client._id,
+        status: { $in: ['PENDING', 'SENT', 'OPENED'] },
+      }).sort({ createdAt: -1 });
+
+      timings.databaseQuery += Math.round(performance.now() - dbStart);
+
+      // 4. Intelligent match based on incoming message type
+      if (!targetRequest && pending.length > 0) {
+        const isCredentialFormat = text.includes(':') && (
+          /service/i.test(text) || /user/i.test(text) || /pass/i.test(text)
+        );
+
+        if (isCredentialFormat) {
+          targetRequest = pending.find(r => r.type === 'CREDENTIAL') || pending[0];
+        } else if (message.photo) {
+          targetRequest = pending.find(r => r.type === 'IMAGE') || pending[0];
+        } else if (message.document) {
+          targetRequest = pending.find(r => r.type === 'DOCUMENT') || pending[0];
+        } else {
+          targetRequest = pending[0]; // Most recent active request
+        }
+      }
+    }
+
+    const routerPath = isCommand ? 'command' : (targetRequest ? 'request-response' : 'fallback');
+
+    // Safe Diagnostic Logging (Never includes passwords or credentials)
+    console.log(`[REQUEST_DEBUG]
+updateId=${updateId || 'null'}
+telegramUserId=${userId}
+chatId=${chatId}
+messageType=${messageType}
+isCommand=${isCommand}
+command=${isCommand ? text.split(' ')[0] : 'null'}
+clientFound=${!!client}
+clientId=${client?._id ? String(client._id) : 'null'}
+activeRequestFound=${!!targetRequest}
+activeRequestId=${targetRequest?.requestId || 'null'}
+activeRequestType=${targetRequest?.type || 'null'}
+activeRequestStatus=${targetRequest?.status || 'null'}
+routerPath=${routerPath}`);
+
+    if (isCommand) {
+      // Direct command routing
+      await this.handleClientCommand(chatId, client, text, timings);
+    } else {
+      const hasActiveRequest = !!targetRequest;
+
+      if (hasActiveRequest) {
+        await this.handleClientResponse(chatId, client, message, targetRequest, pending, timings);
+      } else {
+        // Fallback for non-command text when no active request exists
+        await this.sendMessage(
+          chatId,
+          `<b>👋 Welcome to Dr Debuggers.</b>\n\n` +
+          `You do not have any pending requests to respond to. Type /help to see available commands.`,
+          timings
+        );
+      }
+    }
+
     const handlerTime = performance.now() - handlerStart;
     timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
     
     const total = Math.round(performance.now() - startTotal);
-    console.log(`TELEGRAM_PERF\ncommand=${text.split(' ')[0]}\nclientLookup=${timings.clientLookup}ms\ndatabaseQuery=${timings.databaseQuery}ms\nhandler=${timings.handler}ms\ntelegramAPI=${timings.telegramAPI}ms\ntotal=${total}ms`);
+    console.log(`TELEGRAM_PERF\ncommand=${text.split(' ')[0] || 'response'}\nclientLookup=${timings.clientLookup}ms\ndatabaseQuery=${timings.databaseQuery}ms\nhandler=${timings.handler}ms\ntelegramAPI=${timings.telegramAPI}ms\ntotal=${total}ms`);
     return {
-      command: text.split(' ')[0],
+      command: text.split(' ')[0] || 'response',
       clientLookup: timings.clientLookup,
       databaseQuery: timings.databaseQuery,
       handler: timings.handler,
@@ -775,6 +921,73 @@ export class TelegramService {
         break;
       }
 
+      case '/requests': {
+        const dbStart = performance.now();
+        const pending = await DataRequest.find({
+          clientId: client._id,
+          status: { $in: ['PENDING', 'SENT'] },
+        }).sort({ createdAt: 1 });
+        if (timings) {
+          timings.databaseQuery += Math.round(performance.now() - dbStart);
+        }
+
+        if (pending.length === 0) {
+          await this.sendMessage(chatId, '📋 You have no pending information requests at this time.', timings);
+        } else {
+          let msg = '📋 <b>Your Pending Requests</b>\n\n';
+          pending.forEach((req, idx) => {
+            msg += `${idx + 1}. <b>${req.title}</b> (${req.type})\n` +
+              `Request ID: <code>${req.requestId}</code>\n` +
+              `Instruction: ${req.message}\n\n`;
+          });
+          msg += `To respond to a request, you can reply directly, or if you have multiple, type <code>/request [number]</code> (e.g. <code>/request 1</code>) to select it.`;
+          await this.sendMessage(chatId, msg, timings);
+        }
+        break;
+      }
+
+      case '/request': {
+        const parts = text.split(' ');
+        const index = parts.length > 1 ? parseInt(parts[1], 10) - 1 : -1;
+        
+        const dbStart = performance.now();
+        const pending = await DataRequest.find({
+          clientId: client._id,
+          status: { $in: ['PENDING', 'SENT'] },
+        }).sort({ createdAt: 1 });
+        if (timings) {
+          timings.databaseQuery += Math.round(performance.now() - dbStart);
+        }
+
+        if (index >= 0 && index < pending.length) {
+          const selected = pending[index];
+          
+          // Set active request in global memory
+          global.activeClientRequests = global.activeClientRequests || {};
+          global.activeClientRequests[chatId] = selected.requestId;
+
+          let formatBlock = '';
+          if (selected.type === 'CREDENTIAL') {
+            const fields = selected.requiredFields && selected.requiredFields.length > 0
+              ? selected.requiredFields
+              : ['Service', 'Username', 'Password', 'Login URL'];
+            formatBlock = `\n\nPlease reply using this exact format:\n\n<code>\n${fields.map(f => `${f}:`).join('\n')}\n</code>`;
+          }
+
+          await this.sendMessage(
+            chatId,
+            `🎯 <b>Active Request Selected: ${selected.title}</b>\n\n` +
+            `Message: ${selected.message}` +
+            `${formatBlock}\n\n` +
+            `Please send your response now.`,
+            timings
+          );
+        } else {
+          await this.sendMessage(chatId, `❌ Invalid request selection. Type /requests to see the list.`, timings);
+        }
+        break;
+      }
+
       default:
         await this.sendMessage(chatId, 'Unknown command. Use /help to see the available commands.', timings);
     }
@@ -960,6 +1173,323 @@ export class TelegramService {
 
       default:
         await this.sendMessage(chatId, 'Unknown command. Use /admin to view the menu.', timings);
+    }
+  }
+
+  /**
+   * Handle incoming non-command client responses
+   */
+  private static async handleClientResponse(
+    chatId: string,
+    client: any,
+    message: any,
+    targetRequest: any,
+    pending: any[],
+    timings?: any
+  ): Promise<void> {
+    const text = (message.text || '').trim();
+
+    if (!targetRequest) {
+      if (pending.length === 0) {
+        await this.sendMessage(chatId, '👋 You do not have any pending requests to respond to. Type /help to see available commands.', timings);
+        return;
+      }
+      // Prompt user to select if there are multiple and none explicitly targeted
+      let msg = `📋 <b>You have multiple pending requests</b>\n\nPlease select which request you are responding to:\n\n`;
+      pending.forEach((req, idx) => {
+        msg += `${idx + 1}. <b>${req.title}</b> (Type <code>/request ${idx + 1}</code> to respond)\n`;
+      });
+      await this.sendMessage(chatId, msg, timings);
+      return;
+    }
+
+    // Check if request is expired
+    if (targetRequest.expiresAt && new Date() > targetRequest.expiresAt) {
+      const dbStart = performance.now();
+      targetRequest.status = 'EXPIRED';
+      await targetRequest.save();
+      if (timings) {
+        timings.databaseQuery += Math.round(performance.now() - dbStart);
+      }
+      await this.sendMessage(chatId, `⚠️ This request (<b>${targetRequest.title}</b>) has expired. Please contact the administrator.`, timings);
+      return;
+    }
+
+    // Now process the response according to the request type!
+    try {
+      if (targetRequest.type === 'CREDENTIAL') {
+        // Robust case-insensitive parsing of field lines
+        const lines = text.split('\n');
+        const parsedFields: Record<string, string> = {};
+        for (const line of lines) {
+          const colonIdx = line.indexOf(':');
+          if (colonIdx > 0) {
+            const rawKey = line.slice(0, colonIdx).trim().toLowerCase();
+            const val = line.slice(colonIdx + 1).trim();
+            parsedFields[rawKey] = val;
+            parsedFields[rawKey.replace(/\s+/g, '')] = val;
+          }
+        }
+
+        // Validate required fields
+        const reqFields = targetRequest.requiredFields && targetRequest.requiredFields.length > 0
+          ? targetRequest.requiredFields
+          : ['Service', 'Username', 'Password', 'Login URL'];
+
+        const missingFields: string[] = [];
+        for (const rf of reqFields) {
+          const normalizedKey = rf.toLowerCase().replace(/\s+/g, '');
+          if (!parsedFields[rf.toLowerCase()] && !parsedFields[normalizedKey]) {
+            missingFields.push(rf);
+          }
+        }
+
+        if (missingFields.length > 0) {
+          const fieldLabel = missingFields.length === 1 ? 'The following field is missing:' : 'The following fields are missing:';
+          const missingFormatted = missingFields.map((f: string) => `<b>${f}</b>`).join('\n');
+          await this.sendMessage(
+            chatId,
+            `❌ <b>Credential submission incomplete</b>\n\n` +
+            `${fieldLabel}\n\n` +
+            `${missingFormatted}\n\n` +
+            `Please reply using this format:\n\n` +
+            `<code>\n${reqFields.map((f: string) => `${f}:`).join('\n')}\n</code>`,
+            timings
+          );
+          return;
+        }
+
+        // Encrypt the fields
+        const { encrypt } = await import('@/lib/security/encryption');
+        
+        const serviceEnc = encrypt(parsedFields['service'] || '');
+        const usernameEnc = encrypt(parsedFields['username'] || '');
+        const passwordEnc = encrypt(parsedFields['password'] || '');
+        const loginUrlEnc = (parsedFields['login url'] || parsedFields['loginurl'])
+          ? encrypt(parsedFields['login url'] || parsedFields['loginurl'])
+          : undefined;
+        const additionalInfoEnc = (parsedFields['additional info'] || parsedFields['additionalinfo'])
+          ? encrypt(parsedFields['additional info'] || parsedFields['additionalinfo'])
+          : undefined;
+
+        const dbStart2 = performance.now();
+        // Prevent duplicate creation if webhook update is repeated
+        let cred = await Credential.findOne({ requestId: targetRequest._id });
+        if (!cred) {
+          cred = await Credential.create({
+            requestId: targetRequest._id,
+            clientId: client._id,
+            projectId: targetRequest.projectId,
+            service: serviceEnc,
+            username: usernameEnc,
+            password: passwordEnc,
+            loginUrl: loginUrlEnc || undefined,
+            additionalInfo: additionalInfoEnc || undefined,
+          });
+        }
+
+        // Update Request status
+        targetRequest.status = 'RECEIVED';
+        await targetRequest.save();
+        if (timings) {
+          timings.databaseQuery += Math.round(performance.now() - dbStart2);
+        }
+
+        // Clear active selection session
+        global.activeClientRequests = global.activeClientRequests || {};
+        delete global.activeClientRequests[chatId];
+
+        // Audit Log (never includes plaintext passwords or usernames)
+        await AuditService.logAction(
+          client.email,
+          'CREDENTIAL_RECEIVED',
+          'Credential',
+          targetRequest._id.toString(),
+          {
+            requestId: targetRequest.requestId,
+            clientId: client._id.toString(),
+            projectId: targetRequest.projectId?.toString() || '',
+            telegramUserId: client.telegramUserId,
+            timestamp: new Date(),
+          }
+        );
+
+        console.log(`[REQUEST_DEBUG]\nprocessingResult=success\nrequestId=${targetRequest.requestId}\nstatus=RECEIVED`);
+
+        await this.sendMessage(
+          chatId,
+          `✅ <b>Credentials received successfully</b>\n\n` +
+          `Request ID:\n` +
+          `${targetRequest.requestId}\n\n` +
+          `The requested information has been securely recorded.`,
+          timings
+        );
+
+        // Security: Attempt to delete the Telegram message containing the raw plaintext secrets
+        try {
+          const token = process.env.TELEGRAM_BOT_TOKEN;
+          const apiStart = performance.now();
+          const res = await fetch(`https://api.telegram.org/bot${token}/deleteMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              message_id: message.message_id,
+            }),
+          });
+          const data = await res.json();
+          if (timings) {
+            timings.telegramAPI += Math.round(performance.now() - apiStart);
+          }
+          console.log(`Telegram message deletion status: ${data.ok}`);
+        } catch (delErr) {
+          console.error('Failed to delete Telegram plaintext message:', delErr);
+        }
+
+      } else if (targetRequest.type === 'IMAGE' || targetRequest.type === 'DOCUMENT') {
+        let fileId = '';
+        let telegramFileName = '';
+        
+        if (targetRequest.type === 'IMAGE' && message.photo) {
+          const photo = message.photo[message.photo.length - 1];
+          fileId = photo.file_id;
+          telegramFileName = `photo_${fileId}.jpg`;
+        } else if (targetRequest.type === 'DOCUMENT' && message.document) {
+          fileId = message.document.file_id;
+          telegramFileName = message.document.file_name || `document_${fileId}`;
+        } else if (message.document) {
+          fileId = message.document.file_id;
+          telegramFileName = message.document.file_name || `file_${fileId}`;
+        } else {
+          await this.sendMessage(chatId, `❌ Please send an attachment (photo/document) to respond to this request.`, timings);
+          return;
+        }
+
+        // Retrieve file metadata and buffer from Telegram CDN
+        const token = process.env.TELEGRAM_BOT_TOKEN;
+        const apiStart1 = performance.now();
+        const resFile = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${fileId}`);
+        const dataFile = await resFile.json();
+        if (timings) {
+          timings.telegramAPI += Math.round(performance.now() - apiStart1);
+        }
+
+        if (!dataFile.ok) {
+          throw new Error('Telegram file metadata lookup failed');
+        }
+
+        const telegramPath = dataFile.result.file_path;
+        const apiStart2 = performance.now();
+        const resBuffer = await fetch(`https://api.telegram.org/file/bot${token}/${telegramPath}`);
+        const arrayBuffer = await resBuffer.arrayBuffer();
+        if (timings) {
+          timings.telegramAPI += Math.round(performance.now() - apiStart2);
+        }
+        
+        const buffer = Buffer.from(arrayBuffer);
+        const fileExtension = path.extname(telegramFileName) || '.dat';
+        const uniqueFileName = `${targetRequest.requestId}_${Date.now()}${fileExtension}`;
+        const supabasePath = `requests/${targetRequest.requestId}/${uniqueFileName}`;
+        
+        // Resolve content-type
+        let contentType = 'application/octet-stream';
+        if (fileExtension === '.pdf') contentType = 'application/pdf';
+        else if (fileExtension === '.png') contentType = 'image/png';
+        else if (fileExtension === '.jpg' || fileExtension === '.jpeg') contentType = 'image/jpeg';
+        else if (fileExtension === '.zip') contentType = 'application/zip';
+
+        // Upload to Supabase Storage
+        await StorageService.uploadFile(buffer, supabasePath, contentType);
+
+        const dbStart3 = performance.now();
+        await RequestResponse.create({
+          requestId: targetRequest._id,
+          clientId: client._id,
+          projectId: targetRequest.projectId,
+          files: [{
+            fileName: telegramFileName,
+            mimeType: contentType,
+            size: buffer.length,
+            storagePath: supabasePath,
+            telegramFileId: fileId,
+            uploadedAt: new Date(),
+          }],
+        });
+
+        targetRequest.status = 'COMPLETED';
+        await targetRequest.save();
+        if (timings) {
+          timings.databaseQuery += Math.round(performance.now() - dbStart3);
+        }
+
+        global.activeClientRequests = global.activeClientRequests || {};
+        delete global.activeClientRequests[chatId];
+
+        // Audit Log
+        await AuditService.logAction(
+          client.email,
+          'DATA_REQUEST_RECEIVED',
+          'RequestResponse',
+          targetRequest._id.toString(),
+          {
+            requestId: targetRequest.requestId,
+            clientId: client._id.toString(),
+            title: targetRequest.title,
+          }
+        );
+
+        await this.sendMessage(
+          chatId,
+          `✅ <b>File received successfully.</b>\n\nRequest <code>${targetRequest.requestId}</code> has been completed.`,
+          timings
+        );
+
+      } else {
+        // TEXT or CUSTOM responses
+        if (!text) {
+          await this.sendMessage(chatId, `❌ Please reply with a text message to respond to this request.`, timings);
+          return;
+        }
+
+        const dbStart4 = performance.now();
+        await RequestResponse.create({
+          requestId: targetRequest._id,
+          clientId: client._id,
+          projectId: targetRequest.projectId,
+          responseText: text,
+        });
+
+        targetRequest.status = 'COMPLETED';
+        await targetRequest.save();
+        if (timings) {
+          timings.databaseQuery += Math.round(performance.now() - dbStart4);
+        }
+
+        global.activeClientRequests = global.activeClientRequests || {};
+        delete global.activeClientRequests[chatId];
+
+        // Audit Log
+        await AuditService.logAction(
+          client.email,
+          'DATA_REQUEST_RECEIVED',
+          'RequestResponse',
+          targetRequest._id.toString(),
+          {
+            requestId: targetRequest.requestId,
+            clientId: client._id.toString(),
+            title: targetRequest.title,
+          }
+        );
+
+        await this.sendMessage(
+          chatId,
+          `✅ <b>Response recorded successfully.</b>\n\nRequest <code>${targetRequest.requestId}</code> has been completed.`,
+          timings
+        );
+      }
+    } catch (err: any) {
+      console.error('Failed to process client response:', err);
+      await this.sendMessage(chatId, `❌ An error occurred while processing your response. Please try again later.`, timings);
     }
   }
 }

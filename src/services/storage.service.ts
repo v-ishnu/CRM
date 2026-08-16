@@ -57,6 +57,34 @@ export class StorageService {
   }
 
   /**
+   * Upload any file/document buffer to Supabase Storage
+   */
+  static async uploadFile(buffer: Buffer, storagePath: string, contentType: string): Promise<string> {
+    if (!this.isConfigured()) {
+      if (process.env.NODE_ENV === 'test') {
+        globalThis.mockStorage = globalThis.mockStorage || {};
+        globalThis.mockStorage[storagePath] = buffer;
+        return storagePath;
+      }
+      throw new Error('Supabase storage is not configured.');
+    }
+
+    const { data, error } = await supabase!.storage
+      .from(bucketName)
+      .upload(storagePath, buffer, {
+        contentType,
+        upsert: true,
+      });
+
+    if (error) {
+      console.error('Supabase generic upload error:', error);
+      throw new Error(`Failed to upload file to storage: ${error.message}`);
+    }
+
+    return data.path;
+  }
+
+  /**
    * Retrieve an invoice PDF buffer from Supabase Storage
    */
   static async getInvoicePDF(storagePath: string): Promise<Buffer> {

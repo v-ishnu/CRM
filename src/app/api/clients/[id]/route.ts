@@ -6,6 +6,7 @@ import Invoice from '@/models/Invoice';
 import Payment from '@/models/Payment';
 import AuditLog from '@/models/AuditLog';
 import Notification from '@/models/Notification';
+import DataRequest from '@/models/DataRequest';
 import { AuditService } from '@/services/audit.service';
 import { PaymentService } from '@/services/payment.service';
 import { StorageService } from '@/services/storage.service';
@@ -63,6 +64,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       ],
     }).sort({ timestamp: -1 });
 
+    // Requests
+    const requests = await DataRequest.find({ clientId: id }).sort({ createdAt: -1 });
+
     return NextResponse.json({
       success: true,
       data: {
@@ -71,6 +75,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         invoices,
         payments,
         auditLogs,
+        requests,
         financials: {
           totalProjectValue,
           totalPaid,
