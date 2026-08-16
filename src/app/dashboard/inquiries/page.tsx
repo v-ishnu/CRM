@@ -132,7 +132,7 @@ export default function InquiriesPage() {
 
       {/* Filter Tabs & Search */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center space-x-1.5 bg-[#0d0d12] p-1.5 rounded-xl border border-slate-800 overflow-x-auto">
+        <div className="flex items-center space-x-1.5 bg-[#0d0d12] p-1.5 rounded-xl border border-slate-800 overflow-x-auto scrollbar-hide">
           {[
             { id: 'ALL', label: 'All Inquiries' },
             { id: 'HUMAN', label: '🟠 Human Handoff' },
@@ -190,24 +190,24 @@ export default function InquiriesPage() {
               <Link
                 key={inquiry._id}
                 href={`/dashboard/inquiries/${inquiry._id}`}
-                className="block p-5 hover:bg-slate-850/40 transition-colors group"
+                className="block p-4 sm:p-5 hover:bg-slate-850/40 transition-colors group"
               >
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center space-x-3">
-                      <span className="font-mono font-bold text-sm text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                  <div className="space-y-1.5 min-w-0">
+                    <div className="flex items-center space-x-2.5 flex-wrap gap-y-1">
+                      <span className="font-mono font-bold text-xs sm:text-sm text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20 shrink-0">
                         {inquiry.inquiryNumber}
                       </span>
-                      <h3 className="font-semibold text-slate-200 group-hover:text-indigo-400 transition-colors">
+                      <h3 className="font-semibold text-slate-200 group-hover:text-indigo-400 transition-colors text-sm sm:text-base truncate">
                         {inquiry.name || 'Anonymous Lead'}
                       </h3>
                       {inquiry.telegramUsername && (
-                        <span className="text-xs text-slate-500">@{inquiry.telegramUsername}</span>
+                        <span className="text-xs text-slate-500 truncate">@{inquiry.telegramUsername}</span>
                       )}
                       {getStatusBadge(inquiry.status, inquiry.conversationMode)}
                     </div>
 
-                    <p className="text-sm text-slate-400 line-clamp-1">
+                    <p className="text-xs sm:text-sm text-slate-400 line-clamp-1">
                       {inquiry.message || 'No message preview'}
                     </p>
 
@@ -218,7 +218,7 @@ export default function InquiriesPage() {
                     )}
                   </div>
 
-                  <div className="flex items-center space-x-4 shrink-0 text-xs text-slate-500">
+                  <div className="flex items-center justify-between md:justify-end space-x-4 shrink-0 text-xs text-slate-500 pt-1 md:pt-0 border-t md:border-t-0 border-slate-850/40">
                     <div className="flex items-center space-x-1">
                       <Clock className="w-3.5 h-3.5" />
                       <span>{new Date(inquiry.lastMessageAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
@@ -234,7 +234,7 @@ export default function InquiriesPage() {
                         Bot Active
                       </span>
                     )}
-                    <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-indigo-400 group-hover:translate-x-1 transition-all" />
+                    <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-indigo-400 group-hover:translate-x-1 transition-all hidden sm:inline" />
                   </div>
                 </div>
               </Link>
@@ -244,7 +244,7 @@ export default function InquiriesPage() {
 
         {/* Pagination Footer */}
         {totalPages > 1 && (
-          <div className="p-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+          <div className="p-4 border-t border-slate-800/80 flex flex-col sm:flex-row gap-3 items-center justify-between text-xs text-slate-400">
             <span>
               Showing {inquiries.length} of {totalCount} inquiries
             </span>

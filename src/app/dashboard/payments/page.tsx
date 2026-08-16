@@ -217,8 +217,8 @@ export default function PaymentsPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-[#0d0d12]/60 border border-slate-850 p-4 rounded-xl flex flex-col md:flex-row gap-4 justify-between items-center">
-        <form onSubmit={handleSearch} className="relative w-full md:max-w-md">
+      <div className="bg-[#0d0d12]/60 border border-slate-850 p-4 rounded-xl flex flex-col sm:flex-row gap-3 sm:gap-4 justify-between items-stretch sm:items-center">
+        <form onSubmit={handleSearch} className="relative w-full sm:max-w-md">
           <Search className="absolute left-3.5 top-3 w-4.5 h-4.5 text-slate-550" />
           <input
             type="text"
@@ -235,7 +235,7 @@ export default function PaymentsPage() {
           </button>
         </form>
 
-        <div className="flex items-center gap-4 w-full md:w-auto shrink-0 justify-end">
+        <div className="flex items-center gap-3 w-full sm:w-auto shrink-0 justify-end">
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -258,7 +258,7 @@ export default function PaymentsPage() {
           ))}
         </div>
       ) : payments.length === 0 ? (
-        <div className="bg-[#0d0d12]/40 border border-slate-850 p-12 rounded-xl text-center flex flex-col items-center justify-center text-slate-500">
+        <div className="bg-[#0d0d12]/40 border border-slate-850 p-8 sm:p-12 rounded-xl text-center flex flex-col items-center justify-center text-slate-500">
           <CreditCard className="w-12 h-12 mb-3 stroke-1 text-slate-650" />
           <h3 className="font-bold text-slate-300">No transactions recorded</h3>
           <p className="text-sm text-slate-500 mt-1">Log payments on client profile pages or click &apos;Record Payment&apos;.</p>
@@ -266,23 +266,23 @@ export default function PaymentsPage() {
       ) : (
         <div className="bg-[#0d0d12]/40 border border-slate-850 rounded-xl overflow-hidden shadow-2xl">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse min-w-[650px]">
               <thead>
                 <tr className="border-b border-slate-850 bg-slate-900/35 text-slate-400 text-xs font-semibold uppercase tracking-wider">
-                  <th className="px-6 py-4">Receipt #</th>
-                  <th className="px-6 py-4">Client</th>
-                  <th className="px-6 py-4">Project</th>
-                  <th className="px-6 py-4">Method / Ref</th>
-                  <th className="px-6 py-4">Date</th>
-                  <th className="px-6 py-4 text-right">Amount</th>
-                  <th className="px-6 py-4 text-right">Status</th>
+                  <th className="px-4 sm:px-6 py-4">Receipt #</th>
+                  <th className="px-4 sm:px-6 py-4">Client</th>
+                  <th className="px-4 sm:px-6 py-4">Project</th>
+                  <th className="px-4 sm:px-6 py-4">Method / Ref</th>
+                  <th className="px-4 sm:px-6 py-4">Date</th>
+                  <th className="px-4 sm:px-6 py-4 text-right">Amount</th>
+                  <th className="px-4 sm:px-6 py-4 text-right">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-850 text-sm">
                 {payments.map((p) => (
                   <tr key={p._id} className="hover:bg-slate-900/20 transition-all">
-                    <td className="px-6 py-4 font-bold text-slate-200">{p.paymentNumber}</td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 sm:px-6 py-4 font-bold text-slate-200">{p.paymentNumber}</td>
+                    <td className="px-4 sm:px-6 py-4">
                       <Link
                         href={`/dashboard/clients/${p.clientId._id}`}
                         className="font-medium text-indigo-400 hover:underline"
@@ -291,25 +291,25 @@ export default function PaymentsPage() {
                       </Link>
                       <div className="text-xs text-slate-500 mt-0.5">Code: {p.clientId.clientCode}</div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 sm:px-6 py-4">
                       <div className="text-slate-350">{p.projectId.name}</div>
                       <div className="text-xs text-slate-500 mt-0.5">
                         {p.invoiceId ? `Invoice: ${p.invoiceId.invoiceNumber}` : 'Direct Deposit'}
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 sm:px-6 py-4">
                       <div className="text-slate-350 font-semibold">{p.paymentMethod}</div>
                       {p.transactionReference && (
                         <div className="text-xs text-slate-500 font-mono mt-0.5">{p.transactionReference}</div>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-slate-400">
+                    <td className="px-4 sm:px-6 py-4 text-slate-400 whitespace-nowrap">
                       {new Date(p.paymentDate).toLocaleDateString('en-IN')}
                     </td>
-                    <td className="px-6 py-4 text-right font-bold text-slate-100">
+                    <td className="px-4 sm:px-6 py-4 text-right font-bold text-slate-100 whitespace-nowrap">
                       {p.currency} {p.amount.toLocaleString('en-IN')}
                     </td>
-                    <td className="px-6 py-4 text-right">{getStatusBadge(p.status)}</td>
+                    <td className="px-4 sm:px-6 py-4 text-right">{getStatusBadge(p.status)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -321,7 +321,7 @@ export default function PaymentsPage() {
       {/* Record Payment Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg bg-[#0d0d12] border border-slate-800 rounded-2xl p-6 shadow-2xl relative">
+          <div className="w-full max-w-lg max-h-[90dvh] overflow-y-auto bg-[#0d0d12] border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-2xl relative">
             <h2 className="text-lg font-bold text-slate-100 mb-2">Record Payment Transaction</h2>
             <p className="text-xs text-slate-500 mb-5">Select a client, match project files, and post transaction logs.</p>
             
@@ -368,7 +368,7 @@ export default function PaymentsPage() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Amount (INR)</label>
                   <input

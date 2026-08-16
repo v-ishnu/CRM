@@ -431,7 +431,7 @@ export default function TasksPage() {
       )}
 
       {/* Status Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none border-b border-slate-800/80">
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide border-b border-slate-800/80">
         {[
           { key: 'ALL', label: 'All Tasks' },
           { key: 'TODO', label: 'To Do' },
@@ -716,7 +716,7 @@ export default function TasksPage() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-300 text-xs font-semibold mb-1">Assign To</label>
                   <select
@@ -748,7 +748,7 @@ export default function TasksPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-300 text-xs font-semibold mb-1">Due Date</label>
                   <input

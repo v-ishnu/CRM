@@ -43,7 +43,7 @@ export default function LoginPage() {
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-radial from-[#1e1e30] to-[#0a0a0f] p-4 font-sans text-slate-100">
-      <div className="w-full max-w-md bg-[#13131a]/80 backdrop-blur-xl border border-slate-800 rounded-2xl p-8 shadow-2xl relative overflow-hidden">
+      <div className="w-full max-w-md bg-[#13131a]/80 backdrop-blur-xl border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
         {/* Glow Effects */}
         <div className="absolute top-0 left-1/4 w-32 h-32 bg-indigo-600/20 rounded-full filter blur-3xl pointer-events-none"></div>
         <div className="absolute bottom-0 right-1/4 w-32 h-32 bg-teal-600/10 rounded-full filter blur-3xl pointer-events-none"></div>

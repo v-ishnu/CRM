@@ -453,7 +453,7 @@ export default function TeamPaymentsPage() {
       {/* Record Payment Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-[#0d0d12] border border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-5 my-8">
+          <div className="bg-[#0d0d12] border border-slate-800 rounded-2xl w-full max-w-lg max-h-[90dvh] overflow-y-auto p-5 sm:p-6 space-y-5 my-8">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-white">Record Team Payment</h2>
               <button onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-white">
@@ -462,7 +462,7 @@ export default function TeamPaymentsPage() {
             </div>
 
             <form onSubmit={handleCreateSubmit} className="space-y-4 text-sm">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-300 text-xs font-semibold mb-1">Team Member *</label>
                   <select
@@ -516,7 +516,7 @@ export default function TeamPaymentsPage() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-300 text-xs font-semibold mb-1">Amount (₹) *</label>
                   <input
@@ -546,7 +546,7 @@ export default function TeamPaymentsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-300 text-xs font-semibold mb-1">Payment Date</label>
                   <input

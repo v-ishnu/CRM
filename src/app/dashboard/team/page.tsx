@@ -254,7 +254,7 @@ export default function TeamMembersPage() {
       </div>
 
       {/* Filters Bar */}
-      <div className="flex flex-col md:flex-row items-center gap-3 bg-[#0d0d12] border border-slate-800/80 p-3 rounded-2xl">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-[#0d0d12] border border-slate-800/80 p-3 rounded-2xl">
         <div className="relative flex-1 w-full">
           <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
           <input
@@ -265,7 +265,7 @@ export default function TeamMembersPage() {
             className="w-full bg-[#14141b] border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
           />
         </div>
-        <div className="flex items-center gap-2 w-full md:w-auto">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
@@ -296,13 +296,13 @@ export default function TeamMembersPage() {
       {loading ? (
         <div className="flex items-center justify-center p-12 text-slate-400">Loading team members...</div>
       ) : members.length === 0 ? (
-        <div className="text-center p-12 bg-[#0d0d12] border border-slate-800 rounded-2xl">
+        <div className="text-center p-8 sm:p-12 bg-[#0d0d12] border border-slate-800 rounded-2xl">
           <UsersIcon className="w-12 h-12 text-slate-600 mx-auto mb-3" />
           <h3 className="text-base font-semibold text-slate-200">No team members found</h3>
           <p className="text-xs text-slate-400 mt-1">Get started by adding your first team member.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {members.map((member) => (
             <div
               key={member._id}

@@ -780,7 +780,7 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
         {/* Right Columns: Financials, Projects, Invoices, Payments, History */}
         <div className="lg:col-span-2 space-y-8">
           {/* Financial summary blocks */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
             <div className="bg-[#0d0d12]/50 border border-slate-850 p-4 rounded-xl text-center">
               <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Total Projects budget</span>
               <p className="text-base md:text-lg font-bold text-slate-205 mt-1">

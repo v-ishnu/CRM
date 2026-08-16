@@ -164,16 +164,16 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
             System Dashboard
           </h1>
-          <p className="text-slate-400 text-sm mt-1">Real-time developer CRM tracking & financial summaries.</p>
+          <p className="text-slate-400 text-xs sm:text-sm mt-1">Real-time developer CRM tracking & financial summaries.</p>
         </div>
         <Link
           href="/dashboard/clients/new"
-          className="inline-flex items-center px-5 py-2.5 bg-indigo-605 hover:bg-indigo-500 active:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-indigo-650/15"
+          className="inline-flex items-center justify-center px-4 sm:px-5 py-2.5 bg-indigo-605 hover:bg-indigo-500 active:bg-indigo-700 text-white text-xs sm:text-sm font-semibold rounded-xl transition-all shadow-lg shadow-indigo-650/15"
         >
           Onboard New Client
           <ArrowRight className="w-4 h-4 ml-2" />
@@ -181,13 +181,13 @@ export default function DashboardPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         {cards.map((card) => {
           const Icon = card.icon;
           return (
             <div
               key={card.name}
-              className={`bg-[#0d0d12]/80 border border-slate-800/80 p-6 rounded-2xl relative overflow-hidden flex flex-col justify-between group hover:border-slate-700/60 transition-all duration-300`}
+              className={`bg-[#0d0d12]/80 border border-slate-800/80 p-5 sm:p-6 rounded-2xl relative overflow-hidden flex flex-col justify-between group hover:border-slate-700/60 transition-all duration-300`}
             >
               {/* Backlit Glow */}
               <div className={`absolute top-0 right-0 w-24 h-24 bg-gradient-to-br ${card.color} rounded-bl-full opacity-60 filter blur-xl group-hover:scale-110 transition-transform`}></div>
@@ -195,30 +195,30 @@ export default function DashboardPage() {
               <div className="flex justify-between items-start relative">
                 <div>
                   <p className="text-xs font-semibold text-slate-450 uppercase tracking-wider">{card.name}</p>
-                  <h3 className="text-2xl font-bold text-slate-100 mt-2 tracking-tight">{card.value}</h3>
+                  <h3 className="text-xl sm:text-2xl font-bold text-slate-100 mt-2 tracking-tight">{card.value}</h3>
                 </div>
-                <div className={`p-3 bg-slate-900 border border-slate-800 rounded-xl ${card.textColor}`}>
-                  <Icon className="w-5 h-5" />
+                <div className={`p-2.5 sm:p-3 bg-slate-900 border border-slate-800 rounded-xl ${card.textColor}`}>
+                  <Icon className="w-4 sm:w-5 h-4 sm:h-5" />
                 </div>
               </div>
-              <p className="text-xs text-slate-500 mt-4 relative">{card.description}</p>
+              <p className="text-xs text-slate-500 mt-3 sm:mt-4 relative">{card.description}</p>
             </div>
           );
         })}
       </div>
 
       {/* Financial Ratios & Activity Feed */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
         {/* Collection Ratios */}
-        <div className="lg:col-span-2 bg-[#0d0d12]/60 border border-slate-850 p-6 rounded-2xl">
-          <h2 className="text-lg font-bold text-slate-100 mb-6 flex items-center">
+        <div className="lg:col-span-2 bg-[#0d0d12]/60 border border-slate-850 p-5 sm:p-6 rounded-2xl">
+          <h2 className="text-base sm:text-lg font-bold text-slate-100 mb-5 sm:mb-6 flex items-center">
             <TrendingUp className="w-5 h-5 mr-2 text-indigo-400" />
             Financial Breakdown
           </h2>
           
           <div className="space-y-6">
             <div>
-              <div className="flex justify-between text-sm mb-2">
+              <div className="flex justify-between text-xs sm:text-sm mb-2">
                 <span className="text-slate-400">Collections Rate</span>
                 <span className="font-semibold text-indigo-400">{collectionsRate}% Collected</span>
               </div>
@@ -230,7 +230,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-6 pt-4 border-t border-slate-900">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 pt-4 border-t border-slate-900">
               <div className="bg-slate-900/30 p-4 border border-slate-900 rounded-xl">
                 <p className="text-xs text-slate-500 uppercase font-semibold">Total Payments Collected</p>
                 <p className="text-lg font-bold text-emerald-450 mt-1">₹{totalPaid.toLocaleString('en-IN')}</p>

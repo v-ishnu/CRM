@@ -105,8 +105,8 @@ export default function ProjectsPage() {
       </div>
 
       {/* Search & Filters */}
-      <div className="bg-[#0d0d12]/60 border border-slate-850 p-4 rounded-xl flex flex-col md:flex-row gap-4 justify-between items-center">
-        <form onSubmit={handleSearch} className="relative w-full md:max-w-md">
+      <div className="bg-[#0d0d12]/60 border border-slate-850 p-4 rounded-xl flex flex-col sm:flex-row gap-3 sm:gap-4 justify-between items-stretch sm:items-center">
+        <form onSubmit={handleSearch} className="relative w-full sm:max-w-md">
           <Search className="absolute left-3.5 top-3 w-4.5 h-4.5 text-slate-550" />
           <input
             type="text"
@@ -123,7 +123,7 @@ export default function ProjectsPage() {
           </button>
         </form>
 
-        <div className="flex items-center gap-4 w-full md:w-auto shrink-0 justify-end">
+        <div className="flex items-center gap-3 w-full sm:w-auto shrink-0 justify-end">
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -149,33 +149,33 @@ export default function ProjectsPage() {
           ))}
         </div>
       ) : projects.length === 0 ? (
-        <div className="bg-[#0d0d12]/40 border border-slate-850 p-12 rounded-xl text-center flex flex-col items-center justify-center text-slate-500">
+        <div className="bg-[#0d0d12]/40 border border-slate-850 p-8 sm:p-12 rounded-xl text-center flex flex-col items-center justify-center text-slate-500">
           <FolderKanban className="w-12 h-12 mb-3 stroke-1 text-slate-650" />
           <h3 className="font-bold text-slate-300">No projects found</h3>
           <p className="text-sm text-slate-500 mt-1">Add projects through client onboarding or select different filters.</p>
         </div>
       ) : (
-        <div className="bg-[#0d0d12]/40 border border-slate-850 rounded-xl overflow-hidden">
+        <div className="bg-[#0d0d12]/40 border border-slate-850 rounded-xl overflow-hidden shadow-2xl">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse min-w-[650px]">
               <thead>
                 <tr className="border-b border-slate-850 bg-slate-900/35 text-slate-400 text-xs font-semibold uppercase tracking-wider">
-                  <th className="px-6 py-4">Project</th>
-                  <th className="px-6 py-4">Client</th>
-                  <th className="px-6 py-4">Total Amount</th>
-                  <th className="px-6 py-4">Status / Phase</th>
-                  <th className="px-6 py-4">Milestones</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
+                  <th className="px-4 sm:px-6 py-4">Project</th>
+                  <th className="px-4 sm:px-6 py-4">Client</th>
+                  <th className="px-4 sm:px-6 py-4">Total Amount</th>
+                  <th className="px-4 sm:px-6 py-4">Status / Phase</th>
+                  <th className="px-4 sm:px-6 py-4">Milestones</th>
+                  <th className="px-4 sm:px-6 py-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-850 text-sm">
                 {projects.map((proj) => (
                   <tr key={proj._id} className="hover:bg-slate-900/20 transition-all">
-                    <td className="px-6 py-4">
+                    <td className="px-4 sm:px-6 py-4">
                       <div className="font-semibold text-slate-205">{proj.name}</div>
                       <div className="text-xs text-slate-500 mt-0.5">Code: {proj.projectCode} | {proj.serviceType}</div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 sm:px-6 py-4">
                       <Link
                         href={`/dashboard/clients/${proj.clientId._id}`}
                         className="font-medium text-indigo-400 hover:underline"
@@ -184,10 +184,10 @@ export default function ProjectsPage() {
                       </Link>
                       <div className="text-xs text-slate-500 mt-0.5">Code: {proj.clientId.clientCode}</div>
                     </td>
-                    <td className="px-6 py-4 font-bold text-slate-300">
+                    <td className="px-4 sm:px-6 py-4 font-bold text-slate-300">
                       {proj.currency} {proj.totalAmount.toLocaleString('en-IN')}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 sm:px-6 py-4">
                       {updatingId === proj._id ? (
                         <div className="flex items-center text-xs text-slate-500">
                           <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1.5" />
@@ -211,11 +211,11 @@ export default function ProjectsPage() {
                         </select>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-xs text-slate-500 space-y-0.5">
+                    <td className="px-4 sm:px-6 py-4 text-xs text-slate-500 space-y-0.5 whitespace-nowrap">
                       <div>Start: {proj.startDate ? new Date(proj.startDate).toLocaleDateString() : '—'}</div>
                       <div>Due: {proj.expectedCompletionDate ? new Date(proj.expectedCompletionDate).toLocaleDateString() : '—'}</div>
                     </td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-4 sm:px-6 py-4 text-right">
                       <Link
                         href={`/dashboard/clients/${proj.clientId._id}`}
                         className="inline-flex items-center px-3 py-1.5 bg-slate-900 hover:bg-indigo-600/10 hover:text-indigo-400 border border-slate-800 hover:border-indigo-500/20 text-slate-355 text-xs font-medium rounded-lg transition-all"
