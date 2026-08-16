@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import { NextRequest } from 'next/server';
@@ -18,6 +18,7 @@ import { GET as getRequestDetail, DELETE as deleteRequestRoute } from '@/app/api
 import { POST as decryptCredentialRoute } from '@/app/api/requests/[id]/decrypt/route';
 import { POST as logAuditRoute } from '@/app/api/requests/[id]/audit/route';
 import { POST as telegramWebhook } from '@/app/api/telegram/webhook/route';
+import { TelegramService } from '@/services/telegram.service';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/developer-crm-test';
 
@@ -76,12 +77,23 @@ describe('Data Request & Secure Credential Collection Tests', () => {
     });
   });
 
+  beforeEach(async () => {
+    // Reset test client state
+    await Client.findByIdAndUpdate(testClient._id, {
+      telegramConnected: true,
+      telegramChatId: '987654321',
+      telegramUserId: '987654321',
+      status: 'ACTIVE',
+    });
+  });
+
   afterAll(async () => {
+    const reqClientIds = await Client.find({ clientCode: /^REQ-CL-/ }).distinct('_id');
+    await Credential.deleteMany({ clientId: { $in: reqClientIds } });
+    await RequestResponse.deleteMany({ clientId: { $in: reqClientIds } });
+    await DataRequest.deleteMany({ requestId: /^REQ-2026-/ });
     await Client.deleteMany({ clientCode: /^REQ-CL-/ });
     await Project.deleteMany({ projectCode: /^REQ-PR-/ });
-    await DataRequest.deleteMany({});
-    await Credential.deleteMany({});
-    await RequestResponse.deleteMany({});
     await User.deleteMany({ email: 'requests_admin@example.com' });
     await AuditLog.deleteMany({ actor: 'requests_admin@example.com' });
     await mongoose.connection.close();
@@ -791,6 +803,90 @@ describe('Data Request & Secure Credential Collection Tests', () => {
 
       const deletedCred = await Credential.findById(cred!._id);
       expect(deletedCred).toBeNull();
+    });
+  });
+
+  describe('3. Production Credential Encryption & Decryption Verification', () => {
+    it('successfully processes Hostinger credentials from Telegram with full encryption and verified decryption', async () => {
+      const dbReq = await DataRequest.create({
+        requestId: 'REQ-2026-H001',
+        clientId: testClient._id,
+        projectId: testProject._id,
+        title: 'Hostinger Hosting Credentials',
+        message: 'Please send Hostinger credentials',
+        type: 'CREDENTIAL',
+        credentialType: 'HOSTING',
+        requiredFields: ['Service', 'Username', 'Password', 'Login URL'],
+        status: 'SENT',
+      });
+
+      const hostingerMsg = 
+        `Service: Hostinger\n` +
+        `Username: hostinger_user_99\n` +
+        `Password: VeryStr0ng#Pass!\n` +
+        `Login URL: https://hpanel.hostinger.com`;
+
+      const webhookUpdate = {
+        update_id: 88991,
+        message: {
+          message_id: 88991,
+          from: { id: 987654321, first_name: 'Rahul' },
+          chat: { id: 987654321 },
+          date: Math.floor(Date.now() / 1000),
+          text: hostingerMsg,
+        },
+      };
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+        return { ok: true, json: async () => ({ ok: true }) } as Response;
+      });
+
+      const req = new NextRequest('http://localhost/api/telegram/webhook', {
+        method: 'POST',
+        headers: { 'x-telegram-bot-api-secret-token': 'test_webhook_secret' },
+        body: JSON.stringify(webhookUpdate),
+      });
+
+      const res = await telegramWebhook(req);
+      expect(res.status).toBe(200);
+      fetchSpy.mockRestore();
+
+      const createdCred = await Credential.findOne({ requestId: dbReq._id });
+      expect(createdCred).not.toBeNull();
+
+      // Verify all encrypted structures are strictly populated and non-empty
+      expect(createdCred?.service.ciphertext).toBeTruthy();
+      expect(createdCred?.service.iv).toBeTruthy();
+      expect(createdCred?.service.authTag).toBeTruthy();
+
+      expect(createdCred?.username.ciphertext).toBeTruthy();
+      expect(createdCred?.username.iv).toBeTruthy();
+      expect(createdCred?.username.authTag).toBeTruthy();
+
+      expect(createdCred?.password.ciphertext).toBeTruthy();
+      expect(createdCred?.password.iv).toBeTruthy();
+      expect(createdCred?.password.authTag).toBeTruthy();
+
+      expect(createdCred?.loginUrl?.ciphertext).toBeTruthy();
+      expect(createdCred?.loginUrl?.iv).toBeTruthy();
+      expect(createdCred?.loginUrl?.authTag).toBeTruthy();
+
+      // Verify round-trip decryption matches original without exposing secrets in logs
+      const { decrypt } = await import('@/lib/security/encryption');
+      expect(decrypt(createdCred!.service)).toBe('Hostinger');
+      expect(decrypt(createdCred!.username)).toBe('hostinger_user_99');
+      expect(decrypt(createdCred!.password)).toBe('VeryStr0ng#Pass!');
+      expect(decrypt(createdCred!.loginUrl!)).toBe('https://hpanel.hostinger.com');
+
+      // Verify Request status is updated to RECEIVED
+      const updatedReq = await DataRequest.findById(dbReq._id);
+      expect(updatedReq?.status).toBe('RECEIVED');
+    });
+
+    it('rejects encrypting empty or whitespace-only strings', async () => {
+      const { encrypt } = await import('@/lib/security/encryption');
+      expect(() => encrypt('', 'testField')).toThrow(/cannot be empty/i);
+      expect(() => encrypt('   ', 'testField')).toThrow(/cannot be empty/i);
     });
   });
 });

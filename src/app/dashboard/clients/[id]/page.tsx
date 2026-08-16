@@ -1054,7 +1054,7 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
               <div className="text-center py-6">
                 <p className="text-sm text-slate-550">No requests sent to this client yet.</p>
                 {!client.telegramConnected && (
-                  <p className="text-xs text-slate-600 mt-1">Connect client's Telegram profile to enable requests.</p>
+                  <p className="text-xs text-slate-600 mt-1">Connect client&apos;s Telegram profile to enable requests.</p>
                 )}
               </div>
             ) : (

@@ -1685,51 +1685,121 @@ routerPath=${routerPath}`);
           if (colonIdx > 0) {
             const rawKey = line.slice(0, colonIdx).trim().toLowerCase();
             const val = line.slice(colonIdx + 1).trim();
-            parsedFields[rawKey] = val;
-            parsedFields[rawKey.replace(/\s+/g, '')] = val;
+            if (val) {
+              parsedFields[rawKey] = val;
+              parsedFields[rawKey.replace(/[\s_\-]+/g, '')] = val;
+            }
           }
         }
 
-        // Validate required fields
-        const reqFields = targetRequest.requiredFields && targetRequest.requiredFields.length > 0
-          ? targetRequest.requiredFields
-          : ['Service', 'Username', 'Password', 'Login URL'];
+        // Normalize field values
+        const serviceInput = (
+          parsedFields['service'] ||
+          parsedFields['servicename'] ||
+          parsedFields['service_name'] ||
+          parsedFields['platform'] ||
+          parsedFields['host'] ||
+          targetRequest.credentialType ||
+          targetRequest.title ||
+          'General Service'
+        ).trim();
 
+        const usernameInput = (
+          parsedFields['username'] ||
+          parsedFields['user'] ||
+          parsedFields['user_name'] ||
+          parsedFields['email'] ||
+          parsedFields['login'] ||
+          parsedFields['account'] ||
+          parsedFields['id'] ||
+          ''
+        ).trim();
+
+        const passwordInput = (
+          parsedFields['password'] ||
+          parsedFields['pass'] ||
+          parsedFields['pwd'] ||
+          parsedFields['secret'] ||
+          parsedFields['key'] ||
+          parsedFields['token'] ||
+          ''
+        ).trim();
+
+        const loginUrlInput = (
+          parsedFields['login url'] ||
+          parsedFields['loginurl'] ||
+          parsedFields['url'] ||
+          parsedFields['link'] ||
+          parsedFields['host'] ||
+          parsedFields['domain'] ||
+          parsedFields['website'] ||
+          ''
+        ).trim();
+
+        const additionalInfoInput = (
+          parsedFields['additional info'] ||
+          parsedFields['additionalinfo'] ||
+          parsedFields['notes'] ||
+          parsedFields['note'] ||
+          parsedFields['info'] ||
+          parsedFields['port'] ||
+          parsedFields['database'] ||
+          parsedFields['db'] ||
+          ''
+        ).trim();
+
+        // Check required fields
         const missingFields: string[] = [];
-        for (const rf of reqFields) {
-          const normalizedKey = rf.toLowerCase().replace(/\s+/g, '');
-          if (!parsedFields[rf.toLowerCase()] && !parsedFields[normalizedKey]) {
-            missingFields.push(rf);
-          }
-        }
+        if (!serviceInput) missingFields.push('Service');
+        if (!usernameInput) missingFields.push('Username');
+        if (!passwordInput) missingFields.push('Password');
 
         if (missingFields.length > 0) {
           const fieldLabel = missingFields.length === 1 ? 'The following field is missing:' : 'The following fields are missing:';
           const missingFormatted = missingFields.map((f: string) => `<b>${f}</b>`).join('\n');
+          const reqFormat = ['Service', 'Username', 'Password', 'Login URL'];
           await this.sendMessage(
             chatId,
             `❌ <b>Credential submission incomplete</b>\n\n` +
             `${fieldLabel}\n\n` +
             `${missingFormatted}\n\n` +
             `Please reply using this format:\n\n` +
-            `<code>\n${reqFields.map((f: string) => `${f}:`).join('\n')}\n</code>`,
+            `<code>\n${reqFormat.map((f: string) => `${f}:`).join('\n')}\n</code>`,
             timings
           );
           return;
         }
 
-        // Encrypt the fields
+        // Encrypt the fields using authenticated encryption
         const { encrypt } = await import('@/lib/security/encryption');
         
-        const serviceEnc = encrypt(parsedFields['service'] || '');
-        const usernameEnc = encrypt(parsedFields['username'] || '');
-        const passwordEnc = encrypt(parsedFields['password'] || '');
-        const loginUrlEnc = (parsedFields['login url'] || parsedFields['loginurl'])
-          ? encrypt(parsedFields['login url'] || parsedFields['loginurl'])
-          : undefined;
-        const additionalInfoEnc = (parsedFields['additional info'] || parsedFields['additionalinfo'])
-          ? encrypt(parsedFields['additional info'] || parsedFields['additionalinfo'])
-          : undefined;
+        let serviceEnc, usernameEnc, passwordEnc, loginUrlEnc, additionalInfoEnc;
+        try {
+          serviceEnc = encrypt(serviceInput, 'service');
+          usernameEnc = encrypt(usernameInput, 'username');
+          passwordEnc = encrypt(passwordInput, 'password');
+          loginUrlEnc = loginUrlInput ? encrypt(loginUrlInput, 'loginUrl') : undefined;
+          additionalInfoEnc = additionalInfoInput ? encrypt(additionalInfoInput, 'additionalInfo') : undefined;
+
+          // Strict validation of encrypted blocks
+          if (!serviceEnc?.ciphertext || !serviceEnc?.iv || !serviceEnc?.authTag) {
+            throw new Error('Encryption validation failed for field: service');
+          }
+          if (!usernameEnc?.ciphertext || !usernameEnc?.iv || !usernameEnc?.authTag) {
+            throw new Error('Encryption validation failed for field: username');
+          }
+          if (!passwordEnc?.ciphertext || !passwordEnc?.iv || !passwordEnc?.authTag) {
+            throw new Error('Encryption validation failed for field: password');
+          }
+        } catch (encErr) {
+          console.error('[CREDENTIAL_ERROR] Encryption failure during client response processing for request', targetRequest.requestId);
+          await this.sendMessage(
+            chatId,
+            `❌ <b>We couldn't securely save your credentials. Please try again.</b>`,
+            timings
+          );
+          return;
+        }
 
         const dbStart2 = performance.now();
         // Prevent duplicate creation if webhook update is repeated

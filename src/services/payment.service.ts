@@ -116,24 +116,41 @@ export class PaymentService {
       }
     }
 
-    const paymentNumber = await this.generateNextPaymentNumber();
+    let savedPayment: IPayment | null = null;
+    let attempts = 0;
+    while (attempts < 5) {
+      try {
+        const paymentNumber = await this.generateNextPaymentNumber();
+        const payment = new Payment({
+          paymentNumber,
+          clientId,
+          projectId,
+          invoiceId: finalInvoiceId,
+          amount: numAmount,
+          currency: project.currency,
+          paymentMethod,
+          paymentType: paymentType || 'INSTALLMENT',
+          paymentDate: paymentData.paymentDate || new Date(),
+          transactionReference,
+          status: 'COMPLETED', // Payments recorded by admin default to COMPLETED
+          notes,
+        });
 
-    const payment = new Payment({
-      paymentNumber,
-      clientId,
-      projectId,
-      invoiceId: finalInvoiceId,
-      amount: numAmount,
-      currency: project.currency,
-      paymentMethod,
-      paymentType: paymentType || 'INSTALLMENT',
-      paymentDate: paymentData.paymentDate || new Date(),
-      transactionReference,
-      status: 'COMPLETED', // Payments recorded by admin default to COMPLETED
-      notes,
-    });
+        savedPayment = await payment.save();
+        break;
+      } catch (err: any) {
+        if (err.code === 11000 && err.keyPattern?.paymentNumber && attempts < 4) {
+          attempts++;
+          await new Promise(r => setTimeout(r, Math.random() * 50 + 20));
+          continue;
+        }
+        throw err;
+      }
+    }
 
-    const savedPayment = await payment.save();
+    if (!savedPayment) {
+      throw new Error('Failed to generate unique payment number after multiple attempts');
+    }
 
     // Log action
     await AuditService.logAction(actor, 'PAYMENT_CREATED', 'Payment', savedPayment._id, {
