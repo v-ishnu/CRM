@@ -7,6 +7,8 @@ export interface IAuditLog extends Document {
     | 'CLIENT_UPDATED' 
     | 'CLIENT_DELETED' 
     | 'PROJECT_CREATED' 
+    | 'PROJECT_UPDATED'
+    | 'PROJECT_DELETED'
     | 'PAYMENT_CREATED' 
     | 'PAYMENT_UPDATED' 
     | 'INVOICE_CREATED' 
@@ -23,8 +25,32 @@ export interface IAuditLog extends Document {
     | 'DATA_REQUEST_CREATED'
     | 'DATA_REQUEST_SENT'
     | 'DATA_REQUEST_RECEIVED'
-    | 'DATA_REQUEST_DELETED';
-  entityType: 'Client' | 'Project' | 'Payment' | 'Invoice' | 'Notification' | 'Auth' | 'DataRequest' | 'RequestResponse' | 'Credential';
+    | 'DATA_REQUEST_DELETED'
+    | 'TEAM_MEMBER_CREATED'
+    | 'TEAM_MEMBER_UPDATED'
+    | 'TEAM_MEMBER_DEACTIVATED'
+    | 'TEAM_MEMBER_DELETED'
+    | 'TEAM_MEMBER_CONNECTED_TELEGRAM'
+    | 'PROJECT_TEAM_UPDATED'
+    | 'PROJECT_TEAM_MEMBER_ADDED'
+    | 'PROJECT_TEAM_MEMBER_REMOVED'
+    | 'TASK_CREATED'
+    | 'TASK_UPDATED'
+    | 'TASK_STATUS_CHANGED'
+    | 'TASK_DELETED'
+    | 'CREDENTIAL_SHARED'
+    | 'CREDENTIAL_SHARE_FAILED'
+    | 'CREDENTIAL_ACCESSED'
+    | 'TASK_CREDENTIAL_ACCESS_GRANTED'
+    | 'TASK_CREDENTIAL_SHARED'
+    | 'TASK_CREDENTIAL_ACCESSED'
+    | 'TASK_CREDENTIAL_REVOKED'
+    | 'TEAM_PAYMENT_CREATED'
+    | 'TEAM_PAYMENT_UPDATED'
+    | 'TEAM_PAYMENT_MARKED_PAID'
+    | 'TEAM_PAYMENT_CANCELLED'
+    | 'TEAM_PAYMENT_NOTIFICATION_RETRY';
+  entityType: 'Client' | 'Project' | 'Payment' | 'Invoice' | 'Notification' | 'Auth' | 'DataRequest' | 'RequestResponse' | 'Credential' | 'TeamMember' | 'Task' | 'TeamPayment';
   entityId?: mongoose.Types.ObjectId | string;
   metadata?: Record<string, any>;
   timestamp: Date;
@@ -45,6 +71,8 @@ const AuditLogSchema = new Schema<IAuditLog>(
         'CLIENT_UPDATED',
         'CLIENT_DELETED',
         'PROJECT_CREATED',
+        'PROJECT_UPDATED',
+        'PROJECT_DELETED',
         'PAYMENT_CREATED',
         'PAYMENT_UPDATED',
         'INVOICE_CREATED',
@@ -62,13 +90,37 @@ const AuditLogSchema = new Schema<IAuditLog>(
         'DATA_REQUEST_SENT',
         'DATA_REQUEST_RECEIVED',
         'DATA_REQUEST_DELETED',
+        'TEAM_MEMBER_CREATED',
+        'TEAM_MEMBER_UPDATED',
+        'TEAM_MEMBER_DEACTIVATED',
+        'TEAM_MEMBER_DELETED',
+        'TEAM_MEMBER_CONNECTED_TELEGRAM',
+        'PROJECT_TEAM_UPDATED',
+        'PROJECT_TEAM_MEMBER_ADDED',
+        'PROJECT_TEAM_MEMBER_REMOVED',
+        'TASK_CREATED',
+        'TASK_UPDATED',
+        'TASK_STATUS_CHANGED',
+        'TASK_DELETED',
+        'CREDENTIAL_SHARED',
+        'CREDENTIAL_SHARE_FAILED',
+        'CREDENTIAL_ACCESSED',
+        'TASK_CREDENTIAL_ACCESS_GRANTED',
+        'TASK_CREDENTIAL_SHARED',
+        'TASK_CREDENTIAL_ACCESSED',
+        'TASK_CREDENTIAL_REVOKED',
+        'TEAM_PAYMENT_CREATED',
+        'TEAM_PAYMENT_UPDATED',
+        'TEAM_PAYMENT_MARKED_PAID',
+        'TEAM_PAYMENT_CANCELLED',
+        'TEAM_PAYMENT_NOTIFICATION_RETRY',
       ],
       required: true,
       index: true,
     },
     entityType: {
       type: String,
-      enum: ['Client', 'Project', 'Payment', 'Invoice', 'Notification', 'Auth', 'DataRequest', 'RequestResponse', 'Credential'],
+      enum: ['Client', 'Project', 'Payment', 'Invoice', 'Notification', 'Auth', 'DataRequest', 'RequestResponse', 'Credential', 'TeamMember', 'Task', 'TeamPayment'],
       required: true,
       index: true,
     },

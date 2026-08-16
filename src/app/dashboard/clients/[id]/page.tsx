@@ -24,6 +24,7 @@ import {
   Laptop,
   ArrowRight,
   Lock,
+  X,
 } from 'lucide-react';
 
 interface Project {
@@ -36,6 +37,8 @@ interface Project {
   status: string;
   startDate?: string;
   expectedCompletionDate?: string;
+  paidAmount?: number;
+  outstandingAmount?: number;
 }
 
 interface Invoice {
@@ -129,6 +132,22 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
   const [paymentNotes, setPaymentNotes] = useState('');
   const [recordingPayment, setRecordingPayment] = useState(false);
 
+  // Add Project States
+  const [addProjectModalOpen, setAddProjectModalOpen] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectServiceType, setNewProjectServiceType] = useState('WEBSITE');
+  const [newProjectBudget, setNewProjectBudget] = useState('');
+  const [newProjectCurrency, setNewProjectCurrency] = useState('INR');
+  const [newProjectStartDate, setNewProjectStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newProjectEndDate, setNewProjectEndDate] = useState('');
+  const [newProjectNotes, setNewProjectNotes] = useState('');
+  const [creatingProject, setCreatingProject] = useState(false);
+
+  // Delete Project States
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const [deleteProjectModalOpen, setDeleteProjectModalOpen] = useState(false);
+  const [deletingProject, setDeletingProject] = useState(false);
+
   // Requests States
   const [requests, setRequests] = useState<any[]>([]);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
@@ -150,6 +169,15 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
   const [decryptError, setDecryptError] = useState<string | null>(null);
   const [revealedFields, setRevealedFields] = useState<Record<string, boolean>>({});
   const [copiedFields, setCopiedFields] = useState<Record<string, boolean>>({});
+
+  // Share Credential to Team Member States
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [shareTeamMembers, setShareTeamMembers] = useState<any[]>([]);
+  const [selectedTeamMemberId, setSelectedTeamMemberId] = useState('');
+  const [shareOneTime, setShareOneTime] = useState(true);
+  const [sharingCredential, setSharingCredential] = useState(false);
+  const [shareSuccess, setShareSuccess] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
 
   const fetchClientDetails = async () => {
     try {
@@ -233,6 +261,79 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
     } finally {
       setDeleting(false);
       setConfirmClientCode('');
+    }
+  };
+
+  const handleAddProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProjectName.trim()) {
+      setActionError('Project name is required.');
+      return;
+    }
+    const budgetNum = Number(newProjectBudget);
+    if (isNaN(budgetNum) || budgetNum <= 0) {
+      setActionError('Total budget must be a positive number.');
+      return;
+    }
+
+    setCreatingProject(true);
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      const res = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: id,
+          name: newProjectName.trim(),
+          serviceType: newProjectServiceType,
+          totalAmount: budgetNum,
+          currency: newProjectCurrency,
+          startDate: newProjectStartDate ? new Date(newProjectStartDate).toISOString() : undefined,
+          expectedCompletionDate: newProjectEndDate ? new Date(newProjectEndDate).toISOString() : undefined,
+          description: newProjectNotes.trim() || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setActionSuccess(`Project "${newProjectName}" created successfully!`);
+        setAddProjectModalOpen(false);
+        setNewProjectName('');
+        setNewProjectBudget('');
+        setNewProjectNotes('');
+        await fetchClientDetails();
+      } else {
+        setActionError(json.error?.message || 'Failed to create project.');
+      }
+    } catch (err) {
+      setActionError('An error occurred while creating the project.');
+    } finally {
+      setCreatingProject(false);
+    }
+  };
+
+  const handleDeleteProject = async () => {
+    if (!projectToDelete) return;
+    setDeletingProject(true);
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      const res = await fetch(`/api/projects/${projectToDelete._id}`, {
+        method: 'DELETE',
+      });
+      const json = await res.json();
+      if (json.success) {
+        setActionSuccess(`Project "${projectToDelete.name}" deleted successfully.`);
+        setDeleteProjectModalOpen(false);
+        setProjectToDelete(null);
+        await fetchClientDetails();
+      } else {
+        setActionError(json.error?.message || 'Failed to delete project.');
+      }
+    } catch (err) {
+      setActionError('An error occurred while deleting the project.');
+    } finally {
+      setDeletingProject(false);
     }
   };
 
@@ -702,46 +803,104 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
 
           {/* Projects section */}
           <div className="bg-[#0d0d12]/30 border border-slate-850 p-6 rounded-2xl">
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex justify-between items-center mb-5">
               <h2 className="text-base font-bold text-slate-200 flex items-center">
                 <Laptop className="w-5 h-5 mr-2 text-indigo-400" />
-                Client Projects
+                Client Projects ({projects.length})
               </h2>
+              <button
+                onClick={() => setAddProjectModalOpen(true)}
+                className="px-3.5 py-1.5 bg-indigo-650 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-indigo-950/40 transition-all"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add Project
+              </button>
             </div>
 
             {projects.length === 0 ? (
-              <p className="text-sm text-slate-550 py-4 text-center">No projects registered for this client.</p>
+              <div className="text-center py-8 bg-slate-950/20 border border-slate-900 rounded-xl space-y-3">
+                <p className="text-sm text-slate-500">No projects registered for this client yet.</p>
+                <button
+                  onClick={() => setAddProjectModalOpen(true)}
+                  className="px-4 py-2 bg-indigo-650/20 hover:bg-indigo-650/30 border border-indigo-500/30 text-indigo-300 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-all"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Create First Project
+                </button>
+              </div>
             ) : (
               <div className="space-y-3">
-                {projects.map((proj) => (
-                  <div
-                    key={proj._id}
-                    className="p-4 bg-slate-905/30 border border-slate-850/60 hover:border-slate-800 rounded-xl flex items-center justify-between"
-                  >
-                    <div>
-                      <div className="font-semibold text-slate-200">{proj.name}</div>
-                      <div className="text-xs text-slate-500 mt-1">
-                        Code: {proj.projectCode} | Service: {proj.serviceType}
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-6 text-right">
-                      <div>
-                        <div className="text-sm font-bold text-slate-300">
-                          {proj.currency} {proj.totalAmount.toLocaleString('en-IN')}
+                {projects.map((proj) => {
+                  const paid = proj.paidAmount ?? 0;
+                  const outstanding = proj.outstandingAmount ?? Math.max(0, proj.totalAmount - paid);
+                  return (
+                    <div
+                      key={proj._id}
+                      className="p-4 bg-slate-905/30 border border-slate-850/60 hover:border-slate-800 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-200 text-base">{proj.name}</span>
+                          <span className="text-[10px] bg-indigo-950/40 border border-indigo-500/20 text-indigo-400 font-mono px-2 py-0.5 rounded">
+                            {proj.projectCode}
+                          </span>
                         </div>
-                        <span className="text-[10px] bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-lg text-slate-400 uppercase font-semibold mt-1 inline-block">
-                          {proj.status}
-                        </span>
+                        <div className="text-xs text-slate-500 flex items-center gap-3">
+                          <span>Service: <b className="text-slate-400">{proj.serviceType}</b></span>
+                          <span className="text-[10px] bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-slate-400 uppercase font-semibold">
+                            {proj.status}
+                          </span>
+                        </div>
                       </div>
-                      <Link
-                        href={`/dashboard/projects`}
-                        className="p-2 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200 rounded-lg transition-all"
-                      >
-                        <ArrowRight className="w-4 h-4" />
-                      </Link>
+
+                      <div className="flex items-center justify-between md:justify-end gap-5 pt-2 md:pt-0 border-t md:border-t-0 border-slate-900">
+                        <div className="grid grid-cols-3 gap-3 text-right">
+                          <div>
+                            <span className="text-[10px] text-slate-550 block font-semibold">Budget</span>
+                            <span className="text-xs font-bold text-slate-300">
+                              {proj.currency === 'INR' ? '₹' : (proj.currency === 'USD' ? '$' : proj.currency)}
+                              {proj.totalAmount.toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-emerald-550 block font-semibold">Paid</span>
+                            <span className="text-xs font-bold text-emerald-450">
+                              {proj.currency === 'INR' ? '₹' : (proj.currency === 'USD' ? '$' : proj.currency)}
+                              {paid.toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-red-550 block font-semibold">Outstanding</span>
+                            <span className="text-xs font-bold text-red-405">
+                              {proj.currency === 'INR' ? '₹' : (proj.currency === 'USD' ? '$' : proj.currency)}
+                              {outstanding.toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Link
+                            href={`/dashboard/projects`}
+                            className="p-2 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200 rounded-lg transition-all"
+                            title="View Projects"
+                          >
+                            <ArrowRight className="w-4 h-4" />
+                          </Link>
+                          <button
+                            onClick={() => {
+                              setProjectToDelete(proj);
+                              setDeleteProjectModalOpen(true);
+                            }}
+                            className="p-2 bg-red-950/20 hover:bg-red-900/30 border border-red-900/30 hover:border-red-500/40 text-red-450 hover:text-red-300 rounded-lg transition-all"
+                            title="Delete Project"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1659,6 +1818,34 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
                         </div>
                       </div>
                     )}
+
+                    {/* Share with Team Member button */}
+                    <div className="pt-3 mt-3 border-t border-slate-850/60 flex items-center justify-between">
+                      <span className="text-[11px] text-slate-400">Share securely with authorized team member:</span>
+                      <button
+                        onClick={async () => {
+                          setShareSuccess(null);
+                          setShareError(null);
+                          try {
+                            const res = await fetch('/api/team-members?status=ACTIVE');
+                            const json = await res.json();
+                            if (json.success) {
+                              setShareTeamMembers(json.data || []);
+                              if (json.data && json.data.length > 0) {
+                                setSelectedTeamMemberId(json.data[0]._id);
+                              }
+                              setShareModalOpen(true);
+                            }
+                          } catch (err) {
+                            console.error('Failed to load team members:', err);
+                          }
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow transition-all cursor-pointer"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>🔐 Share via Telegram</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1710,6 +1897,308 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
         </div>
       </div>
     )}
+
+      {/* Add Project Modal */}
+      {addProjectModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#0f0f15] border border-slate-800 w-full max-w-lg rounded-2xl p-6 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-850">
+              <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+                <Plus className="w-5 h-5 text-indigo-400" />
+                Add New Project for {client.name}
+              </h3>
+              <button
+                onClick={() => setAddProjectModalOpen(false)}
+                className="text-slate-500 hover:text-slate-300 text-sm font-semibold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleAddProject} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">
+                  Project Name <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                  placeholder="e.g. E-Commerce Store Development"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">Service Type</label>
+                  <select
+                    value={newProjectServiceType}
+                    onChange={(e) => setNewProjectServiceType(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="WEBSITE">Website</option>
+                    <option value="WEB_APPLICATION">Web Application</option>
+                    <option value="MOBILE_APPLICATION">Mobile Application</option>
+                    <option value="API_DEVELOPMENT">API Development</option>
+                    <option value="WORDPRESS">WordPress</option>
+                    <option value="ECOMMERCE">E-Commerce</option>
+                    <option value="MAINTENANCE">Maintenance</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">Currency</label>
+                  <select
+                    value={newProjectCurrency}
+                    onChange={(e) => setNewProjectCurrency(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="INR">INR (₹)</option>
+                    <option value="USD">USD ($)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">
+                  Total Budget Amount <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  step="any"
+                  value={newProjectBudget}
+                  onChange={(e) => setNewProjectBudget(e.target.value)}
+                  placeholder="e.g. 50000"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    value={newProjectStartDate}
+                    onChange={(e) => setNewProjectStartDate(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">Expected Completion</label>
+                  <input
+                    type="date"
+                    value={newProjectEndDate}
+                    onChange={(e) => setNewProjectEndDate(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Description / Scope Notes</label>
+                <textarea
+                  rows={3}
+                  value={newProjectNotes}
+                  onChange={(e) => setNewProjectNotes(e.target.value)}
+                  placeholder="Project requirements, deliverable milestones..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setAddProjectModalOpen(false)}
+                  className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-semibold rounded-xl text-xs transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingProject}
+                  className="flex-1 py-2.5 bg-indigo-650 hover:bg-indigo-500 disabled:bg-slate-800 text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  {creatingProject ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    'Create Project'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Project Confirmation Modal */}
+      {deleteProjectModalOpen && projectToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#0f0f15] border border-red-900/40 w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-4">
+            <h3 className="text-base font-bold text-red-400 flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-red-500" />
+              Delete Project: {projectToDelete.name}?
+            </h3>
+            <p className="text-xs text-slate-450 leading-relaxed">
+              Are you sure you want to delete <b>{projectToDelete.name}</b> (<code>{projectToDelete.projectCode}</code>)?
+              <br /><br />
+              This will remove the project and its associated payments, invoices, requests, and credentials. The client profile <b>{client.name}</b> will NOT be deleted.
+            </p>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteProjectModalOpen(false);
+                  setProjectToDelete(null);
+                }}
+                className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-semibold rounded-xl text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteProject}
+                disabled={deletingProject}
+                className="flex-1 py-2.5 bg-red-950 hover:bg-red-900 border border-red-800 text-red-300 font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5"
+              >
+                {deletingProject ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  'Confirm Delete Project'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Share Credential to Team Member Modal */}
+      {shareModalOpen && activeRequest && activeRequest.credentialMeta && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+          <div className="bg-[#0f0f15] border border-slate-800 w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Send className="w-4 h-4 text-indigo-400" />
+                Share Credential with Team Member
+              </h3>
+              <button onClick={() => setShareModalOpen(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              The credentials will be decrypted on the server and sent directly to the selected team member&apos;s linked Telegram account.
+            </p>
+
+            {shareSuccess && (
+              <div className="p-3 bg-emerald-950/40 border border-emerald-800/60 rounded-xl text-emerald-300 text-xs font-semibold">
+                {shareSuccess}
+              </div>
+            )}
+
+            {shareError && (
+              <div className="p-3 bg-red-950/40 border border-red-800/60 rounded-xl text-red-300 text-xs font-semibold">
+                {shareError}
+              </div>
+            )}
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Select Team Member *</label>
+                <select
+                  value={selectedTeamMemberId}
+                  onChange={(e) => setSelectedTeamMemberId(e.target.value)}
+                  className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                >
+                  {shareTeamMembers.map((m) => {
+                    const hasPerm = m.permissions && m.permissions.includes('VIEW_CREDENTIALS');
+                    return (
+                      <option key={m._id} value={m._id}>
+                        {m.name} ({m.role}) {m.telegramConnected ? '• Telegram Linked' : '• No Telegram'} {hasPerm ? '• Has Permission' : '• No Permission'}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer pt-1">
+                <input
+                  type="checkbox"
+                  checked={shareOneTime}
+                  onChange={(e) => setShareOneTime(e.target.checked)}
+                  className="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0"
+                />
+                <span className="text-slate-300">Mark as One-Time / Confidential Credential</span>
+              </label>
+            </div>
+
+            <div className="flex gap-3 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShareModalOpen(false)}
+                className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-semibold rounded-xl text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={sharingCredential || !selectedTeamMemberId}
+                onClick={async () => {
+                  setSharingCredential(true);
+                  setShareSuccess(null);
+                  setShareError(null);
+                  try {
+                    const credId = activeRequest.credentialMeta._id;
+                    const res = await fetch(`/api/credentials/${credId}/share`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        teamMemberId: selectedTeamMemberId,
+                        oneTime: shareOneTime,
+                      }),
+                    });
+                    const json = await res.json();
+                    if (json.success) {
+                      setShareSuccess(json.data?.message || 'Credential sent via Telegram successfully!');
+                      setTimeout(() => {
+                        setShareModalOpen(false);
+                      }, 2000);
+                    } else {
+                      setShareError(json.error?.message || 'Failed to share credential');
+                    }
+                  } catch (err: any) {
+                    setShareError(err.message || 'Error occurred while sharing credential');
+                  } finally {
+                    setSharingCredential(false);
+                  }
+                }}
+                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-900 text-white disabled:text-slate-600 font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-600/20 cursor-pointer"
+              >
+                {sharingCredential ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-3.5 h-3.5" />
+                    Send Credential
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

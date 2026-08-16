@@ -5,19 +5,47 @@ import { dbConnect } from '@/lib/db/connect';
 
 export class ClientService {
   /**
-   * Create a new client with a unique client code
+   * Cryptographically secure, non-sequential random public client code (e.g. CL-7K4M9X2Q)
+   */
+  static generateSecureClientCode(): string {
+    const charset = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const bytes = crypto.randomBytes(8);
+    let code = 'CL-';
+    for (let i = 0; i < 8; i++) {
+      code += charset[bytes[i] % charset.length];
+    }
+    return code;
+  }
+
+  /**
+   * Generate a unique secure client code with database collision check & retry
+   */
+  static async getUniqueSecureClientCode(): Promise<string> {
+    await dbConnect();
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const code = this.generateSecureClientCode();
+      const existing = await Client.findOne({ clientCode: code });
+      if (!existing) {
+        return code;
+      }
+    }
+    throw new Error('Failed to generate unique client code after multiple attempts');
+  }
+
+  /**
+   * Create a new client with a unique secure client code
    */
   static async createClient(clientData: Partial<IClient>, actor: string): Promise<IClient> {
     await dbConnect();
 
-    const code = clientData.clientCode?.toUpperCase().trim();
+    let code = clientData.clientCode?.toUpperCase().trim();
     if (!code) {
-      throw new Error('Client code is required');
-    }
-
-    const existingClient = await Client.findOne({ clientCode: code });
-    if (existingClient) {
-      throw new Error(`Client with code "${code}" already exists`);
+      code = await this.getUniqueSecureClientCode();
+    } else {
+      const existingClient = await Client.findOne({ clientCode: code });
+      if (existingClient) {
+        throw new Error(`Client with code "${code}" already exists`);
+      }
     }
 
     const client = new Client({
@@ -34,6 +62,43 @@ export class ClientService {
     });
 
     return savedClient;
+  }
+
+  /**
+   * Safe migration to replace legacy sequential client codes (e.g. CL-0001) with secure random codes
+   */
+  static async migrateLegacyClientCodes(): Promise<{ migratedCount: number; updated: Array<{ id: string; oldCode: string; newCode: string }> }> {
+    await dbConnect();
+
+    const legacyClients = await Client.find({
+      clientCode: /^CL-\d{1,6}$/,
+    });
+
+    const updated: Array<{ id: string; oldCode: string; newCode: string }> = [];
+
+    for (const client of legacyClients) {
+      const oldCode = client.clientCode;
+      const newCode = await this.getUniqueSecureClientCode();
+      client.clientCode = newCode;
+      await client.save();
+
+      updated.push({
+        id: client._id.toString(),
+        oldCode,
+        newCode,
+      });
+
+      await AuditService.logAction('system_migration', 'CLIENT_UPDATED', 'Client', client._id, {
+        info: 'Migrated clientCode from legacy sequential to secure random code',
+        oldCode,
+        newCode,
+      });
+    }
+
+    return {
+      migratedCount: updated.length,
+      updated,
+    };
   }
 
   /**

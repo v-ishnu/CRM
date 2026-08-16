@@ -60,8 +60,8 @@ export default function NewClientPage() {
       setLoading(false);
       return;
     }
-    if (!formData.projectName || !formData.totalAmount) {
-      setError('Project Name and Total Budget Amount are required.');
+    if (formData.projectName && !formData.totalAmount) {
+      setError('Total Budget Amount is required when creating a project.');
       setLoading(false);
       return;
     }

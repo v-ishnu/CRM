@@ -26,7 +26,34 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     const project = await ProjectService.createProject(body, actor);
-    return NextResponse.json({ success: true, data: project });
+
+    // Create Invoice if totalAmount > 0 and not explicitly disabled
+    let invoice = null;
+    if (body.createInvoice !== false && project.totalAmount > 0) {
+      try {
+        const { InvoiceService } = await import('@/services/invoice.service');
+        const invoiceItem = {
+          description: `${project.name} - ${project.serviceType} Development`,
+          quantity: 1,
+          unitPrice: project.totalAmount,
+        };
+
+        invoice = await InvoiceService.createInvoice(
+          {
+            clientId: project.clientId.toString(),
+            projectId: project._id.toString(),
+            items: [invoiceItem],
+            dueDate: project.expectedCompletionDate,
+            notes: 'Project setup invoice',
+          },
+          actor
+        );
+      } catch (invErr) {
+        console.error('Failed to auto-create invoice for new project:', invErr);
+      }
+    }
+
+    return NextResponse.json({ success: true, data: { project, invoice } });
   } catch (error: any) {
     console.error('Project creation API error:', error);
     return NextResponse.json(

@@ -120,3 +120,34 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     );
   }
 }
+
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const actor = req.headers.get('x-user-email') || 'admin';
+  const userRole = req.headers.get('x-user-role');
+
+  if (userRole !== 'ADMIN') {
+    return NextResponse.json(
+      { success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } },
+      { status: 403 }
+    );
+  }
+
+  try {
+    await dbConnect();
+    const { id } = await params;
+
+    const result = await ProjectService.deleteProject(id, actor);
+
+    return NextResponse.json({
+      success: true,
+      message: `Project "${result.projectName}" deleted successfully`,
+    });
+  } catch (error: any) {
+    console.error('Delete project error:', error);
+    return NextResponse.json(
+      { success: false, error: { code: 'SERVER_ERROR', message: error.message } },
+      { status: 500 }
+    );
+  }
+}
+

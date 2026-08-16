@@ -20,33 +20,6 @@ const getClientsSchema = z.object({
   limit: z.string().transform(Number).optional(),
 });
 
-// Code generator helpers
-async function generateNextClientCode(): Promise<string> {
-  const lastClient = await Client.findOne().sort({ clientCode: -1 });
-  let nextSeq = 1;
-  if (lastClient) {
-    const lastCode = lastClient.clientCode;
-    const lastSeq = parseInt(lastCode.replace('CL-', ''), 10);
-    if (!isNaN(lastSeq)) {
-      nextSeq = lastSeq + 1;
-    }
-  }
-  return `CL-${String(nextSeq).padStart(4, '0')}`;
-}
-
-async function generateNextProjectCode(): Promise<string> {
-  const lastProject = await Project.findOne().sort({ projectCode: -1 });
-  let nextSeq = 1;
-  if (lastProject) {
-    const lastCode = lastProject.projectCode;
-    const lastSeq = parseInt(lastCode.replace('PR-', ''), 10);
-    if (!isNaN(lastSeq)) {
-      nextSeq = lastSeq + 1;
-    }
-  }
-  return `PR-${String(nextSeq).padStart(4, '0')}`;
-}
-
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -78,10 +51,9 @@ export async function POST(req: NextRequest) {
     await dbConnect();
     const body = await req.json();
 
-    // 1. Create client
-    const clientCode = await generateNextClientCode();
+    // 1. Create client with secure random clientCode
     const clientData = {
-      clientCode,
+      clientCode: body.clientCode || undefined,
       name: body.clientName || body.name,
       email: body.email,
       phone: body.phone,
@@ -97,89 +69,100 @@ export async function POST(req: NextRequest) {
 
     createdClient = await ClientService.createClient(clientData, actor);
 
-    // 2. Create project
-    const projectCode = await generateNextProjectCode();
-    const projectData = {
-      projectCode,
-      clientId: createdClient._id,
-      name: body.projectName,
-      description: body.projectDescription,
-      serviceType: body.serviceType || 'WEBSITE',
-      totalAmount: Number(body.totalAmount),
-      currency: body.currency || 'INR',
-      status: 'IN_PROGRESS' as const,
-      startDate: body.startDate ? new Date(body.startDate) : new Date(),
-      expectedCompletionDate: body.expectedCompletionDate ? new Date(body.expectedCompletionDate) : undefined,
-    };
+    // 2. Optionally create initial project if projectName is provided
+    if (body.projectName && body.totalAmount !== undefined) {
+      const projectData = {
+        clientId: createdClient._id,
+        name: body.projectName,
+        description: body.projectDescription,
+        serviceType: body.serviceType || 'WEBSITE',
+        totalAmount: Number(body.totalAmount),
+        currency: body.currency || 'INR',
+        status: 'IN_PROGRESS' as const,
+        startDate: body.startDate ? new Date(body.startDate) : new Date(),
+        expectedCompletionDate: body.expectedCompletionDate ? new Date(body.expectedCompletionDate) : undefined,
+      };
 
-    createdProject = await ProjectService.createProject(projectData, actor);
+      createdProject = await ProjectService.createProject(projectData, actor);
 
-    // 3. Create Invoice
-    const invoiceItem = {
-      description: `${createdProject.name} - ${createdProject.serviceType} Development`,
-      quantity: 1,
-      unitPrice: createdProject.totalAmount,
-    };
+      // 3. Create Invoice for initial project
+      const invoiceItem = {
+        description: `${createdProject.name} - ${createdProject.serviceType} Development`,
+        quantity: 1,
+        unitPrice: createdProject.totalAmount,
+      };
 
-    createdInvoice = await InvoiceService.createInvoice(
-      {
-        clientId: createdClient._id.toString(),
-        projectId: createdProject._id.toString(),
-        items: [invoiceItem],
-        dueDate: projectData.expectedCompletionDate,
-        notes: 'Initial project setup invoice',
-      },
-      actor
-    );
-
-    // 4. Optionally record payment
-    const paymentAmount = Number(body.paymentAmount);
-    if (paymentAmount > 0) {
-      createdPayment = await PaymentService.recordPayment(
+      createdInvoice = await InvoiceService.createInvoice(
         {
-          clientId: createdClient._id,
-          projectId: createdProject._id,
-          invoiceId: createdInvoice._id,
-          amount: paymentAmount,
-          paymentMethod: body.paymentMethod || 'BANK_TRANSFER',
-          paymentDate: body.paymentDate ? new Date(body.paymentDate) : new Date(),
-          transactionReference: body.transactionReference,
-          paymentType: 'ADVANCE',
-          notes: 'Advance project payment',
+          clientId: createdClient._id.toString(),
+          projectId: createdProject._id.toString(),
+          items: [invoiceItem],
+          dueDate: projectData.expectedCompletionDate,
+          notes: 'Initial project setup invoice',
         },
         actor
       );
-    }
 
-    // 5. Send Onboarding / Payment telegram update
-    let telegramDispatched = false;
-    let telegramError = '';
-    
-    try {
-      const notification = await NotificationService.sendOnboardingNotification(
-        createdClient._id.toString(),
-        createdProject._id.toString(),
-        createdPayment?._id?.toString(),
-        createdInvoice._id.toString()
-      );
-      telegramDispatched = notification.status === 'SENT';
-      if (notification.error) {
-        telegramError = notification.error;
+      // 4. Optionally record payment
+      const paymentAmount = Number(body.paymentAmount);
+      if (paymentAmount > 0) {
+        createdPayment = await PaymentService.recordPayment(
+          {
+            clientId: createdClient._id,
+            projectId: createdProject._id,
+            invoiceId: createdInvoice._id,
+            amount: paymentAmount,
+            paymentMethod: body.paymentMethod || 'BANK_TRANSFER',
+            paymentDate: body.paymentDate ? new Date(body.paymentDate) : new Date(),
+            transactionReference: body.transactionReference,
+            paymentType: 'ADVANCE',
+            notes: 'Advance project payment',
+          },
+          actor
+        );
       }
-    } catch (telegramErr: any) {
-      console.error('Failed to send Telegram notification:', telegramErr);
-      telegramError = telegramErr.message || 'Telegram Bot connection error';
+
+      // 5. Send Onboarding / Payment telegram update
+      let telegramDispatched = false;
+      let telegramError = '';
+      
+      try {
+        const notification = await NotificationService.sendOnboardingNotification(
+          createdClient._id.toString(),
+          createdProject._id.toString(),
+          createdPayment?._id?.toString(),
+          createdInvoice._id.toString()
+        );
+        telegramDispatched = notification.status === 'SENT';
+        if (notification.error) {
+          telegramError = notification.error;
+        }
+      } catch (telegramErr: any) {
+        console.error('Failed to send Telegram notification:', telegramErr);
+        telegramError = telegramErr.message || 'Telegram Bot connection error';
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          client: createdClient,
+          project: createdProject,
+          invoice: createdInvoice,
+          payment: createdPayment,
+          telegramDispatched,
+          telegramError,
+        },
+      });
     }
 
     return NextResponse.json({
       success: true,
       data: {
         client: createdClient,
-        project: createdProject,
-        invoice: createdInvoice,
-        payment: createdPayment,
-        telegramDispatched,
-        telegramError,
+        project: null,
+        invoice: null,
+        payment: null,
+        telegramDispatched: false,
       },
     });
   } catch (error: any) {

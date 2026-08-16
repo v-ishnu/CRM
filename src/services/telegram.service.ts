@@ -7,10 +7,15 @@ import Payment from '@/models/Payment';
 import DataRequest from '@/models/DataRequest';
 import Credential from '@/models/Credential';
 import RequestResponse from '@/models/RequestResponse';
+import TeamMember from '@/models/TeamMember';
+import Task from '@/models/Task';
+import TeamPayment from '@/models/TeamPayment';
 import { ClientService } from './client.service';
 import { PaymentService } from './payment.service';
 import { AuditService } from './audit.service';
 import { StorageService } from './storage.service';
+import { TeamMemberService } from './team-member.service';
+import { TaskService } from './task.service';
 import { dbConnect } from '@/lib/db/connect';
 
 declare global {
@@ -202,6 +207,293 @@ export class TelegramService {
   }
 
   /**
+   * Send text message with raw options (including inline keyboard) and full result
+   */
+  static async sendMessageRaw(
+    chatId: string,
+    text: string,
+    options: { reply_markup?: any; parse_mode?: string } = {}
+  ): Promise<{ success: boolean; messageId?: number; error?: string }> {
+    if (!this.isConfigured()) {
+      return { success: false, error: 'Telegram bot token is not configured' };
+    }
+
+    try {
+      const response = await fetch(`${TELEGRAM_API}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text,
+          parse_mode: options.parse_mode || 'HTML',
+          reply_markup: options.reply_markup,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.ok === true) {
+        return { success: true, messageId: data.result?.message_id };
+      }
+      return { success: false, error: data.description || 'Failed to deliver Telegram message' };
+    } catch (err: any) {
+      console.error('sendMessageRaw error:', err);
+      return { success: false, error: err.message || 'Network error' };
+    }
+  }
+
+  /**
+   * Answer a Telegram callback query
+   */
+  static async answerCallbackQuery(callbackQueryId: string, text?: string): Promise<boolean> {
+    if (!this.isConfigured()) return false;
+    try {
+      const res = await fetch(`${TELEGRAM_API}/answerCallbackQuery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          callback_query_id: callbackQueryId,
+          text: text || '',
+          show_alert: false,
+        }),
+      });
+      const data = await res.json();
+      return data.ok === true;
+    } catch (err) {
+      console.error('answerCallbackQuery error:', err);
+      return false;
+    }
+  }
+
+  /**
+   * Send notification when a new task is assigned to a team member
+   */
+  static async sendTaskAssignedNotification(task: any, project: any, teamMember: any): Promise<boolean> {
+    if (!teamMember.telegramChatId) return false;
+
+    const priorityIcons: Record<string, string> = {
+      LOW: '🟢',
+      MEDIUM: '🟡',
+      HIGH: '🔴',
+      URGENT: '🚨',
+    };
+    const icon = priorityIcons[task.priority] || '🟡';
+    const dueDateStr = task.dueDate ? new Date(task.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No due date';
+
+    const text = `📋 <b>New Task Assigned</b>\n\n` +
+      `<b>Project:</b> ${project.name} (<code>${project.projectCode}</code>)\n` +
+      `<b>Task:</b> ${task.title} (<code>${task.taskCode}</code>)\n` +
+      `<b>Priority:</b> ${icon} ${task.priority}\n` +
+      `<b>Due Date:</b> ${dueDateStr}\n\n` +
+      `<b>Description:</b>\n${task.description || 'No detailed description.'}`;
+
+    const inlineKeyboard = {
+      inline_keyboard: [
+        [
+          { text: '⚡ Start Working', callback_data: `task_prog:${task._id}` },
+          { text: '✅ Mark Done', callback_data: `task_done:${task._id}` },
+        ],
+      ],
+    };
+
+    const res = await this.sendMessageRaw(teamMember.telegramChatId, text, { reply_markup: inlineKeyboard });
+    return res.success;
+  }
+
+  /**
+   * Send status transition notification to admin
+   */
+  static async sendTaskStatusNotificationToAdmin(task: any, oldStatus: string, newStatus: string, changedBy: string): Promise<boolean> {
+    const adminChatId = process.env.ADMIN_TELEGRAM_ID;
+    if (!adminChatId) return false;
+
+    const text = `🔔 <b>Task Status Updated</b>\n\n` +
+      `<b>Task:</b> ${task.title} (<code>${task.taskCode}</code>)\n` +
+      `<b>Status:</b> <code>${oldStatus}</code> ➔ <b>${newStatus}</b>\n` +
+      `<b>Updated by:</b> ${changedBy}`;
+
+    const res = await this.sendMessageRaw(String(adminChatId), text);
+    return res.success;
+  }
+
+  /**
+   * Send notification to a team member when a team payment is recorded, marked paid, or cancelled
+   */
+  static async sendTeamPaymentNotification(
+    payment: any,
+    teamMember: any,
+    project: any,
+    task?: any,
+    eventType: 'PAID' | 'CANCELLED' = 'PAID'
+  ): Promise<boolean> {
+    if (!teamMember.telegramChatId) return false;
+
+    const dateStr = payment.paymentDate
+      ? new Date(payment.paymentDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+      : new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+    let text = '';
+    if (eventType === 'CANCELLED') {
+      text = `⚠️ <b>Payment Cancelled</b>\n\n` +
+        `Hello <b>${teamMember.name}</b>,\n` +
+        `Payment <code>${payment.paymentNumber}</code> for <b>₹${payment.amount.toLocaleString('en-IN')}</b> ` +
+        `(Project: <b>${project.name}</b>) has been marked as <b>CANCELLED</b>.`;
+    } else {
+      text = `💰 <b>Payment Received</b>\n\n` +
+        `Hello <b>${teamMember.name}</b>,\n` +
+        `A payment has been recorded for your work.\n\n` +
+        `<b>Project:</b> ${project.name} (<code>${project.projectCode}</code>)\n` +
+        (task ? `<b>Task:</b> ${task.title} (<code>${task.taskCode}</code>)\n` : '') +
+        `<b>Amount:</b> <b>₹${payment.amount.toLocaleString('en-IN')}</b>\n` +
+        `<b>Payment Method:</b> ${payment.paymentMethod}\n` +
+        `<b>Payment Date:</b> ${dateStr}\n` +
+        (payment.reference ? `<b>Reference:</b> <code>${payment.reference}</code>\n` : '') +
+        `<b>Status:</b> <b>PAID</b>\n\n` +
+        `Thank you for your contributions!`;
+    }
+
+    const res = await this.sendMessageRaw(teamMember.telegramChatId, text);
+    return res.success;
+  }
+
+  /**
+   * Handle Team Member Telegram Commands (/tasks, /help, /mypayments)
+   */
+  private static async handleTeamMemberCommand(
+    chatId: string,
+    text: string,
+    teamMember: any,
+    timings?: any
+  ): Promise<void> {
+    let cmd = text.toLowerCase().split(' ')[0];
+    if (cmd.includes('@')) cmd = cmd.split('@')[0];
+
+    switch (cmd) {
+      case '/start':
+      case '/help':
+        await this.sendMessage(
+          chatId,
+          `<b>👋 Hello, ${teamMember.name}!</b>\n\n` +
+          `<b>Role:</b> ${teamMember.role}\n\n` +
+          `Available team commands:\n` +
+          `/tasks - View your assigned tasks with interactive actions\n` +
+          `/mypayments - View your compensation & payment history\n` +
+          `/help - Show this help menu`,
+          timings
+        );
+        break;
+
+      case '/tasks':
+      case '/mytasks': {
+        const dbStart = performance.now();
+        const tasks = await Task.find({
+          assignedTo: teamMember._id,
+          status: { $nin: ['CANCELLED'] },
+        })
+          .populate('projectId', 'name projectCode')
+          .sort({ createdAt: -1 })
+          .limit(10)
+          .lean();
+        if (timings) timings.databaseQuery += Math.round(performance.now() - dbStart);
+
+        if (tasks.length === 0) {
+          await this.sendMessage(chatId, `📋 <b>Your Tasks</b>\n\nYou currently have no active tasks assigned. Great job!`, timings);
+          return;
+        }
+
+        const priorityIcons: Record<string, string> = {
+          LOW: '🟢',
+          MEDIUM: '🟡',
+          HIGH: '🔴',
+          URGENT: '🚨',
+        };
+
+        let msg = `📋 <b>Your Assigned Tasks (${tasks.length})</b>\n\n`;
+        for (let i = 0; i < tasks.length; i++) {
+          const t: any = tasks[i];
+          const icon = priorityIcons[t.priority] || '🟡';
+          const pName = t.projectId?.name || 'Project';
+          const dueStr = t.dueDate ? new Date(t.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : 'No date';
+          msg += `<b>${i + 1}. ${t.title}</b>\n` +
+                 `   <i>${pName}</i> (<code>${t.taskCode}</code>)\n` +
+                 `   ${icon} <b>${t.priority}</b> | Status: <code>${t.status}</code> | Due: ${dueStr}\n\n`;
+        }
+
+        // Add inline buttons for the first 3 pending tasks
+        const actionTasks = tasks.filter((t: any) => t.status !== 'COMPLETED').slice(0, 3);
+        const inlineKeyboard = actionTasks.length > 0 ? {
+          inline_keyboard: actionTasks.map((t: any) => [
+            { text: `⚡ ${t.title.slice(0, 15)} (In Progress)`, callback_data: `task_prog:${t._id}` },
+            { text: `✅ Mark Done`, callback_data: `task_done:${t._id}` },
+          ]),
+        } : undefined;
+
+        await this.sendMessageRaw(chatId, msg, { reply_markup: inlineKeyboard });
+        break;
+      }
+
+      case '/mypayments':
+      case '/payments': {
+        const dbStart = performance.now();
+        const payments = await TeamPayment.find({
+          teamMemberId: teamMember._id,
+        })
+          .populate('projectId', 'name projectCode')
+          .populate('taskId', 'title taskCode')
+          .sort({ paymentDate: -1, createdAt: -1 })
+          .limit(10)
+          .lean();
+        if (timings) timings.databaseQuery += Math.round(performance.now() - dbStart);
+
+        let totalPaid = 0;
+        let totalPending = 0;
+        for (const p of payments) {
+          if (p.status === 'PAID') totalPaid += p.amount;
+          else if (p.status === 'PENDING') totalPending += p.amount;
+        }
+
+        if (payments.length === 0) {
+          await this.sendMessage(
+            chatId,
+            `💰 <b>Your Payments</b>\n\n` +
+            `No payment records found yet for your account.`,
+            timings
+          );
+          return;
+        }
+
+        let msg = `💰 <b>Your Payments Summary</b>\n\n` +
+          `<b>Paid:</b> ₹${totalPaid.toLocaleString('en-IN')}\n` +
+          `<b>Pending:</b> ₹${totalPending.toLocaleString('en-IN')}\n` +
+          `<b>Total:</b> ₹${(totalPaid + totalPending).toLocaleString('en-IN')}\n\n` +
+          `<b>Recent Payments (${payments.length}):</b>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n`;
+
+        for (let i = 0; i < payments.length; i++) {
+          const p: any = payments[i];
+          const pName = p.projectId?.name || 'Project';
+          const tName = p.taskId?.title ? ` - ${p.taskId.title}` : '';
+          const statusIcon = p.status === 'PAID' ? '✅' : (p.status === 'PENDING' ? '⏳' : '❌');
+          const dateStr = p.paymentDate ? new Date(p.paymentDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '';
+          msg += `<b>${i + 1}. ₹${p.amount.toLocaleString('en-IN')}</b> • ${statusIcon} <code>${p.status}</code>\n` +
+                 `   <i>${pName}${tName}</i>\n` +
+                 `   Date: ${dateStr} | Ref: <code>${p.paymentNumber}</code>\n\n`;
+        }
+
+        await this.sendMessageRaw(chatId, msg);
+        break;
+      }
+
+      default:
+        await this.sendMessage(
+          chatId,
+          `Unknown team command. Use /tasks to view your assigned tasks, /mypayments for payments, or /help for guidance.`,
+          timings
+        );
+        break;
+    }
+  }
+
+  /**
    * Send PDF document to a chat
    */
   static async sendDocument(
@@ -324,9 +616,6 @@ export class TelegramService {
     await dbConnect();
     timings.databaseQuery += Math.round(performance.now() - dbConnStart);
 
-    const message = update?.message;
-    if (!message || !message.chat || !message.from) return;
-
     // Idempotency: Prevent duplicate processing of retried Telegram webhook updates
     const updateId = update?.update_id;
     if (updateId) {
@@ -350,6 +639,47 @@ export class TelegramService {
         if (first !== undefined) global.processedTelegramUpdates.delete(first);
       }
     }
+
+    // 1. Handle interactive Inline Keyboard callbacks (e.g. from /tasks)
+    if (update?.callback_query) {
+      const cb = update.callback_query;
+      const cbId = cb.id;
+      const cbData = cb.data || '';
+      const fromUserId = String(cb.from?.id);
+      const cbChatId = String(cb.message?.chat?.id || fromUserId);
+
+      if (cbData.startsWith('task_prog:') || cbData.startsWith('task_done:')) {
+        const isProg = cbData.startsWith('task_prog:');
+        const taskId = cbData.replace(isProg ? 'task_prog:' : 'task_done:', '');
+        
+        const teamMember = await TeamMember.findOne({ telegramUserId: fromUserId });
+        if (!teamMember || teamMember.status === 'DEACTIVATED') {
+          await this.answerCallbackQuery(cbId, '❌ Unauthorized or account deactivated.');
+          return { command: 'callback', total: 0 };
+        }
+
+        const task = await Task.findById(taskId);
+        if (!task) {
+          await this.answerCallbackQuery(cbId, '❌ Task not found.');
+          return { command: 'callback', total: 0 };
+        }
+
+        if (task.assignedTo?.toString() !== teamMember._id.toString() && teamMember.role !== 'ADMIN') {
+          await this.answerCallbackQuery(cbId, '❌ You are not assigned to this task.');
+          return { command: 'callback', total: 0 };
+        }
+
+        const newStatus = isProg ? 'IN_PROGRESS' : 'COMPLETED';
+        await TaskService.updateTaskStatus(taskId, newStatus, teamMember.name, true);
+
+        await this.answerCallbackQuery(cbId, `✅ Task marked as ${newStatus}!`);
+        await this.sendMessage(cbChatId, `📋 <b>Task Updated</b>\n\nTask <b>${task.title}</b> is now marked as <b>${newStatus}</b>.`);
+        return { command: 'callback', total: 0 };
+      }
+    }
+
+    const message = update?.message;
+    if (!message || !message.chat || !message.from) return;
 
     const chatId = String(message.chat.id);
     const userId = String(message.from.id);
@@ -388,6 +718,155 @@ export class TelegramService {
       };
     }
 
+    // Handle Deep Linking connection token (both Team and Client)
+    const isStartCommand = text.startsWith('/start');
+    let startToken: string | null = null;
+    if (isStartCommand) {
+      const parts = text.split(' ');
+      if (parts.length > 1) {
+        startToken = parts[1].trim();
+      }
+    }
+
+    if (isStartCommand && startToken) {
+      if (startToken.startsWith('TEAM_')) {
+        // Team member connection flow
+        try {
+          const handlerStart = performance.now();
+          const dbStart = performance.now();
+          const member = await TeamMemberService.connectTelegram(startToken, {
+            telegramUserId: userId,
+            telegramUsername: username,
+            telegramChatId: chatId,
+          });
+          timings.databaseQuery += Math.round(performance.now() - dbStart);
+
+          await this.sendMessage(
+            chatId,
+            `<b>🎉 Telegram Successfully Connected!</b>\n\nHello <b>${member.name}</b>, your Telegram profile is now securely linked to your team account as <b>${member.role}</b>.\n\nYou can use:\n/tasks - View your assigned tasks\n/help - Show help menu`,
+            timings
+          );
+
+          const handlerTime = performance.now() - handlerStart;
+          timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
+          const total = Math.round(performance.now() - startTotal);
+          return {
+            command: text.split(' ')[0],
+            clientLookup: timings.clientLookup,
+            databaseQuery: timings.databaseQuery,
+            handler: timings.handler,
+            telegramAPI: timings.telegramAPI,
+            total,
+            startTotal,
+            timings,
+          };
+        } catch (error: any) {
+          const handlerStart = performance.now();
+          await this.sendMessage(chatId, `<b>❌ Team Connection Failed</b>\n\n${error.message || 'The token is invalid or has expired.'}`, timings);
+          const handlerTime = performance.now() - handlerStart;
+          timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
+          const total = Math.round(performance.now() - startTotal);
+          return {
+            command: text.split(' ')[0],
+            clientLookup: timings.clientLookup,
+            databaseQuery: timings.databaseQuery,
+            handler: timings.handler,
+            telegramAPI: timings.telegramAPI,
+            total,
+            startTotal,
+            timings,
+          };
+        }
+      } else {
+        // Client connection flow
+        try {
+          const handlerStart = performance.now();
+          const dbStart = performance.now();
+          const connectedClient = await ClientService.connectTelegram(startToken, {
+            telegramUserId: userId,
+            telegramUsername: username,
+            telegramChatId: chatId,
+          });
+          timings.databaseQuery += Math.round(performance.now() - dbStart);
+
+          await this.sendMessage(
+            chatId,
+            `<b>🎉 Telegram Successfully Connected!</b>\n\nHello <b>${connectedClient.name}</b>, your Telegram profile is now securely linked to your account with client code <b>${connectedClient.clientCode}</b>.\n\nYou can use the following commands to interact with your account:\n/myprofile - View Profile\n/myproject - View Project Details\n/payments - View Payment Logs\n/invoices - View Billing History\n/status - Check Development Progress`,
+            timings
+          );
+          
+          const handlerTime = performance.now() - handlerStart;
+          timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
+          
+          const total = Math.round(performance.now() - startTotal);
+          console.log(`TELEGRAM_PERF\ncommand=${text.split(' ')[0]}\nclientLookup=${timings.clientLookup}ms\ndatabaseQuery=${timings.databaseQuery}ms\nhandler=${timings.handler}ms\ntelegramAPI=${timings.telegramAPI}ms\ntotal=${total}ms`);
+          return {
+            command: text.split(' ')[0],
+            clientLookup: timings.clientLookup,
+            databaseQuery: timings.databaseQuery,
+            handler: timings.handler,
+            telegramAPI: timings.telegramAPI,
+            total,
+            startTotal,
+            timings,
+          };
+        } catch (error: any) {
+          const handlerStart = performance.now();
+          await this.sendMessage(chatId, `<b>❌ Connection Failed</b>\n\n${error.message || 'The token is invalid or has expired.'}`, timings);
+          const handlerTime = performance.now() - handlerStart;
+          timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
+          
+          const total = Math.round(performance.now() - startTotal);
+          console.log(`TELEGRAM_PERF\ncommand=${text.split(' ')[0]}\nclientLookup=${timings.clientLookup}ms\ndatabaseQuery=${timings.databaseQuery}ms\nhandler=${timings.handler}ms\ntelegramAPI=${timings.telegramAPI}ms\ntotal=${total}ms`);
+          return {
+            command: text.split(' ')[0],
+            clientLookup: timings.clientLookup,
+            databaseQuery: timings.databaseQuery,
+            handler: timings.handler,
+            telegramAPI: timings.telegramAPI,
+            total,
+            startTotal,
+            timings,
+          };
+        }
+      }
+    }
+
+    // Check if user is a Team Member
+    const dbTeamLookup = performance.now();
+    const teamMember: any = await TeamMember.findOne({
+      $or: [
+        { telegramUserId: userId },
+        { telegramChatId: chatId },
+      ]
+    }).lean();
+    timings.databaseQuery += Math.round(performance.now() - dbTeamLookup);
+
+    if (teamMember) {
+      if (teamMember.status === 'DEACTIVATED') {
+        await this.sendMessage(chatId, '❌ <b>Account Deactivated</b>\n\nYour team member account is deactivated. Please contact an administrator.', timings);
+        return { command: 'deactivated', total: 0 };
+      }
+
+      if (isCommand) {
+        const handlerStart = performance.now();
+        await this.handleTeamMemberCommand(chatId, text, teamMember, timings);
+        const handlerTime = performance.now() - handlerStart;
+        timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
+        const total = Math.round(performance.now() - startTotal);
+        return {
+          command: text.split(' ')[0],
+          clientLookup: timings.clientLookup,
+          databaseQuery: timings.databaseQuery,
+          handler: timings.handler,
+          telegramAPI: timings.telegramAPI,
+          total,
+          startTotal,
+          timings,
+        };
+      }
+    }
+
     // Try to find the client associated with this Telegram userId or chatId
     const lookupStart = performance.now();
     let client: any = await Client.findOne({
@@ -399,75 +878,6 @@ export class TelegramService {
       .select('clientCode name company email phone address city country telegramUserId telegramChatId telegramConnected')
       .lean();
     timings.clientLookup = Math.round(performance.now() - lookupStart);
-
-    console.log('[DEBUG] webhook client lookup:', { userId, clientFound: !!client, clientCode: client?.clientCode, telegramUserId: client?.telegramUserId });
-    if (!client) {
-      const allClients = await Client.find({});
-      console.log('[DEBUG] all clients in DB:', allClients.map(c => ({ id: c._id, code: c.clientCode, telegramConnected: c.telegramConnected, telegramUserId: c.telegramUserId })));
-    }
-
-    // Handle Deep Linking connection token
-    const isStartCommand = text.startsWith('/start');
-    let startToken: string | null = null;
-    if (isStartCommand) {
-      const parts = text.split(' ');
-      if (parts.length > 1) {
-        startToken = parts[1].trim();
-      }
-    }
-
-    if (isStartCommand && startToken) {
-      try {
-        const handlerStart = performance.now();
-        const dbStart = performance.now();
-        client = await ClientService.connectTelegram(startToken, {
-          telegramUserId: userId,
-          telegramUsername: username,
-          telegramChatId: chatId,
-        });
-        timings.databaseQuery += Math.round(performance.now() - dbStart);
-
-        await this.sendMessage(
-          chatId,
-          `<b>🎉 Telegram Successfully Connected!</b>\n\nHello <b>${client.name}</b>, your Telegram profile is now securely linked to your account with client code <b>${client.clientCode}</b>.\n\nYou can use the following commands to interact with your account:\n/myprofile - View Profile\n/myproject - View Project Details\n/payments - View Payment Logs\n/invoices - View Billing History\n/status - Check Development Progress`,
-          timings
-        );
-        
-        const handlerTime = performance.now() - handlerStart;
-        timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
-        
-        const total = Math.round(performance.now() - startTotal);
-        console.log(`TELEGRAM_PERF\ncommand=${text.split(' ')[0]}\nclientLookup=${timings.clientLookup}ms\ndatabaseQuery=${timings.databaseQuery}ms\nhandler=${timings.handler}ms\ntelegramAPI=${timings.telegramAPI}ms\ntotal=${total}ms`);
-        return {
-          command: text.split(' ')[0],
-          clientLookup: timings.clientLookup,
-          databaseQuery: timings.databaseQuery,
-          handler: timings.handler,
-          telegramAPI: timings.telegramAPI,
-          total,
-          startTotal,
-          timings,
-        };
-      } catch (error: any) {
-        const handlerStart = performance.now();
-        await this.sendMessage(chatId, `<b>❌ Connection Failed</b>\n\n${error.message || 'The token is invalid or has expired.'}`, timings);
-        const handlerTime = performance.now() - handlerStart;
-        timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
-        
-        const total = Math.round(performance.now() - startTotal);
-        console.log(`TELEGRAM_PERF\ncommand=${text.split(' ')[0]}\nclientLookup=${timings.clientLookup}ms\ndatabaseQuery=${timings.databaseQuery}ms\nhandler=${timings.handler}ms\ntelegramAPI=${timings.telegramAPI}ms\ntotal=${total}ms`);
-        return {
-          command: text.split(' ')[0],
-          clientLookup: timings.clientLookup,
-          databaseQuery: timings.databaseQuery,
-          handler: timings.handler,
-          telegramAPI: timings.telegramAPI,
-          total,
-          startTotal,
-          timings,
-        };
-      }
-    }
 
     // If client is not connected
     if (!client) {
@@ -679,17 +1089,31 @@ routerPath=${routerPath}`);
         );
         break;
 
+      case '/project':
+      case '/projects':
       case '/myproject': {
+        const parts = text.split(' ').filter(Boolean);
+        const specificCode = parts.length > 1 ? parts[1].trim().toUpperCase() : null;
+
         const dbStart = performance.now();
-        const projects = await Project.find({ clientId: client._id })
-          .select('name serviceType totalAmount currency status')
+        const projectQuery: any = { clientId: client._id };
+        if (specificCode) {
+          projectQuery.projectCode = specificCode;
+        }
+
+        const projects = await Project.find(projectQuery)
+          .select('projectCode name serviceType totalAmount currency status startDate expectedCompletionDate')
           .lean();
         if (timings) {
           timings.databaseQuery += Math.round(performance.now() - dbStart);
         }
 
         if (projects.length === 0) {
-          await this.sendMessage(chatId, 'No active projects found for your account.', timings);
+          if (specificCode) {
+            await this.sendMessage(chatId, `Project <code>${specificCode}</code> not found or access denied.`, timings);
+          } else {
+            await this.sendMessage(chatId, 'No active projects found for your account.', timings);
+          }
           return;
         }
 
@@ -717,27 +1141,46 @@ routerPath=${routerPath}`);
           const { project: p, paidAmount, outstandingAmount } = item;
           const currencySymbol = p.currency === 'INR' ? '₹' : (p.currency === 'USD' ? '$' : p.currency);
           msg += `<b>Project:</b> ${p.name}\n` +
+                 `<b>Code:</b> <code>${p.projectCode}</code>\n` +
                  `<b>Service:</b> ${p.serviceType}\n` +
+                 `<b>Status:</b> <code>${p.status}</code>\n` +
                  `<b>Budget:</b> ${currencySymbol}${p.totalAmount.toLocaleString('en-IN')}\n` +
                  `<b>Paid:</b> ${currencySymbol}${paidAmount.toLocaleString('en-IN')}\n` +
                  `<b>Outstanding:</b> ${currencySymbol}${outstandingAmount.toLocaleString('en-IN')}\n\n`;
         }
+
+        if (projectsWithBalances.length > 1 && !specificCode) {
+          msg += `<i>Tip: Use <code>/project &lt;projectCode&gt;</code> to view a specific project.</i>`;
+        }
+
         await this.sendMessage(chatId, msg, timings);
         break;
       }
 
       case '/payment':
       case '/payments': {
+        const parts = text.split(' ').filter(Boolean);
+        const specificCode = parts.length > 1 ? parts[1].trim().toUpperCase() : null;
+
         const dbStart = performance.now();
-        const projects = await Project.find({ clientId: client._id })
-          .select('name totalAmount currency')
+        const projectQuery: any = { clientId: client._id };
+        if (specificCode) {
+          projectQuery.projectCode = specificCode;
+        }
+
+        const projects = await Project.find(projectQuery)
+          .select('projectCode name totalAmount currency')
           .lean();
         if (timings) {
           timings.databaseQuery += Math.round(performance.now() - dbStart);
         }
 
         if (projects.length === 0) {
-          await this.sendMessage(chatId, 'No projects found.', timings);
+          if (specificCode) {
+            await this.sendMessage(chatId, `Project <code>${specificCode}</code> not found or access denied.`, timings);
+          } else {
+            await this.sendMessage(chatId, 'No projects found.', timings);
+          }
           return;
         }
 
@@ -765,27 +1208,29 @@ routerPath=${routerPath}`);
           const outstandingAmount = Math.max(0, p.totalAmount - paidAmount);
           const currencySymbol = p.currency === 'INR' ? '₹' : (p.currency === 'USD' ? '$' : p.currency);
 
-          msg += `<b>Project:</b>\n${p.name}\n\n` +
-                 `<b>Total:</b>\n${currencySymbol}${p.totalAmount.toLocaleString('en-IN')}\n\n` +
-                 `<b>Paid:</b>\n${currencySymbol}${paidAmount.toLocaleString('en-IN')}\n\n` +
-                 `<b>Outstanding:</b>\n${currencySymbol}${outstandingAmount.toLocaleString('en-IN')}\n\n`;
+          msg += `<b>Project:</b> ${p.name} (<code>${p.projectCode}</code>)\n` +
+                 `<b>Total:</b> ${currencySymbol}${p.totalAmount.toLocaleString('en-IN')}\n` +
+                 `<b>Paid:</b> ${currencySymbol}${paidAmount.toLocaleString('en-IN')}\n` +
+                 `<b>Outstanding:</b> ${currencySymbol}${outstandingAmount.toLocaleString('en-IN')}\n\n`;
 
           if (payments.length > 0) {
-            msg += `<b>Transactions:</b>\n\n`;
+            msg += `<b>Transactions:</b>\n`;
             let idx = 1;
             for (const r of payments) {
               const pType = r.paymentType || 'INSTALLMENT';
-              msg += `${idx}. ${currencySymbol}${r.amount.toLocaleString('en-IN')}\n` +
-                     `   ${pType}\n` +
-                     `   ${r.paymentMethod}\n` +
-                     `   ${r.paymentNumber}\n\n`;
+              msg += `${idx}. ${currencySymbol}${r.amount.toLocaleString('en-IN')} - ${pType} via ${r.paymentMethod} (${r.paymentNumber})\n`;
               idx++;
             }
           } else {
-            msg += `No payments recorded yet.\n\n`;
+            msg += `No payments recorded yet for this project.\n`;
           }
-          msg += `--------------------------------\n\n`;
+          msg += `\n--------------------------------\n\n`;
         }
+
+        if (projectsWithPayments.length > 1 && !specificCode) {
+          msg += `<i>Tip: Use <code>/payments &lt;projectCode&gt;</code> to view transactions for a single project.</i>`;
+        }
+
         await this.sendMessage(chatId, msg, timings);
         break;
       }
@@ -793,7 +1238,8 @@ routerPath=${routerPath}`);
       case '/invoices': {
         const dbStart = performance.now();
         const invoices = await Invoice.find({ clientId: client._id })
-          .select('invoiceNumber total status invoiceDate currency')
+          .populate('projectId', 'projectCode name')
+          .select('invoiceNumber projectId total status invoiceDate currency')
           .sort({ createdAt: -1 })
           .lean();
         if (timings) {
@@ -808,7 +1254,8 @@ routerPath=${routerPath}`);
         let msg = '<b>📄 Your Invoices</b>\n\n';
         for (const inv of invoices) {
           const currencySymbol = inv.currency === 'INR' ? '₹' : (inv.currency === 'USD' ? '$' : inv.currency);
-          msg += `<b>Invoice:</b> ${inv.invoiceNumber}\n` +
+          const projName = (inv.projectId as any)?.name ? ` (${(inv.projectId as any).name})` : '';
+          msg += `<b>Invoice:</b> ${inv.invoiceNumber}${projName}\n` +
                  `<b>Amount:</b> ${currencySymbol}${inv.total.toLocaleString('en-IN')}\n` +
                  `<b>Status:</b> <code>${inv.status}</code>\n` +
                  `<b>Date:</b> ${new Date(inv.invoiceDate).toLocaleDateString()}\n` +
@@ -859,16 +1306,28 @@ routerPath=${routerPath}`);
       }
 
       case '/status': {
+        const parts = text.split(' ').filter(Boolean);
+        const specificCode = parts.length > 1 ? parts[1].trim().toUpperCase() : null;
+
         const dbStart = performance.now();
-        const projects = await Project.find({ clientId: client._id })
-          .select('name totalAmount currency status')
+        const projectQuery: any = { clientId: client._id };
+        if (specificCode) {
+          projectQuery.projectCode = specificCode;
+        }
+
+        const projects = await Project.find(projectQuery)
+          .select('projectCode name totalAmount currency status')
           .lean();
         if (timings) {
           timings.databaseQuery += Math.round(performance.now() - dbStart);
         }
 
         if (projects.length === 0) {
-          await this.sendMessage(chatId, 'No active projects.', timings);
+          if (specificCode) {
+            await this.sendMessage(chatId, `Project <code>${specificCode}</code> not found or access denied.`, timings);
+          } else {
+            await this.sendMessage(chatId, 'No active projects.', timings);
+          }
           return;
         }
 
@@ -903,20 +1362,20 @@ routerPath=${routerPath}`);
 
           const currencySymbol = p.currency === 'INR' ? '₹' : (p.currency === 'USD' ? '$' : p.currency);
 
-          msg += `📊 <b>Project Status</b>\n\n` +
-                 `${p.name}\n\n` +
-                 `<b>Budget:</b>\n` +
-                 `${currencySymbol}${p.totalAmount.toLocaleString('en-IN')}\n\n` +
-                 `<b>Paid:</b>\n` +
-                 `${currencySymbol}${paidAmount.toLocaleString('en-IN')}\n\n` +
-                 `<b>Outstanding:</b>\n` +
-                 `${currencySymbol}${outstandingAmount.toLocaleString('en-IN')}\n\n` +
-                 `<b>Development:</b>\n` +
-                 `<code>${p.status}</code>\n\n` +
-                 `<b>Payment:</b>\n` +
-                 `<code>${paymentStatus}</code>\n\n` +
+          msg += `📊 <b>Project Status: ${p.name}</b>\n` +
+                 `<b>Code:</b> <code>${p.projectCode}</code>\n\n` +
+                 `<b>Budget:</b> ${currencySymbol}${p.totalAmount.toLocaleString('en-IN')}\n` +
+                 `<b>Paid:</b> ${currencySymbol}${paidAmount.toLocaleString('en-IN')}\n` +
+                 `<b>Outstanding:</b> ${currencySymbol}${outstandingAmount.toLocaleString('en-IN')}\n\n` +
+                 `<b>Development:</b> <code>${p.status}</code>\n` +
+                 `<b>Payment:</b> <code>${paymentStatus}</code>\n\n` +
                  `--------------------------------\n\n`;
         }
+
+        if (projectsWithStatus.length > 1 && !specificCode) {
+          msg += `<i>Tip: Use <code>/status &lt;projectCode&gt;</code> to check status of a specific project.</i>`;
+        }
+
         await this.sendMessage(chatId, msg, timings);
         break;
       }

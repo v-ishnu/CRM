@@ -13,6 +13,7 @@ export interface IProject extends Document {
   expectedCompletionDate?: Date;
   completionDate?: Date;
   notes?: string;
+  teamMemberIds?: mongoose.Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -76,6 +77,13 @@ const ProjectSchema = new Schema<IProject>(
     notes: {
       type: String,
     },
+    teamMemberIds: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: 'TeamMember',
+        index: true,
+      },
+    ],
   },
   {
     timestamps: true,

@@ -38,11 +38,12 @@ describe('Data Request & Secure Credential Collection Tests', () => {
     process.env.TELEGRAM_BOT_TOKEN = 'mock_bot_token';
 
     // Cleanup existing test documents
+    const reqClientIds = await Client.find({ clientCode: /^REQ-CL-/ }).distinct('_id');
+    await Credential.deleteMany({ clientId: { $in: reqClientIds } });
+    await RequestResponse.deleteMany({ clientId: { $in: reqClientIds } });
+    await DataRequest.deleteMany({ requestId: /^REQ-2026-T/ });
     await Client.deleteMany({ clientCode: /^REQ-CL-/ });
     await Project.deleteMany({ projectCode: /^REQ-PR-/ });
-    await DataRequest.deleteMany({});
-    await Credential.deleteMany({});
-    await RequestResponse.deleteMany({});
     await User.deleteMany({ email: 'requests_admin@example.com' });
     await AuditLog.deleteMany({ actor: 'requests_admin@example.com' });
 
