@@ -101,56 +101,137 @@ export class TelegramService {
     }
   }
 
+  private static syncedChatScopes = new Map<string, string>();
+
+  /**
+   * Universal command definitions by role
+   */
+  static readonly DEFAULT_COMMANDS = [
+    { command: 'start', description: 'Start the bot or connect account' },
+    { command: 'help', description: 'Show available commands & help' },
+  ];
+
+  static readonly TEAM_MEMBER_COMMANDS = [
+    { command: 'tasks', description: 'View assigned tasks' },
+    { command: 'mypayments', description: 'View payment history' },
+    { command: 'myprojects', description: 'View assigned projects' },
+    { command: 'myprofile', description: 'View profile info' },
+    { command: 'help', description: 'Show team member commands' },
+    { command: 'start', description: 'Start team bot session' },
+  ];
+
+  static readonly CLIENT_COMMANDS = [
+    { command: 'myprofile', description: 'View profile info' },
+    { command: 'myproject', description: 'View project details' },
+    { command: 'payments', description: 'View payment history' },
+    { command: 'invoices', description: 'View invoices history' },
+    { command: 'status', description: 'View project progress' },
+    { command: 'help', description: 'Show available commands' },
+    { command: 'start', description: 'Start client bot session' },
+  ];
+
+  static readonly ADMIN_COMMANDS = [
+    { command: 'admin', description: 'Show admin dashboard menu' },
+    { command: 'clients', description: 'List all clients' },
+    { command: 'client', description: 'View client details' },
+    { command: 'payments', description: 'List recent payments' },
+    { command: 'pending', description: 'List pending invoices' },
+    { command: 'invoices', description: 'List recent invoices' },
+    { command: 'help', description: 'Show admin help menu' },
+    { command: 'start', description: 'Start admin bot session' },
+  ];
+
+  /**
+   * Synchronize chat-specific commands for a given chat and role.
+   * Ensures Telegram's native command autocomplete dropdown strictly reflects the user's role.
+   * Uses an in-memory cache to prevent redundant Telegram API calls on every request.
+   */
+  static async syncChatCommands(
+    chatId: string | number,
+    role: 'ADMIN' | 'TEAM_MEMBER' | 'CLIENT' | 'UNLINKED' | 'CONFLICT',
+    force: boolean = false
+  ): Promise<boolean> {
+    if (!this.isConfigured() || !chatId) return false;
+    const strChatId = String(chatId);
+    const numChatId = Number(chatId);
+    if (isNaN(numChatId)) return false;
+
+    if (!force && this.syncedChatScopes.get(strChatId) === role) {
+      return true;
+    }
+
+    let commands = this.DEFAULT_COMMANDS;
+    if (role === 'ADMIN') commands = this.ADMIN_COMMANDS;
+    else if (role === 'TEAM_MEMBER') commands = this.TEAM_MEMBER_COMMANDS;
+    else if (role === 'CLIENT') commands = this.CLIENT_COMMANDS;
+    else if (role === 'UNLINKED' || role === 'CONFLICT') commands = this.DEFAULT_COMMANDS;
+
+    try {
+      const res = await fetch(`${TELEGRAM_API}/setMyCommands`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          commands,
+          scope: { type: 'chat', chat_id: numChatId },
+        }),
+      });
+      const data = await res.json();
+      if (data.ok === true) {
+        this.syncedChatScopes.set(strChatId, role);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error(`Failed to sync chat commands for chat ${chatId}:`, err);
+      return false;
+    }
+  }
+
   /**
    * Configure bot commands in Telegram
+   * 1. Sets safe default commands globally (start & help only)
+   * 2. Sets custom commands for admin if ADMIN_TELEGRAM_ID is configured
+   * 3. Pre-populates chat scopes for all active team members and clients
    */
   static async setBotCommands(): Promise<boolean> {
     if (!this.isConfigured()) return false;
 
-    const defaultCommands = [
-      { command: 'myprofile', description: 'View profile info' },
-      { command: 'myproject', description: 'View project details' },
-      { command: 'payment', description: 'View payment summary' },
-      { command: 'payments', description: 'View payment history' },
-      { command: 'invoice', description: 'Get latest invoice PDF' },
-      { command: 'invoices', description: 'View invoices history' },
-      { command: 'status', description: 'View project progress' },
-      { command: 'help', description: 'Show available commands' },
-    ];
-
-    const adminCommands = [
-      { command: 'clients', description: 'List all clients' },
-      { command: 'client', description: 'View client details (specify client code)' },
-      { command: 'payments', description: 'List recent payments' },
-      { command: 'pending', description: 'List pending invoices' },
-      { command: 'invoices', description: 'List recent invoices' },
-      { command: 'help', description: 'Show admin help menu' },
-    ];
-
     try {
-      // 1. Set default commands for clients/all users
+      // 1. Set safe universal default commands globally
       const r1 = await fetch(`${TELEGRAM_API}/setMyCommands`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          commands: defaultCommands,
+          commands: this.DEFAULT_COMMANDS,
           scope: { type: 'default' },
         }),
       });
       const data1 = await r1.json();
 
-      // 2. Set custom commands for admin if ADMIN_TELEGRAM_ID is configured
+      // 2. Set custom commands for admin if configured
       const adminTelegramId = process.env.ADMIN_TELEGRAM_ID;
       if (adminTelegramId) {
-        const r2 = await fetch(`${TELEGRAM_API}/setMyCommands`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            commands: adminCommands,
-            scope: { type: 'chat', chat_id: Number(adminTelegramId) },
-          }),
-        });
-        await r2.json();
+        await this.syncChatCommands(adminTelegramId, 'ADMIN', true);
+      }
+
+      // 3. Pre-populate active team members and clients if database is available
+      try {
+        await dbConnect();
+        const activeMembers = await TeamMember.find({ status: 'ACTIVE', telegramChatId: { $exists: true, $ne: '' } }).select('telegramChatId').lean();
+        for (const m of activeMembers) {
+          if (m.telegramChatId) {
+            await this.syncChatCommands(m.telegramChatId, 'TEAM_MEMBER', true);
+          }
+        }
+
+        const activeClients = await Client.find({ telegramConnected: true, telegramChatId: { $exists: true, $ne: '' } }).select('telegramChatId').lean();
+        for (const c of activeClients) {
+          if (c.telegramChatId) {
+            await this.syncChatCommands(c.telegramChatId, 'CLIENT', true);
+          }
+        }
+      } catch (dbErr) {
+        console.warn('Could not batch pre-sync chat scopes from database:', dbErr);
       }
 
       return data1.ok === true;
@@ -797,6 +878,14 @@ export class TelegramService {
         const dueStr = task.dueDate ? new Date(task.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No due date';
         const credCount = task.requiredCredentialIds?.length || 0;
 
+        await AuditService.logAction(
+          memberEmail,
+          'TASK_VIEWED',
+          'Task',
+          task._id.toString(),
+          { taskCode: task.taskCode, telegramUserId: fromUserId }
+        );
+
         const detailsMsg = `📋 <b>Task Details: ${task.title}</b>\n\n` +
           `<b>Task Code:</b> <code>${task.taskCode}</code>\n` +
           `<b>Project:</b> ${pName} (<code>${pCode}</code>)\n` +
@@ -847,6 +936,15 @@ export class TelegramService {
         try {
           const { CredentialSharingService } = await import('./credential-sharing.service');
           await CredentialSharingService.shareTaskCredentials(task._id.toString(), memberEmail);
+
+          await AuditService.logAction(
+            memberEmail,
+            'TASK_CREDENTIALS_VIEWED',
+            'Task',
+            task._id.toString(),
+            { taskCode: task.taskCode, telegramUserId: fromUserId, requiredCredentialCount: task.requiredCredentialIds?.length || 0 }
+          );
+
           await this.answerCallbackQuery(cbId, '🔐 Credentials dispatched to your chat.');
           return { action, success: true };
         } catch (err: any) {
@@ -1080,6 +1178,33 @@ export class TelegramService {
         break;
       }
 
+      case '/myproject':
+      case '/project':
+      case '/payment':
+      case '/payments':
+      case '/invoice':
+      case '/invoices':
+      case '/status':
+        await AuditService.logAction(
+          teamMember.email,
+          'TEAM_MEMBER_COMMAND_DENIED',
+          'TeamMember',
+          teamMember._id.toString(),
+          { command: cmd, rawText: raw, reason: 'CLIENT_COMMAND_BLOCKED_FOR_TEAM_MEMBER' }
+        );
+        await this.sendMessageRaw(
+          chatId,
+          `ℹ️ <b>This command is not available for team members.</b>\n\n` +
+          `Use /help to see your available commands:\n` +
+          `• 📋 /tasks - View assigned tasks\n` +
+          `• 💰 /mypayments - View payment history\n` +
+          `• 📁 /myprojects - View assigned projects\n` +
+          `• 👤 /myprofile - View profile\n` +
+          `• ❓ /help - Help menu`,
+          { reply_markup: this.getTeamMemberReplyKeyboard() }
+        );
+        break;
+
       default:
         await this.sendMessageRaw(
           chatId,
@@ -1292,6 +1417,9 @@ export class TelegramService {
           });
           timings.databaseQuery += Math.round(performance.now() - dbStart);
 
+          // Synchronize team member chat command scope
+          await this.syncChatCommands(chatId, 'TEAM_MEMBER', true);
+
           await this.sendMessageRaw(
             chatId,
             `<b>🎉 Telegram Successfully Connected!</b>\n\nHello <b>${member.name}</b>, your Telegram profile is now securely linked to your team account as <b>${member.role}</b>.\n\nYou can use:\n/tasks - View your assigned tasks\n/help - Show help menu`,
@@ -1340,6 +1468,9 @@ export class TelegramService {
           });
           timings.databaseQuery += Math.round(performance.now() - dbStart);
 
+          // Synchronize client chat command scope
+          await this.syncChatCommands(chatId, 'CLIENT', true);
+
           await this.sendMessageRaw(
             chatId,
             `<b>🎉 Telegram Successfully Connected!</b>\n\nHello <b>${connectedClient.name}</b>, your Telegram profile is now securely linked to your account with client code <b>${connectedClient.clientCode}</b>.\n\nYou can use the following commands to interact with your account:\n/myprofile - View Profile\n/myproject - View Project Details\n/payments - View Payment Logs\n/invoices - View Billing History\n/status - Check Development Progress`,
@@ -1386,8 +1517,20 @@ export class TelegramService {
     const identity = await this.resolveTelegramIdentity(userId, chatId);
     timings.clientLookup = Math.round(performance.now() - lookupStart);
 
+    // Sync role-based Telegram autocomplete command dropdown
+    if (chatId) {
+      await this.syncChatCommands(chatId, identity.type);
+    }
+
     // 1. Conflict Check
     if (identity.type === 'CONFLICT') {
+      await AuditService.logAction(
+        userId,
+        'TELEGRAM_ROLE_CONFLICT',
+        'Auth',
+        undefined,
+        { telegramUserId: userId, chatId, teamMemberId: identity.teamMember?._id, clientId: identity.client?._id }
+      );
       await AuditService.logAction(
         userId,
         'TELEGRAM_ACCOUNT_CONFLICT',
@@ -2031,6 +2174,17 @@ export class TelegramService {
         }
         break;
       }
+
+      case '/tasks':
+      case '/mytasks':
+      case '/mypayments':
+      case '/myprojects':
+        await this.sendMessageRaw(
+          chatId,
+          `ℹ️ <b>Unknown command.</b>\n\nUse /help to see your available commands.`,
+          { reply_markup: this.getClientReplyKeyboard() }
+        );
+        break;
 
       default:
         await this.sendMessage(chatId, 'Unknown command. Use /help to see the available commands.', timings);

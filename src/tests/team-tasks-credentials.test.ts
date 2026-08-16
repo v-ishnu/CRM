@@ -632,6 +632,27 @@ describe('Team Members, Task Management & Secure Telegram Credential Sharing', (
         },
       });
       expect(profileRes?.command).toBe('/myprofile');
+    }, 15000);
+
+    it('prevents team members from accessing client commands and logs TEAM_MEMBER_COMMAND_DENIED', async () => {
+      // Team member attempts /invoices
+      const invoicesRes = await TelegramService.handleWebhookUpdate({
+        update_id: Math.floor(Math.random() * 1000000),
+        message: {
+          chat: { id: 77889911 },
+          from: { id: 77889911, username: 'alicedev' },
+          text: '/invoices',
+        },
+      });
+      expect(invoicesRes?.command).toBe('/invoices');
+
+      // Verify audit log
+      const deniedCmdLog = await AuditLog.findOne({
+        action: 'TEAM_MEMBER_COMMAND_DENIED',
+        actor: devMember.email,
+      });
+      expect(deniedCmdLog).not.toBeNull();
+      expect(deniedCmdLog?.metadata?.reason).toBe('CLIENT_COMMAND_BLOCKED_FOR_TEAM_MEMBER');
     });
 
     it('prevents client from accessing team member commands', async () => {
@@ -645,6 +666,106 @@ describe('Team Members, Task Management & Secure Telegram Credential Sharing', (
         },
       });
       expect(clientTasksRes?.command).toBe('/tasks');
+    });
+
+    it('handles details and credentials callbacks with audit logging and permission enforcement', async () => {
+      const task = await TaskService.createTask(
+        {
+          title: 'Test Task: Details and Creds',
+          projectId: testProject._id.toString(),
+          assignedTo: devMember._id.toString(),
+          priority: 'MEDIUM',
+          requiredCredentialIds: [testCredential._id.toString()],
+        },
+        'test-runner'
+      );
+
+      // 1. Details callback
+      const detailsUpdate = {
+        update_id: Math.floor(Math.random() * 1000000),
+        callback_query: {
+          id: 'cb_details_01',
+          from: { id: 77889911, username: 'alicedev' },
+          message: { chat: { id: 77889911 }, message_id: 104 },
+          data: `team_task:details:${task._id}`,
+        },
+      };
+
+      const detRes = await TelegramService.handleWebhookUpdate(detailsUpdate);
+      expect(detRes?.command).toBe('callback');
+
+      const viewLog = await AuditLog.findOne({
+        action: 'TASK_VIEWED',
+        entityId: { $in: [task._id, task._id.toString()] },
+      });
+      expect(viewLog).not.toBeNull();
+      expect(viewLog?.actor).toBe(devMember.email);
+
+      // 2. Credentials callback
+      const credsUpdate = {
+        update_id: Math.floor(Math.random() * 1000000),
+        callback_query: {
+          id: 'cb_creds_01',
+          from: { id: 77889911, username: 'alicedev' },
+          message: { chat: { id: 77889911 }, message_id: 105 },
+          data: `team_task:credentials:${task._id}`,
+        },
+      };
+
+      const credsRes = await TelegramService.handleWebhookUpdate(credsUpdate);
+      expect(credsRes?.command).toBe('callback');
+
+      const credsLog = await AuditLog.findOne({
+        action: 'TASK_CREDENTIALS_VIEWED',
+        entityId: { $in: [task._id, task._id.toString()] },
+      });
+      expect(credsLog).not.toBeNull();
+      expect(credsLog?.actor).toBe(devMember.email);
+    });
+
+    it('rejects client attempting a team task callback query', async () => {
+      const task = await TaskService.createTask(
+        {
+          title: 'Alice Task: Client Callback Attack',
+          projectId: testProject._id.toString(),
+          assignedTo: devMember._id.toString(),
+          priority: 'HIGH',
+        },
+        'test-runner'
+      );
+
+      // Client attempts Alice's task callback
+      const update = {
+        update_id: Math.floor(Math.random() * 1000000),
+        callback_query: {
+          id: 'cb_client_attack_01',
+          from: { id: 77889922, username: 'test_client_team' },
+          message: { chat: { id: 77889922 }, message_id: 106 },
+          data: `team_task:start:${task._id}`,
+        },
+      };
+
+      await TelegramService.handleWebhookUpdate(update);
+
+      const taskCheck = await Task.findById(task._id);
+      expect(taskCheck?.status).toBe('TODO');
+    });
+
+    it('syncChatCommands correctly configures role-specific command scopes', async () => {
+      const spyFetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+        return {
+          ok: true,
+          json: async () => ({ ok: true, result: true }),
+        } as any;
+      });
+
+      const ok = await TelegramService.syncChatCommands('77889911', 'TEAM_MEMBER', true);
+      expect(ok).toBe(true);
+
+      const clientOk = await TelegramService.syncChatCommands('77889922', 'CLIENT', true);
+      expect(clientOk).toBe(true);
+
+      spyFetch.mockRestore();
     });
   });
 });
