@@ -130,9 +130,9 @@ export class TaskService {
     });
 
     // Notify assigned team member via Telegram if connected
-    if (assignedMember && assignedMember.telegramConnected && assignedMember.telegramChatId) {
+    if (assignedMember && (assignedMember.telegramUserId || assignedMember.telegramChatId)) {
       try {
-        await TelegramService.sendTaskAssignedNotification(task, project, assignedMember);
+        await TelegramService.sendTaskAssignedNotification(task, project, assignedMember, actor);
       } catch (err) {
         console.error('Failed to send task Telegram notification:', err);
       }
@@ -215,9 +215,9 @@ export class TaskService {
         task.assignedTo = member._id as any;
 
         // If new assignee, notify via Telegram
-        if (oldAssignee !== member._id.toString() && member.telegramConnected && member.telegramChatId) {
+        if (oldAssignee !== member._id.toString() && (member.telegramUserId || member.telegramChatId)) {
           if (project) {
-            TelegramService.sendTaskAssignedNotification(task, project, member).catch((err) => {
+            TelegramService.sendTaskAssignedNotification(task, project, member, actor).catch((err) => {
               console.error('Failed to send reassigned task Telegram notification:', err);
             });
           }

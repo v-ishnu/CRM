@@ -767,5 +767,134 @@ describe('Team Members, Task Management & Secure Telegram Credential Sharing', (
 
       spyFetch.mockRestore();
     });
+
+    it('handles team_task:done:<taskId> alias to mark task as completed', async () => {
+      const task = await TaskService.createTask(
+        {
+          title: 'Test Task: Done Alias Action',
+          projectId: testProject._id.toString(),
+          assignedTo: devMember._id.toString(),
+          priority: 'HIGH',
+        },
+        'test-runner'
+      );
+
+      const update = {
+        update_id: Math.floor(Math.random() * 1000000),
+        callback_query: {
+          id: 'cb_done_alias_01',
+          from: { id: 77889911, username: 'alicedev' },
+          message: { chat: { id: 77889911 }, message_id: 107 },
+          data: `team_task:done:${task._id}`,
+        },
+      };
+
+      const res = await TelegramService.handleWebhookUpdate(update);
+      expect(res?.command).toBe('callback');
+
+      const updatedTask = await Task.findById(task._id);
+      expect(updatedTask?.status).toBe('COMPLETED');
+      expect(updatedTask?.completedAt).toBeDefined();
+    });
+
+    it('rejects callback queries from inactive/deactivated team members with TASK_ACTION_DENIED', async () => {
+      const randSuffix = Math.floor(Math.random() * 1000000);
+      const randUserId = String(Math.floor(Math.random() * 800000 + 100000));
+      const inactiveMember = await TeamMember.create({
+        name: 'Inactive Dev',
+        email: `inactive_dev_${randSuffix}@example.com`,
+        role: 'DEVELOPER',
+        telegramUserId: randUserId,
+        status: 'DEACTIVATED',
+      });
+
+      const task = await TaskService.createTask(
+        {
+          title: 'Task for Inactive Dev',
+          projectId: testProject._id.toString(),
+          priority: 'LOW',
+        },
+        'test-runner'
+      );
+      // Manually set assignee to bypass createTask validation
+      task.assignedTo = inactiveMember._id as any;
+      await task.save();
+
+      const update = {
+        update_id: Math.floor(Math.random() * 1000000),
+        callback_query: {
+          id: 'cb_inactive_01',
+          from: { id: Number(randUserId), username: 'inactivedev' },
+          message: { chat: { id: Number(randUserId) }, message_id: 108 },
+          data: `team_task:start:${task._id}`,
+        },
+      };
+
+      await TelegramService.handleWebhookUpdate(update);
+
+      const taskCheck = await Task.findById(task._id);
+      expect(taskCheck?.status).toBe('TODO');
+
+      const deniedLog = await AuditLog.findOne({
+        action: 'TASK_ACTION_DENIED',
+        actor: inactiveMember.email,
+      });
+      expect(deniedLog).not.toBeNull();
+
+      await TeamMember.deleteOne({ _id: inactiveMember._id });
+    });
+
+    it('rejects invalid MongoDB task ID cleanly without throwing CastError', async () => {
+      const update = {
+        update_id: Math.floor(Math.random() * 1000000),
+        callback_query: {
+          id: 'cb_invalid_id_01',
+          from: { id: 77889911, username: 'alicedev' },
+          message: { chat: { id: 77889911 }, message_id: 109 },
+          data: `team_task:start:invalid_task_id_123`,
+        },
+      };
+
+      const res = await TelegramService.handleWebhookUpdate(update);
+      expect(res?.command).toBe('callback');
+      expect(res?.action).toBe('start');
+    });
+
+    it('verifies sendTaskAssignedNotification creates exactly four inline buttons and task creation succeeds', async () => {
+      const spySend = vi.spyOn(TelegramService, 'sendMessageRaw');
+
+      const task = await TaskService.createTask(
+        {
+          title: 'Four Buttons Verification Task',
+          projectId: testProject._id.toString(),
+          assignedTo: devMember._id.toString(),
+          priority: 'URGENT',
+          dueDate: new Date('2026-08-28'),
+          description: 'Add WordPress content to the website.',
+        },
+        'Admin'
+      );
+
+      expect(task).toBeDefined();
+      expect(task.taskCode).toBeDefined();
+
+      expect(spySend).toHaveBeenCalled();
+      const lastCallArgs = spySend.mock.calls[spySend.mock.calls.length - 1];
+      const buttons = lastCallArgs[2]?.reply_markup?.inline_keyboard;
+      expect(buttons).toBeDefined();
+      expect(buttons.length).toBe(2);
+      expect(buttons[0].length).toBe(2);
+      expect(buttons[1].length).toBe(2);
+
+      // Verify button texts and callback data
+      expect(buttons[0][0].text).toBe('⚡ Start Working');
+      expect(buttons[0][0].callback_data).toBe(`team_task:start:${task._id}`);
+      expect(buttons[0][1].text).toBe('✅ Mark as Done');
+      expect(buttons[0][1].callback_data).toBe(`team_task:done:${task._id}`);
+      expect(buttons[1][0].text).toBe('📋 View Details');
+      expect(buttons[1][0].callback_data).toBe(`team_task:details:${task._id}`);
+      expect(buttons[1][1].text).toBe('🔐 Credentials');
+      expect(buttons[1][1].callback_data).toBe(`team_task:credentials:${task._id}`);
+    });
   });
 });

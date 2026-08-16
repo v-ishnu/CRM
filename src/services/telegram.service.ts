@@ -511,8 +511,17 @@ export class TelegramService {
   /**
    * Send notification when a new task is assigned to a team member
    */
-  static async sendTaskAssignedNotification(task: any, project: any, teamMember: any): Promise<boolean> {
-    if (!teamMember.telegramChatId) return false;
+  static async sendTaskAssignedNotification(
+    task: any,
+    project: any,
+    teamMember: any,
+    assignedBy: string = 'Admin'
+  ): Promise<boolean> {
+    const targetChatId = teamMember.telegramUserId || teamMember.telegramChatId;
+    if (!targetChatId) {
+      console.warn(`[TASK_NOTIFICATION] Team member ${teamMember.name} (${teamMember._id}) does not have a linked Telegram User ID or Chat ID.`);
+      return false;
+    }
 
     const priorityIcons: Record<string, string> = {
       LOW: '🟢',
@@ -521,31 +530,35 @@ export class TelegramService {
       URGENT: '🚨',
     };
     const icon = priorityIcons[task.priority] || '🟡';
-    const dueDateStr = task.dueDate ? new Date(task.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No due date';
+    const dueDateStr = task.dueDate
+      ? new Date(task.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+      : 'No due date';
 
-    const text = `📋 <b>New Task Assigned</b>\n\n` +
-      `<b>Project:</b> ${project.name} (<code>${project.projectCode}</code>)\n` +
-      `<b>Task:</b> ${task.title} (<code>${task.taskCode}</code>)\n` +
-      `<b>Priority:</b> ${icon} ${task.priority}\n` +
-      `<b>Due Date:</b> ${dueDateStr}\n\n` +
-      `<b>Description:</b>\n${task.description || 'No detailed description.'}`;
+    const text = `🆕 <b>New Task Assigned</b>\n\n` +
+      `<b>Project:</b>\n${project.name || 'Project'}\n\n` +
+      `<b>Project Code:</b>\n<code>${project.projectCode || 'N/A'}</code>\n\n` +
+      `<b>Task:</b>\n${task.title}\n\n` +
+      `<b>Task ID:</b>\n<code>${task.taskCode}</code>\n\n` +
+      `<b>Priority:</b>\n${icon} ${task.priority}\n\n` +
+      `<b>Status:</b>\n<code>${task.status}</code>\n\n` +
+      `<b>Due:</b>\n${dueDateStr}\n\n` +
+      `<b>Description:</b>\n${task.description || 'No detailed description.'}\n\n` +
+      `<b>Assigned by:</b>\n${assignedBy}`;
 
     const inlineKeyboard = {
       inline_keyboard: [
         [
           { text: '⚡ Start Working', callback_data: `team_task:start:${task._id}` },
-          { text: '✅ Mark Done', callback_data: `team_task:complete:${task._id}` },
+          { text: '✅ Mark as Done', callback_data: `team_task:done:${task._id}` },
         ],
         [
           { text: '📋 View Details', callback_data: `team_task:details:${task._id}` },
-          ...(task.requiredCredentialIds && task.requiredCredentialIds.length > 0 && !task.credentialAccessRevoked
-            ? [{ text: '🔐 Credentials', callback_data: `team_task:credentials:${task._id}` }]
-            : []),
+          { text: '🔐 Credentials', callback_data: `team_task:credentials:${task._id}` },
         ],
       ],
     };
 
-    const res = await this.sendMessageRaw(teamMember.telegramChatId, text, { reply_markup: inlineKeyboard });
+    const res = await this.sendMessageRaw(String(targetChatId), text, { reply_markup: inlineKeyboard });
     return res.success;
   }
 
@@ -621,28 +634,34 @@ export class TelegramService {
 
     console.log(`[TELEGRAM_CALLBACK_RECEIVED]\ncallbackId=${cbId}\nuserId=${fromUserId}\ndata=${cbData}`);
 
-    // Resolve user identity
-    const identity = await this.resolveTelegramIdentity(fromUserId, cbChatId);
+    try {
+      // Resolve user identity
+      const identity = await this.resolveTelegramIdentity(fromUserId, cbChatId);
 
-    if (
-      cbData.startsWith('team_task:') ||
-      cbData.startsWith('task_prog:') ||
-      cbData.startsWith('task_done:')
-    ) {
-      return await this.handleTeamTaskCallback(
-        cbId,
-        fromUserId,
-        cbChatId,
-        messageId,
-        cbData,
-        identity,
-        message,
-        timings
-      );
+      if (
+        cbData.startsWith('team_task:') ||
+        cbData.startsWith('task_prog:') ||
+        cbData.startsWith('task_done:')
+      ) {
+        return await this.handleTeamTaskCallback(
+          cbId,
+          fromUserId,
+          cbChatId,
+          messageId,
+          cbData,
+          identity,
+          message,
+          timings
+        );
+      }
+
+      await this.answerCallbackQuery(cbId, 'Action received.');
+      return { action: cbData, success: true };
+    } catch (err: any) {
+      console.error('handleCallbackQuery uncaught error:', err);
+      await this.answerCallbackQuery(cbId, 'An error occurred while processing action.', true);
+      return { action: cbData, success: false };
     }
-
-    await this.answerCallbackQuery(cbId, 'Action received.');
-    return { action: cbData, success: true };
   }
 
   /**
@@ -667,6 +686,9 @@ export class TelegramService {
     } else if (cbData.startsWith('task_prog:')) {
       action = 'start';
       taskId = cbData.replace('task_prog:', '');
+    } else if (cbData.startsWith('team_task:done:')) {
+      action = 'complete';
+      taskId = cbData.replace('team_task:done:', '');
     } else if (cbData.startsWith('team_task:complete:')) {
       action = 'complete';
       taskId = cbData.replace('team_task:complete:', '');
@@ -681,9 +703,17 @@ export class TelegramService {
       taskId = cbData.replace('team_task:credentials:', '');
     }
 
+    // Validate task ID format
+    const mongoose = (await import('mongoose')).default;
+    if (!mongoose.Types.ObjectId.isValid(taskId)) {
+      await this.answerCallbackQuery(cbId, '❌ Invalid task reference.', true);
+      return { action, success: false };
+    }
+
     // 1. Role Authorization
     if (identity.type !== 'TEAM_MEMBER' && identity.type !== 'ADMIN') {
-      await this.answerCallbackQuery(cbId, 'You are not authorized for this task.', true);
+      await this.answerCallbackQuery(cbId, '❌ You are not authorized to access this task.', true);
+      await this.sendMessageRaw(chatId, '❌ <b>You are not authorized to access this task.</b>');
       await AuditService.logAction(
         fromUserId,
         'TASK_ACTION_DENIED',
@@ -694,14 +724,15 @@ export class TelegramService {
       return { action, success: false };
     }
 
-    if (identity.type === 'TEAM_MEMBER' && identity.teamMember.status === 'DEACTIVATED') {
-      await this.answerCallbackQuery(cbId, 'Your account is deactivated.', true);
+    if (identity.type === 'TEAM_MEMBER' && identity.teamMember.status !== 'ACTIVE') {
+      await this.answerCallbackQuery(cbId, '❌ Your team member account is inactive.', true);
+      await this.sendMessageRaw(chatId, '❌ <b>Your team member account is inactive.</b> Please contact the administrator.');
       await AuditService.logAction(
-        identity.teamMember.email,
+        identity.teamMember.email || fromUserId,
         'TASK_ACTION_DENIED',
         'Task',
         taskId,
-        { reason: 'DEACTIVATED', telegramUserId: fromUserId, action }
+        { reason: `INACTIVE_ACCOUNT_STATUS_${identity.teamMember.status}`, telegramUserId: fromUserId, action }
       );
       return { action, success: false };
     }
@@ -711,6 +742,7 @@ export class TelegramService {
     const task = await Task.findById(taskId).populate('projectId', 'name projectCode currency');
     if (!task) {
       await this.answerCallbackQuery(cbId, 'Task not found.', true);
+      await this.sendMessageRaw(chatId, '❌ <b>Task not found.</b>');
       return { action, success: false };
     }
 
@@ -718,7 +750,8 @@ export class TelegramService {
     if (identity.type === 'TEAM_MEMBER') {
       const isAssigned = task.assignedTo?.toString() === identity.teamMember._id.toString();
       if (!isAssigned) {
-        await this.answerCallbackQuery(cbId, 'You are not authorized for this task.', true);
+        await this.answerCallbackQuery(cbId, '❌ You are not authorized to access this task.', true);
+        await this.sendMessageRaw(chatId, '❌ <b>You are not authorized to access this task.</b>');
         await AuditService.logAction(
           identity.teamMember.email,
           'TASK_ACTION_DENIED',
@@ -743,6 +776,9 @@ export class TelegramService {
     const pName = (task.projectId as any)?.name || 'Project';
     const pCode = (task.projectId as any)?.projectCode || '';
 
+    // Structured callback logging (Part 19)
+    console.log(`[Telegram Callback]\ntelegramUserId: ${fromUserId}\ncallback: ${cbData}\ntaskId: ${taskId}\nrole: ${identity.type}\nauthorization: GRANTED\nresult: PROCESSING`);
+
     // Log callback action
     await AuditService.logAction(
       memberEmail,
@@ -755,16 +791,18 @@ export class TelegramService {
     // 4. Action Execution
     switch (action) {
       case 'start': {
+        await this.answerCallbackQuery(cbId, 'Starting task...');
+
         if (task.status === 'IN_PROGRESS') {
-          await this.answerCallbackQuery(cbId, 'Task is already in progress.');
+          await this.sendMessageRaw(chatId, 'ℹ️ <b>This task is already in progress.</b>');
           return { action, success: true };
         }
         if (task.status === 'COMPLETED') {
-          await this.answerCallbackQuery(cbId, 'Task is already completed.', true);
+          await this.sendMessageRaw(chatId, 'ℹ️ <b>This task has already been completed.</b>');
           return { action, success: false };
         }
         if (task.status === 'CANCELLED') {
-          await this.answerCallbackQuery(cbId, 'Task is cancelled.', true);
+          await this.sendMessageRaw(chatId, '⚠️ <b>This task is cancelled.</b>');
           return { action, success: false };
         }
 
@@ -777,48 +815,58 @@ export class TelegramService {
           'Task',
           task._id.toString(),
           {
+            taskId: task._id,
             taskCode: task.taskCode,
             projectId: task.projectId?._id || task.projectId,
+            clientId: task.clientId,
             teamMemberId: memberId,
             telegramUserId: fromUserId,
+            timestamp: new Date(),
           }
         );
 
-        await this.answerCallbackQuery(cbId, 'Task started.');
-
-        // Update message
         const priorityIcon = task.priority === 'URGENT' ? '🚨' : (task.priority === 'HIGH' ? '🔴' : (task.priority === 'MEDIUM' ? '🟡' : '🟢'));
-        const updatedText = `⚡ <b>Task In Progress</b>\n\n` +
-          `<b>Project:</b> ${pName} (<code>${pCode}</code>)\n` +
-          `<b>Task:</b> ${task.title} (<code>${task.taskCode}</code>)\n` +
-          `<b>Priority:</b> ${priorityIcon} ${task.priority}\n` +
-          `<b>Status:</b> <code>IN_PROGRESS</code>\n\n` +
-          (task.description ? `<i>${task.description}</i>\n\n` : '') +
-          `<i>Status updated by ${memberName}</i>`;
+        const dueStr = task.dueDate ? new Date(task.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No due date';
 
-        const buttons: any[] = [
-          [{ text: '✅ Mark Done', callback_data: `team_task:complete:${task._id}` }],
-          [{ text: '📋 View Details', callback_data: `team_task:details:${task._id}` }],
+        const updatedText = `🆕 <b>Task Assigned</b>\n\n` +
+          `<b>Project:</b>\n${pName}\n\n` +
+          `<b>Task:</b>\n${task.title}\n\n` +
+          `<b>Task ID:</b>\n<code>${task.taskCode}</code>\n\n` +
+          `<b>Status:</b>\n🟡 <code>IN_PROGRESS</code>\n\n` +
+          `<b>Priority:</b>\n${priorityIcon} ${task.priority}\n\n` +
+          `<b>Due:</b>\n${dueStr}\n\n` +
+          `<b>Description:</b>\n${task.description || 'No detailed description.'}\n\n` +
+          `<i>⚡ Started by ${memberName}</i>`;
+
+        const updatedButtons = [
+          [
+            { text: '📋 View Details', callback_data: `team_task:details:${task._id}` },
+            { text: '🔐 Credentials', callback_data: `team_task:credentials:${task._id}` },
+          ],
+          [
+            { text: '✅ Mark as Done', callback_data: `team_task:done:${task._id}` },
+          ],
         ];
-        if (task.requiredCredentialIds && task.requiredCredentialIds.length > 0 && !task.credentialAccessRevoked) {
-          buttons[1].push({ text: '🔐 Credentials', callback_data: `team_task:credentials:${task._id}` });
-        }
 
         if (messageId) {
           await this.editMessageText(chatId, messageId, updatedText, {
-            reply_markup: { inline_keyboard: buttons },
+            reply_markup: { inline_keyboard: updatedButtons },
           });
+        } else {
+          await this.sendMessageRaw(chatId, updatedText, { reply_markup: { inline_keyboard: updatedButtons } });
         }
         return { action, success: true };
       }
 
       case 'complete': {
+        await this.answerCallbackQuery(cbId, 'Completing task...');
+
         if (task.status === 'COMPLETED') {
-          await this.answerCallbackQuery(cbId, 'Task is already completed.', true);
+          await this.sendMessageRaw(chatId, 'ℹ️ <b>This task has already been completed.</b>');
           return { action, success: true };
         }
         if (task.status === 'CANCELLED') {
-          await this.answerCallbackQuery(cbId, 'Task is cancelled.', true);
+          await this.sendMessageRaw(chatId, '⚠️ <b>This task is cancelled.</b>');
           return { action, success: false };
         }
 
@@ -832,29 +880,38 @@ export class TelegramService {
           'Task',
           task._id.toString(),
           {
+            taskId: task._id,
             taskCode: task.taskCode,
             projectId: task.projectId?._id || task.projectId,
+            clientId: task.clientId,
             teamMemberId: memberId,
             telegramUserId: fromUserId,
+            timestamp: new Date(),
+            completedAt: task.completedAt,
           }
         );
 
-        await this.answerCallbackQuery(cbId, 'Task marked as completed.');
+        const updatedText = `✅ <b>Task Completed</b>\n\n` +
+          `<b>Project:</b>\n${pName} (<code>${pCode}</code>)\n\n` +
+          `<b>Task:</b>\n${task.title}\n\n` +
+          `<b>Task ID:</b>\n<code>${task.taskCode}</code>\n\n` +
+          `<b>Completed by:</b>\n${memberName}\n\n` +
+          `<b>Status:</b>\n<code>COMPLETED</code>\n\n` +
+          `<b>Completed At:</b>\n${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
 
-        // Update message to remove active start/complete buttons
-        const updatedText = `✅ <b>Task Completed!</b>\n\n` +
-          `<b>Project:</b> ${pName} (<code>${pCode}</code>)\n` +
-          `<b>Task:</b> ${task.title} (<code>${task.taskCode}</code>)\n` +
-          `<b>Status:</b> <code>COMPLETED</code>\n` +
-          `<b>Completed At:</b> ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}\n\n` +
-          `Great work, ${memberName}!`;
+        const updatedButtons = [
+          [
+            { text: '📋 View Details', callback_data: `team_task:details:${task._id}` },
+            { text: '🔐 Credentials', callback_data: `team_task:credentials:${task._id}` },
+          ],
+        ];
 
         if (messageId) {
           await this.editMessageText(chatId, messageId, updatedText, {
-            reply_markup: {
-              inline_keyboard: [[{ text: '📋 View Details', callback_data: `team_task:details:${task._id}` }]],
-            },
+            reply_markup: { inline_keyboard: updatedButtons },
           });
+        } else {
+          await this.sendMessageRaw(chatId, updatedText, { reply_markup: { inline_keyboard: updatedButtons } });
         }
 
         // Notify Admin of completed task
@@ -876,7 +933,6 @@ export class TelegramService {
         await this.answerCallbackQuery(cbId, 'Loading task details...');
         const priorityIcon = task.priority === 'URGENT' ? '🚨' : (task.priority === 'HIGH' ? '🔴' : (task.priority === 'MEDIUM' ? '🟡' : '🟢'));
         const dueStr = task.dueDate ? new Date(task.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No due date';
-        const credCount = task.requiredCredentialIds?.length || 0;
 
         await AuditService.logAction(
           memberEmail,
@@ -886,38 +942,38 @@ export class TelegramService {
           { taskCode: task.taskCode, telegramUserId: fromUserId }
         );
 
-        const detailsMsg = `📋 <b>Task Details: ${task.title}</b>\n\n` +
-          `<b>Task Code:</b> <code>${task.taskCode}</code>\n` +
-          `<b>Project:</b> ${pName} (<code>${pCode}</code>)\n` +
-          `<b>Priority:</b> ${priorityIcon} ${task.priority}\n` +
-          `<b>Status:</b> <code>${task.status}</code>\n` +
-          `<b>Due Date:</b> ${dueStr}\n` +
-          (task.agreedAmount ? `<b>Agreed Payout:</b> ₹${task.agreedAmount.toLocaleString('en-IN')}\n` : '') +
-          `<b>Required Credentials:</b> ${credCount > 0 ? `${credCount} attached` : 'None'}\n\n` +
-          `<b>Description:</b>\n${task.description || 'No description provided.'}`;
+        const detailsMsg = `📋 <b>Task Details</b>\n\n` +
+          `<b>Project:</b>\n${pName} (<code>${pCode}</code>)\n\n` +
+          `<b>Task:</b>\n${task.title}\n\n` +
+          `<b>Task ID:</b>\n<code>${task.taskCode}</code>\n\n` +
+          `<b>Priority:</b>\n${priorityIcon} ${task.priority}\n\n` +
+          `<b>Status:</b>\n<code>${task.status}</code>\n\n` +
+          `<b>Due:</b>\n${dueStr}\n\n` +
+          `<b>Description:</b>\n${task.description || 'No description provided.'}\n\n` +
+          `<b>Assigned To:</b>\n${memberName}`;
 
         const buttons: any[] = [];
         if (task.status === 'TODO') {
           buttons.push([
             { text: '⚡ Start Working', callback_data: `team_task:start:${task._id}` },
-            { text: '✅ Mark Done', callback_data: `team_task:complete:${task._id}` },
+            { text: '✅ Mark as Done', callback_data: `team_task:done:${task._id}` },
           ]);
         } else if (task.status === 'IN_PROGRESS') {
-          buttons.push([{ text: '✅ Mark Done', callback_data: `team_task:complete:${task._id}` }]);
+          buttons.push([{ text: '✅ Mark as Done', callback_data: `team_task:done:${task._id}` }]);
         }
-        if (credCount > 0 && !task.credentialAccessRevoked) {
-          buttons.push([{ text: '🔐 Required Credentials', callback_data: `team_task:credentials:${task._id}` }]);
-        }
+        buttons.push([{ text: '🔐 Credentials', callback_data: `team_task:credentials:${task._id}` }]);
 
         await this.sendMessageRaw(chatId, detailsMsg, {
-          reply_markup: buttons.length > 0 ? { inline_keyboard: buttons } : undefined,
+          reply_markup: { inline_keyboard: buttons },
         });
         return { action, success: true };
       }
 
       case 'credentials': {
+        await this.answerCallbackQuery(cbId, 'Checking credential access...');
+
         if (!identity.teamMember?.permissions?.includes('VIEW_CREDENTIALS') && identity.type !== 'ADMIN') {
-          await this.answerCallbackQuery(cbId, 'You do not have permission to view credentials.', true);
+          await this.sendMessageRaw(chatId, '❌ <b>You are not authorized to access these credentials.</b>');
           await AuditService.logAction(
             memberEmail,
             'TASK_ACTION_DENIED',
@@ -929,8 +985,13 @@ export class TelegramService {
         }
 
         if (task.credentialAccessRevoked) {
-          await this.answerCallbackQuery(cbId, 'Credential access for this task has been revoked.', true);
+          await this.sendMessageRaw(chatId, '🔐 <b>Credentials</b>\n\nCredential access for this task has been revoked.');
           return { action, success: false };
+        }
+
+        if (!task.requiredCredentialIds || task.requiredCredentialIds.length === 0) {
+          await this.sendMessageRaw(chatId, '🔐 <b>Credentials</b>\n\nNo credentials are required for this task.');
+          return { action, success: true };
         }
 
         try {
@@ -942,13 +1003,13 @@ export class TelegramService {
             'TASK_CREDENTIALS_VIEWED',
             'Task',
             task._id.toString(),
-            { taskCode: task.taskCode, telegramUserId: fromUserId, requiredCredentialCount: task.requiredCredentialIds?.length || 0 }
+            { taskCode: task.taskCode, telegramUserId: fromUserId, requiredCredentialCount: task.requiredCredentialIds.length }
           );
 
-          await this.answerCallbackQuery(cbId, '🔐 Credentials dispatched to your chat.');
           return { action, success: true };
         } catch (err: any) {
-          await this.answerCallbackQuery(cbId, err.message || 'Failed to retrieve credentials.', true);
+          console.error('Task credential retrieval failed:', err);
+          await this.sendMessageRaw(chatId, '❌ <b>Credentials could not be retrieved securely.</b>');
           return { action, success: false };
         }
       }
