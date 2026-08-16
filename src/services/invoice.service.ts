@@ -147,11 +147,11 @@ export class InvoiceService {
     const project = invoice.projectId as any;
 
     // Get company details from env with fallbacks
-    const compName = process.env.COMPANY_NAME || 'Dr. Debuggers';
-    const compAddress = process.env.COMPANY_ADDRESS || 'Ramkrishna Nagar, Patna, 200027';
-    const compEmail = process.env.COMPANY_EMAIL || 'work.debuggers@gmail.com';
+    const compName = 'Dr. Debuggers';
+    const compAddress = 'Street No 5, Bhagatpura, Phagwara, Punjab 144401';
+    const compEmail = 'work.debuggers@gmail.com';
     const compPhone = process.env.COMPANY_PHONE || '+1 (555) 019-9000';
-    const compWebsite = process.env.COMPANY_WEBSITE || 'www.example.com';
+    // const compWebsite = process.env.COMPANY_WEBSITE || 'www.example.com';
 
     // Calculate total payments and remaining balance
     const payments = await Payment.find({
