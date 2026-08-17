@@ -66,9 +66,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="md:hidden flex items-center justify-between px-6 py-4 bg-[#0d0d12] border-b border-slate-800 shrink-0">
         <div className="flex items-center space-x-2">
           <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center font-bold text-white text-sm">
-            CRM
+            Dr.
           </div>
-          <span className="font-bold text-lg text-slate-200">Dev CRM</span>
+          <span className="font-bold text-lg text-slate-200">Debuggers</span>
         </div>
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
