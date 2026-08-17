@@ -273,7 +273,7 @@ export class InquiryService {
       // Notify Admin of lead message
       const adminChatId = process.env.ADMIN_TELEGRAM_ID;
       if (adminChatId) {
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://telegram.vishnucode.com';
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://crm.drdebuggers.com';
         await TelegramService.sendMessageRaw(
           adminChatId,
           `💬 <b>New Message from Lead</b> (<code>${inquiry.inquiryNumber}</code>)\n\n` +
@@ -385,7 +385,7 @@ export class InquiryService {
       // Notify admin immediately
       const adminChatId = process.env.ADMIN_TELEGRAM_ID;
       if (adminChatId) {
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://telegram.vishnucode.com';
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://crm.drdebuggers.com';
         const adminNotification =
           `🚨 <b>New Website Inquiry</b>\n\n` +
           `<b>Inquiry:</b> <code>${inquiry.inquiryNumber}</code>\n` +
