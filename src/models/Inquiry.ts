@@ -26,6 +26,7 @@ export interface IInquiry extends Document {
   telegramChatId: string;
   name?: string;
   service?: string;
+  step?: 'SELECT_SERVICE' | 'AWAITING_DETAILS' | 'AWAITING_CONTACT' | 'SUBMITTED';
   message?: string;
   messages: IInquiryMessage[];
   conversationMode: 'BOT' | 'HUMAN' | 'CLOSED';
@@ -140,6 +141,11 @@ const InquirySchema = new Schema<IInquiry>(
       type: String,
       trim: true,
       default: 'General',
+    },
+    step: {
+      type: String,
+      enum: ['SELECT_SERVICE', 'AWAITING_DETAILS', 'AWAITING_CONTACT', 'SUBMITTED'],
+      default: 'SELECT_SERVICE',
     },
     message: {
       type: String,

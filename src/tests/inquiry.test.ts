@@ -383,7 +383,7 @@ describe('Public Inquiry & Human Handoff Fallback System', () => {
 
     // Cleanup created client
     await Client.deleteOne({ _id: result.client._id });
-  });
+  }, 20000);
 
   // TEST 12: New message after inquiry closed creates a fresh inquiry session
   it('TEST 12: Sending a message after past inquiry is closed creates a new fresh active inquiry', async () => {
@@ -506,4 +506,147 @@ describe('Public Inquiry & Human Handoff Fallback System', () => {
       )
     ).rejects.toThrow('File is too large');
   });
+
+  // TEST 16: Full Public Inquiry flow via inline button callback
+  it('TEST 16: Full Public Inquiry flow via inline button callback query to completion', async () => {
+    const publicUser3TelegramId = '95959505';
+    await Inquiry.deleteMany({ telegramUserId: publicUser3TelegramId });
+
+    // 1. Fresh user sends /start
+    const startUpdate = {
+      update_id: Math.floor(Math.random() * 1000000),
+      message: {
+        chat: { id: Number(publicUser3TelegramId) },
+        from: { id: Number(publicUser3TelegramId), username: 'bob_lead', first_name: 'Bob', last_name: 'Smith' },
+        text: '/start',
+      },
+    };
+    const startRes = await TelegramService.handleWebhookUpdate(startUpdate);
+    expect(startRes?.command).toBe('/start');
+    expect(startRes?.inquiryMode).toBe('BOT');
+
+    let inq = await Inquiry.findOne({ telegramUserId: publicUser3TelegramId, status: { $ne: 'CLOSED' } });
+    expect(inq).not.toBeNull();
+    expect(inq?.step).toBe('SELECT_SERVICE');
+
+    // 2. User clicks inline button for Web Development
+    const callbackUpdate = {
+      update_id: Math.floor(Math.random() * 1000000),
+      callback_query: {
+        id: 'cb_test_inq_web_01',
+        from: { id: Number(publicUser3TelegramId), username: 'bob_lead', first_name: 'Bob', last_name: 'Smith' },
+        message: {
+          chat: { id: Number(publicUser3TelegramId) },
+          message_id: 101,
+        },
+        data: 'inquiry:service:web',
+      },
+    };
+    const cbRes = await TelegramService.handleWebhookUpdate(callbackUpdate);
+    expect(cbRes?.command).toBe('callback');
+    expect(cbRes?.action).toBe('inquiry_service_selected');
+
+    inq = await Inquiry.findOne({ telegramUserId: publicUser3TelegramId, status: { $ne: 'CLOSED' } });
+    expect(inq?.service).toBe('Web Development');
+    expect(inq?.step).toBe('AWAITING_DETAILS');
+
+    // 3. User sends project details
+    const detailsUpdate = {
+      update_id: Math.floor(Math.random() * 1000000),
+      message: {
+        chat: { id: Number(publicUser3TelegramId) },
+        from: { id: Number(publicUser3TelegramId), username: 'bob_lead', first_name: 'Bob' },
+        text: 'I need an e-commerce website for my clothing brand with 50 products and payment gateway.',
+      },
+    };
+    await TelegramService.handleWebhookUpdate(detailsUpdate);
+
+    inq = await Inquiry.findOne({ telegramUserId: publicUser3TelegramId, status: { $ne: 'CLOSED' } });
+    expect(inq?.step).toBe('AWAITING_CONTACT');
+    expect(inq?.message).toBe('I need an e-commerce website for my clothing brand with 50 products and payment gateway.');
+
+    // 4. User sends contact details
+    const contactUpdate = {
+      update_id: Math.floor(Math.random() * 1000000),
+      message: {
+        chat: { id: Number(publicUser3TelegramId) },
+        from: { id: Number(publicUser3TelegramId), username: 'bob_lead', first_name: 'Bob' },
+        text: 'Bob Smith, bob@example.com, +91 9988776655',
+      },
+    };
+    await TelegramService.handleWebhookUpdate(contactUpdate);
+
+    inq = await Inquiry.findOne({ telegramUserId: publicUser3TelegramId, status: { $ne: 'CLOSED' } });
+    expect(inq?.status).toBe('NEW');
+    expect(inq?.service).toBe('Web Development');
+    expect(inq?.name).toBe('Bob Smith');
+    expect(inq?.message).toContain('Bob Smith, bob@example.com, +91 9988776655');
+
+    // Clean up
+    await Inquiry.deleteMany({ telegramUserId: publicUser3TelegramId });
+  }, 20000);
+
+  // TEST 17: Full Public Inquiry flow via Reply Keyboard button
+  it('TEST 17: Full Public Inquiry flow via Reply Keyboard button selection', async () => {
+    const publicUser4TelegramId = '96969606';
+
+    // 1. Fresh user sends /start
+    const startUpdate = {
+      update_id: Math.floor(Math.random() * 1000000),
+      message: {
+        chat: { id: Number(publicUser4TelegramId) },
+        from: { id: Number(publicUser4TelegramId), username: 'emma_lead', first_name: 'Emma' },
+        text: '/start',
+      },
+    };
+    await TelegramService.handleWebhookUpdate(startUpdate);
+
+    // 2. User clicks reply button "📱 App Development"
+    const buttonUpdate = {
+      update_id: Math.floor(Math.random() * 1000000),
+      message: {
+        chat: { id: Number(publicUser4TelegramId) },
+        from: { id: Number(publicUser4TelegramId), username: 'emma_lead', first_name: 'Emma' },
+        text: '📱 App Development',
+      },
+    };
+    await TelegramService.handleWebhookUpdate(buttonUpdate);
+
+    let inq = await Inquiry.findOne({ telegramUserId: publicUser4TelegramId, status: { $ne: 'CLOSED' } });
+    expect(inq?.service).toBe('Mobile App Development');
+    expect(inq?.step).toBe('AWAITING_DETAILS');
+
+    // 3. User sends project details
+    const detailsUpdate = {
+      update_id: Math.floor(Math.random() * 1000000),
+      message: {
+        chat: { id: Number(publicUser4TelegramId) },
+        from: { id: Number(publicUser4TelegramId), username: 'emma_lead', first_name: 'Emma' },
+        text: 'Cross platform mobile app for fitness tracking and workout plans.',
+      },
+    };
+    await TelegramService.handleWebhookUpdate(detailsUpdate);
+
+    inq = await Inquiry.findOne({ telegramUserId: publicUser4TelegramId, status: { $ne: 'CLOSED' } });
+    expect(inq?.step).toBe('AWAITING_CONTACT');
+
+    // 4. User sends /skip
+    const skipUpdate = {
+      update_id: Math.floor(Math.random() * 1000000),
+      message: {
+        chat: { id: Number(publicUser4TelegramId) },
+        from: { id: Number(publicUser4TelegramId), username: 'emma_lead', first_name: 'Emma' },
+        text: '/skip',
+      },
+    };
+    await TelegramService.handleWebhookUpdate(skipUpdate);
+
+    inq = await Inquiry.findOne({ telegramUserId: publicUser4TelegramId, status: { $ne: 'CLOSED' } });
+    expect(inq?.status).toBe('NEW');
+    expect(inq?.service).toBe('Mobile App Development');
+    expect(inq?.name).toBe('Emma');
+
+    // Clean up
+    await Inquiry.deleteMany({ telegramUserId: publicUser4TelegramId });
+  }, 20000);
 });

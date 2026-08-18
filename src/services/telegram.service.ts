@@ -752,6 +752,26 @@ export class TelegramService {
         }
       }
 
+      if (
+        cbData.startsWith('inquiry:') ||
+        cbData.startsWith('inq:service:') ||
+        cbData.startsWith('inq:human') ||
+        cbData.startsWith('inquiry_')
+      ) {
+        const { InquiryService } = await import('./inquiry.service');
+        const fromUsername = cb.from?.username || '';
+        const fromName = [cb.from?.first_name, cb.from?.last_name].filter(Boolean).join(' ') || fromUsername;
+        return await InquiryService.handlePublicCallback(
+          cbId,
+          fromUserId,
+          cbChatId,
+          fromUsername,
+          fromName,
+          cbData,
+          timings
+        );
+      }
+
       await this.answerCallbackQuery(cbId, 'Action received.');
       return { action: cbData, success: true };
     } catch (err: any) {

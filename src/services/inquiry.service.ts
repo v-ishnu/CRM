@@ -59,6 +59,57 @@ export class InquiryService {
   }
 
   /**
+   * Get public inquiry inline keyboard
+   */
+  static getPublicInlineKeyboard() {
+    return {
+      inline_keyboard: [
+        [
+          { text: '🌐 Web Development', callback_data: 'inquiry:service:web' },
+          { text: '📱 App Development', callback_data: 'inquiry:service:app' },
+        ],
+        [
+          { text: '🔍 SEO', callback_data: 'inquiry:service:seo' },
+          { text: '✍️ Content', callback_data: 'inquiry:service:content' },
+        ],
+        [
+          { text: '🤖 AI & Automation', callback_data: 'inquiry:service:ai' },
+          { text: '☁️ Cloud / VPS', callback_data: 'inquiry:service:cloud' },
+        ],
+        [
+          { text: '👨‍💻 Talk to Human', callback_data: 'inquiry:human' },
+        ],
+      ],
+    };
+  }
+
+  /**
+   * Helper to map incoming text or callback identifier to standard service category
+   */
+  static mapServiceFromInput(input: string): string | null {
+    const raw = (input || '').toLowerCase().trim();
+    if (raw.includes('web development') || raw.includes('website') || raw === 'inquiry:service:web' || raw === 'inquiry_web' || raw === '🌐 web development') {
+      return 'Web Development';
+    }
+    if (raw.includes('app development') || raw.includes('mobile app') || raw === 'inquiry:service:app' || raw === 'inquiry_app' || raw === '📱 app development') {
+      return 'Mobile App Development';
+    }
+    if (raw.includes('seo') || raw === 'inquiry:service:seo' || raw === 'inquiry_seo' || raw === '🔍 seo') {
+      return 'Search Engine Optimization (SEO)';
+    }
+    if (raw.includes('content') || raw === 'inquiry:service:content' || raw === 'inquiry_content' || raw === '✍️ content') {
+      return 'Content Writing';
+    }
+    if (raw.includes('ai') || raw.includes('automation') || raw === 'inquiry:service:ai' || raw === 'inquiry_ai' || raw === '🤖 ai & automation') {
+      return 'AI & Automation';
+    }
+    if (raw.includes('cloud') || raw.includes('vps') || raw === 'inquiry:service:cloud' || raw === 'inquiry_cloud' || raw === '☁️ cloud / vps') {
+      return 'Cloud / VPS Infrastructure';
+    }
+    return null;
+  }
+
+  /**
    * Find active (non-closed) inquiry or create a new one
    */
   static async findOrCreateActiveInquiry(
@@ -188,6 +239,142 @@ export class InquiryService {
   }
 
   /**
+   * Handle incoming callback queries from public users clicking inquiry inline buttons
+   */
+  static async handlePublicCallback(
+    cbId: string,
+    telegramUserId: string,
+    chatId: string,
+    username: string,
+    name: string,
+    cbData: string,
+    timings?: any
+  ): Promise<{ action: string; success: boolean }> {
+    await dbConnect();
+
+    const inquiry = await this.findOrCreateActiveInquiry(telegramUserId, {
+      telegramUsername: username,
+      telegramChatId: chatId,
+      name,
+    });
+
+    console.log(`[TELEGRAM_INQUIRY_DEBUG]\nupdateId=callback_${cbId}\ntelegramUserId=${telegramUserId}\nupdateType=callback_query\ncallbackData=${cbData}\nuserRole=PUBLIC\ninquiryState=${inquiry.step || 'SELECT_SERVICE'}\nhandler=handlePublicCallback\nresult=PROCESSING`);
+
+    await TelegramService.answerCallbackQuery(cbId, 'Option selected');
+
+    if (cbData === 'inquiry:human' || cbData === 'inq:human') {
+      inquiry.conversationMode = 'HUMAN';
+      inquiry.status = 'HUMAN_HANDOFF';
+      inquiry.handoffReason = 'User clicked Talk to Human inline button.';
+      inquiry.step = 'SELECT_SERVICE';
+
+      const handoffMessage =
+        `👨‍💻 <b>Connecting You With Our Team</b>\n\n` +
+        `Your requirement needs to be discussed with our team.\n\n` +
+        `I've forwarded your inquiry to an administrator.\n\n` +
+        `<b>Inquiry ID:</b>\n<code>${inquiry.inquiryNumber}</code>\n\n` +
+        `Please continue sending your requirements here.\n\n` +
+        `A team member will respond shortly.`;
+
+      inquiry.messages.push({
+        sender: 'BOT',
+        text: handoffMessage,
+        timestamp: new Date(),
+      });
+      inquiry.lastMessageAt = new Date();
+      await inquiry.save();
+
+      await AuditService.logAction(
+        username || telegramUserId,
+        'INQUIRY_HANDOFF',
+        'Inquiry',
+        inquiry._id.toString(),
+        {
+          inquiryNumber: inquiry.inquiryNumber,
+          telegramUserId,
+          reason: 'User clicked Talk to Human',
+        }
+      );
+
+      await TelegramService.sendMessageRaw(chatId, handoffMessage, {
+        reply_markup: this.getPublicReplyKeyboard(),
+      });
+
+      const adminChatId = process.env.ADMIN_TELEGRAM_ID;
+      if (adminChatId) {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://crm.drdebuggers.com';
+        const adminNotification =
+          `🚨 <b>New Website Inquiry</b>\n\n` +
+          `<b>Inquiry:</b> <code>${inquiry.inquiryNumber}</code>\n` +
+          `<b>Telegram User:</b> @${username || 'N/A'}\n` +
+          `<b>Telegram ID:</b> <code>${telegramUserId}</code>\n` +
+          (name ? `<b>Name:</b> ${name}\n` : '') +
+          `\n<b>Requirement:</b>\n` +
+          `<i>"Talk to Human requested via button"</i>\n\n` +
+          `<b>Status:</b> 🟠 HUMAN HANDOFF`;
+
+        await TelegramService.sendMessageRaw(adminChatId, adminNotification, {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '💬 Open Inquiry', url: `${appUrl}/dashboard/inquiries/${inquiry._id}` },
+                { text: '👤 Take Inquiry', callback_data: `inq:take:${inquiry._id}` },
+              ],
+              [
+                { text: '❌ Close Inquiry', callback_data: `inq:close:${inquiry._id}` },
+              ],
+            ],
+          },
+        });
+      }
+
+      console.log(`[TELEGRAM_INQUIRY_DEBUG]\nupdateId=callback_${cbId}\ntelegramUserId=${telegramUserId}\nupdateType=callback_query\ncallbackData=${cbData}\nuserRole=PUBLIC\ninquiryState=HUMAN_HANDOFF\nhandler=handlePublicCallback\nresult=SUCCESS`);
+
+      return { action: 'inquiry_human_handoff', success: true };
+    }
+
+    if (cbData === 'inquiry:cancel') {
+      inquiry.step = 'SELECT_SERVICE';
+      await inquiry.save();
+      await TelegramService.sendMessageRaw(
+        chatId,
+        `❌ <b>Inquiry Cancelled</b>\n\nYou can start again at any time using /start.`,
+        { reply_markup: this.getPublicReplyKeyboard() }
+      );
+      return { action: 'inquiry_cancelled', success: true };
+    }
+
+    const matchedService = this.mapServiceFromInput(cbData);
+    if (matchedService) {
+      inquiry.service = matchedService;
+      inquiry.step = 'AWAITING_DETAILS';
+      inquiry.conversationMode = 'BOT';
+
+      const promptText =
+        `<b>${matchedService} Inquiry</b>\n\n` +
+        `Great! Please describe your project requirements and any specific features you need:`;
+
+      inquiry.messages.push({
+        sender: 'BOT',
+        text: promptText,
+        timestamp: new Date(),
+      });
+      inquiry.lastMessageAt = new Date();
+      await inquiry.save();
+
+      await TelegramService.sendMessageRaw(chatId, promptText, {
+        reply_markup: this.getPublicReplyKeyboard(),
+      });
+
+      console.log(`[TELEGRAM_INQUIRY_DEBUG]\nupdateId=callback_${cbId}\ntelegramUserId=${telegramUserId}\nupdateType=callback_query\ncallbackData=${cbData}\nuserRole=PUBLIC\ninquiryState=AWAITING_DETAILS\nhandler=handlePublicCallback\nresult=SUCCESS`);
+
+      return { action: 'inquiry_service_selected', success: true };
+    }
+
+    return { action: cbData, success: true };
+  }
+
+  /**
    * Handle an incoming message from an unlinked public Telegram user
    */
   static async handlePublicMessage(
@@ -201,8 +388,9 @@ export class InquiryService {
   ): Promise<{ responseSent: boolean; mode: string }> {
     await dbConnect();
 
-    const trimmedText = text.trim();
+    const trimmedText = (text || '').trim();
     const isStartCommand = trimmedText === '/start' || trimmedText.startsWith('/start ');
+    const isCancelCommand = trimmedText === '/cancel';
 
     const inquiry = await this.findOrCreateActiveInquiry(telegramUserId, {
       telegramUsername: username,
@@ -211,8 +399,62 @@ export class InquiryService {
       initialMessage: isStartCommand ? undefined : trimmedText,
     });
 
+    console.log(`[TELEGRAM_INQUIRY_DEBUG]\nupdateId=msg_${Date.now()}\ntelegramUserId=${telegramUserId}\nupdateType=message\nuserRole=PUBLIC\ninquiryState=${inquiry.step || 'SELECT_SERVICE'}\nhandler=handlePublicMessage\nresult=PROCESSING`);
+
     // =========================================================================
-    // CRITICAL RULE: When conversationMode is HUMAN, NEVER call bot AI handler.
+    // 1. Explicit /start or /cancel command -> Resets to BOT mode & main menu
+    // =========================================================================
+    if (isStartCommand) {
+      inquiry.step = 'SELECT_SERVICE';
+      inquiry.conversationMode = 'BOT';
+      if (inquiry.status === 'HUMAN_HANDOFF') {
+        inquiry.status = 'NEW';
+      }
+      const welcomeText =
+        `👋 <b>Welcome to Dr Debuggers!</b>\n\n` +
+        `I can help you with general information about our services.\n\n` +
+        `<b>What are you looking for?</b>\n\n` +
+        `Examples:\n` +
+        `🌐 Website Development\n` +
+        `📱 Mobile App Development\n` +
+        `🔍 SEO\n` +
+        `✍️ Content\n` +
+        `🤖 AI / Automation\n` +
+        `☁️ Cloud / VPS\n` +
+        `💻 Custom Software\n\n` +
+        `You can also describe your requirement directly.`;
+
+      inquiry.messages.push({
+        sender: 'BOT',
+        text: welcomeText,
+        timestamp: new Date(),
+      });
+      inquiry.lastMessageAt = new Date();
+      await inquiry.save();
+
+      await TelegramService.sendMessageRaw(chatId, welcomeText, {
+        reply_markup: this.getPublicReplyKeyboard(),
+      });
+
+      console.log(`[TELEGRAM_INQUIRY_DEBUG]\nupdateId=msg_${Date.now()}\ntelegramUserId=${telegramUserId}\nupdateType=message\nuserRole=PUBLIC\ninquiryState=SELECT_SERVICE\nhandler=handlePublicMessage\nresult=SENT_WELCOME`);
+
+      return { responseSent: true, mode: 'BOT' };
+    }
+
+    if (isCancelCommand) {
+      inquiry.step = 'SELECT_SERVICE';
+      inquiry.conversationMode = 'BOT';
+      await inquiry.save();
+      await TelegramService.sendMessageRaw(
+        chatId,
+        `❌ <b>Inquiry Cancelled</b>\n\nYou can start again at any time using /start.`,
+        { reply_markup: this.getPublicReplyKeyboard() }
+      );
+      return { responseSent: true, mode: 'BOT' };
+    }
+
+    // =========================================================================
+    // 2. CRITICAL RULE: When conversationMode is HUMAN, NEVER call bot AI handler.
     // Store message, notify admin, and do NOT send automated response.
     // =========================================================================
     if (inquiry.conversationMode === 'HUMAN') {
@@ -293,40 +535,9 @@ export class InquiryService {
         );
       }
 
+      console.log(`[TELEGRAM_INQUIRY_DEBUG]\nupdateId=msg_${Date.now()}\ntelegramUserId=${telegramUserId}\nupdateType=message\nuserRole=PUBLIC\ninquiryState=HUMAN\nhandler=handlePublicMessage\nresult=SAVED_HUMAN_MESSAGE`);
+
       return { responseSent: false, mode: 'HUMAN' };
-    }
-
-    // =========================================================================
-    // In BOT Mode:
-    // =========================================================================
-    if (isStartCommand) {
-      const welcomeText =
-        `👋 <b>Welcome to Dr Debuggers!</b>\n\n` +
-        `I can help you with general information about our services.\n\n` +
-        `<b>What are you looking for?</b>\n\n` +
-        `Examples:\n` +
-        `🌐 Website Development\n` +
-        `📱 Mobile App Development\n` +
-        `🔍 SEO\n` +
-        `✍️ Content\n` +
-        `🤖 AI / Automation\n` +
-        `☁️ Cloud / VPS\n` +
-        `💻 Custom Software\n\n` +
-        `You can also describe your requirement directly.`;
-
-      inquiry.messages.push({
-        sender: 'BOT',
-        text: welcomeText,
-        timestamp: new Date(),
-      });
-      inquiry.lastMessageAt = new Date();
-      await inquiry.save();
-
-      await TelegramService.sendMessageRaw(chatId, welcomeText, {
-        reply_markup: this.getPublicReplyKeyboard(),
-      });
-
-      return { responseSent: true, mode: 'BOT' };
     }
 
     // Record incoming client message
@@ -336,13 +547,168 @@ export class InquiryService {
       timestamp: new Date(),
     });
 
-    // Check if human handoff is required
+    // 1. If currently in AWAITING_DETAILS step, capture project requirements directly
+    if (inquiry.step === 'AWAITING_DETAILS') {
+      const explicitHuman =
+        trimmedText.toLowerCase().includes('talk to human') ||
+        trimmedText.toLowerCase().includes('talk to developer') ||
+        trimmedText.toLowerCase().includes('speak to agent') ||
+        trimmedText.toLowerCase().includes('human agent') ||
+        trimmedText.toLowerCase().includes('customer care');
+
+      if (explicitHuman) {
+        inquiry.conversationMode = 'HUMAN';
+        inquiry.status = 'HUMAN_HANDOFF';
+        inquiry.handoffReason = 'User explicitly requested human assistance.';
+        inquiry.step = 'SELECT_SERVICE';
+
+        const handoffMessage =
+          `👨‍💻 <b>Connecting You With Our Team</b>\n\n` +
+          `Your requirement needs to be discussed with our team.\n\n` +
+          `I've forwarded your inquiry to an administrator.\n\n` +
+          `<b>Inquiry ID:</b>\n<code>${inquiry.inquiryNumber}</code>\n\n` +
+          `Please continue sending your requirements here.\n\n` +
+          `A team member will respond shortly.`;
+
+        inquiry.messages.push({
+          sender: 'SYSTEM',
+          text: `Human handoff triggered: User requested human assistance`,
+          timestamp: new Date(),
+        });
+        inquiry.messages.push({
+          sender: 'BOT',
+          text: handoffMessage,
+          timestamp: new Date(),
+        });
+        inquiry.lastMessageAt = new Date();
+        await inquiry.save();
+
+        await TelegramService.sendMessageRaw(chatId, handoffMessage, {
+          reply_markup: this.getPublicReplyKeyboard(),
+        });
+
+        const adminChatId = process.env.ADMIN_TELEGRAM_ID;
+        if (adminChatId) {
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://crm.drdebuggers.com';
+          await TelegramService.sendMessageRaw(
+            adminChatId,
+            `🚨 <b>New Website Inquiry</b>\n\n<b>Inquiry:</b> <code>${inquiry.inquiryNumber}</code>\n<b>Telegram User:</b> @${username || 'N/A'}\n<b>Telegram ID:</b> <code>${telegramUserId}</code>\n\n<b>Requirement:</b>\n<i>"${trimmedText}"</i>\n\n<b>Status:</b> 🟠 HUMAN HANDOFF`,
+            {
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: '💬 Open Inquiry', url: `${appUrl}/dashboard/inquiries/${inquiry._id}` }, { text: '👤 Take Inquiry', callback_data: `inq:take:${inquiry._id}` }],
+                  [{ text: '❌ Close Inquiry', callback_data: `inq:close:${inquiry._id}` }],
+                ],
+              },
+            }
+          );
+        }
+
+        return { responseSent: true, mode: 'HUMAN' };
+      }
+
+      inquiry.message = trimmedText;
+      inquiry.step = 'AWAITING_CONTACT';
+      inquiry.lastMessageAt = new Date();
+
+      const contactPrompt =
+        `📝 <b>Thank you for sharing your project details!</b>\n\n` +
+        `Please share your <b>Name</b> and <b>Email or Phone Number</b> so our team can prepare a proposal (or send /skip to use your Telegram profile):`;
+
+      inquiry.messages.push({
+        sender: 'BOT',
+        text: contactPrompt,
+        timestamp: new Date(),
+      });
+      await inquiry.save();
+
+      await TelegramService.sendMessageRaw(chatId, contactPrompt, {
+        reply_markup: this.getPublicReplyKeyboard(),
+      });
+
+      console.log(`[TELEGRAM_INQUIRY_DEBUG]\nupdateId=msg_${Date.now()}\ntelegramUserId=${telegramUserId}\nupdateType=message\nuserRole=PUBLIC\ninquiryState=AWAITING_CONTACT\nhandler=handlePublicMessage\nresult=AWAITING_CONTACT_PROMPTED`);
+
+      return { responseSent: true, mode: 'BOT' };
+    }
+
+    // 2. If currently in AWAITING_CONTACT step, capture contact info and finalize submission
+    if (inquiry.step === 'AWAITING_CONTACT') {
+      if (trimmedText.toLowerCase() !== '/skip') {
+        if (!inquiry.name) {
+          inquiry.name = name || trimmedText.split(/[-–,]/)[0].trim();
+        }
+        inquiry.message = `${inquiry.message || ''} [Contact: ${trimmedText}]`.trim();
+      }
+
+      inquiry.step = 'SUBMITTED';
+      inquiry.status = 'NEW';
+      inquiry.lastMessageAt = new Date();
+
+      const confirmMessage =
+        `✅ <b>Inquiry Submitted Successfully!</b>\n\n` +
+        `<b>Inquiry ID:</b> <code>${inquiry.inquiryNumber}</code>\n` +
+        `<b>Service:</b> ${inquiry.service || 'General'}\n\n` +
+        `Thank you! Our team has received your project details and will get back to you shortly.\n\n` +
+        `Feel free to message us here anytime if you have additional details to share.`;
+
+      inquiry.messages.push({
+        sender: 'BOT',
+        text: confirmMessage,
+        timestamp: new Date(),
+      });
+      await inquiry.save();
+
+      await TelegramService.sendMessageRaw(chatId, confirmMessage, {
+        reply_markup: this.getPublicReplyKeyboard(),
+      });
+
+      // Notify Admin of completed public inquiry
+      const adminChatId = process.env.ADMIN_TELEGRAM_ID;
+      if (adminChatId) {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://crm.drdebuggers.com';
+        const adminNotification =
+          `📩 <b>New Public Inquiry Received!</b>\n\n` +
+          `<b>Inquiry:</b> <code>${inquiry.inquiryNumber}</code>\n` +
+          `<b>Service:</b> ${inquiry.service || 'General'}\n` +
+          `<b>Lead:</b> ${inquiry.name || name || 'Anonymous'} (@${username || 'N/A'})\n` +
+          `<b>Telegram ID:</b> <code>${telegramUserId}</code>\n\n` +
+          `<b>Details:</b>\n` +
+          `<i>"${inquiry.message || trimmedText}"</i>\n\n` +
+          `<b>Status:</b> 🟢 NEW INQUIRY`;
+
+        try {
+          await TelegramService.sendMessageRaw(adminChatId, adminNotification, {
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  { text: '💬 Open in CRM', url: `${appUrl}/dashboard/inquiries/${inquiry._id}` },
+                  { text: '👤 Take Inquiry', callback_data: `inq:take:${inquiry._id}` },
+                ],
+              ],
+            },
+          });
+        } catch (notifErr) {
+          console.error('Failed to dispatch admin notification for public inquiry:', notifErr);
+        }
+      }
+
+      console.log(`[TELEGRAM_INQUIRY_DEBUG]\nupdateId=msg_${Date.now()}\ntelegramUserId=${telegramUserId}\nupdateType=message\nuserRole=PUBLIC\ninquiryState=SUBMITTED\nhandler=handlePublicMessage\nresult=INQUIRY_SUBMITTED`);
+
+      // Reset step to SELECT_SERVICE so subsequent messages start cleanly
+      inquiry.step = 'SELECT_SERVICE';
+      await inquiry.save();
+
+      return { responseSent: true, mode: 'BOT' };
+    }
+
+    // 3. Check if human handoff is required (explicit talk to human or complex specs)
     const handoffCheck = this.isHumanHandoffRequired(trimmedText);
 
     if (handoffCheck.required) {
       inquiry.conversationMode = 'HUMAN';
       inquiry.status = 'HUMAN_HANDOFF';
       inquiry.handoffReason = handoffCheck.reason;
+      inquiry.step = 'SELECT_SERVICE';
 
       const handoffMessage =
         `👨‍💻 <b>Connecting You With Our Team</b>\n\n` +
@@ -411,10 +777,44 @@ export class InquiryService {
         });
       }
 
+      console.log(`[TELEGRAM_INQUIRY_DEBUG]\nupdateId=msg_${Date.now()}\ntelegramUserId=${telegramUserId}\nupdateType=message\nuserRole=PUBLIC\ninquiryState=HUMAN_HANDOFF\nhandler=handlePublicMessage\nresult=HANDOFF_TRIGGERED`);
+
       return { responseSent: true, mode: 'HUMAN' };
     }
 
-    // Informational Bot Answers for General Questions
+    // 4. Check if the user selected one of the service buttons
+    const directService = this.mapServiceFromInput(trimmedText);
+    const isServiceButton = [
+      '🌐 web development', '📱 app development', '🔍 seo', '✍️ content', '🤖 ai & automation', '☁️ cloud / vps',
+      'web development', 'mobile app development', 'search engine optimization (seo)', 'content writing', 'ai & automation', 'cloud / vps infrastructure'
+    ].includes(trimmedText.toLowerCase());
+
+    if (directService && isServiceButton) {
+      inquiry.service = directService;
+      inquiry.step = 'AWAITING_DETAILS';
+      inquiry.lastMessageAt = new Date();
+
+      const promptText =
+        `<b>${directService} Inquiry</b>\n\n` +
+        `Great! Please describe your project requirements and any specific features you need:`;
+
+      inquiry.messages.push({
+        sender: 'BOT',
+        text: promptText,
+        timestamp: new Date(),
+      });
+      await inquiry.save();
+
+      await TelegramService.sendMessageRaw(chatId, promptText, {
+        reply_markup: this.getPublicReplyKeyboard(),
+      });
+
+      console.log(`[TELEGRAM_INQUIRY_DEBUG]\nupdateId=msg_${Date.now()}\ntelegramUserId=${telegramUserId}\nupdateType=message\nuserRole=PUBLIC\ninquiryState=AWAITING_DETAILS\nhandler=handlePublicMessage\nresult=SERVICE_SELECTED`);
+
+      return { responseSent: true, mode: 'BOT' };
+    }
+
+    // Default Informational Bot Answers for General Questions in SELECT_SERVICE mode
     const botResponse = this.generateBotAnswer(trimmedText);
 
     inquiry.messages.push({
@@ -428,6 +828,8 @@ export class InquiryService {
     await TelegramService.sendMessageRaw(chatId, botResponse, {
       reply_markup: this.getPublicReplyKeyboard(),
     });
+
+    console.log(`[TELEGRAM_INQUIRY_DEBUG]\nupdateId=msg_${Date.now()}\ntelegramUserId=${telegramUserId}\nupdateType=message\nuserRole=PUBLIC\ninquiryState=SELECT_SERVICE\nhandler=handlePublicMessage\nresult=FAQ_ANSWERED`);
 
     return { responseSent: true, mode: 'BOT' };
   }
