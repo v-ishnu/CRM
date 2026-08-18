@@ -197,6 +197,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     // 4. Delete MongoDB records sequentially
     const Credential = (await import('@/models/Credential')).default;
     const RequestResponse = (await import('@/models/RequestResponse')).default;
+    const Task = (await import('@/models/Task')).default;
+    const TeamPayment = (await import('@/models/TeamPayment')).default;
 
     await Client.deleteOne({ _id: id });
     await Project.deleteMany({ clientId: id });
@@ -206,6 +208,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     await DataRequest.deleteMany({ clientId: id });
     await Credential.deleteMany({ clientId: id });
     await RequestResponse.deleteMany({ clientId: id });
+    await Task.deleteMany({ clientId: id });
+    await TeamPayment.deleteMany({ projectId: { $in: projectIds } });
 
     // Delete associated entity audit logs to ensure clean activity records
     await AuditLog.deleteMany({
