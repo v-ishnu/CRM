@@ -14,20 +14,20 @@ interface Payment {
   transactionReference?: string;
   status: 'PENDING' | 'COMPLETED' | 'FAILED' | 'REFUNDED';
   notes?: string;
-  clientId: {
+  clientId?: {
     _id: string;
     name: string;
     clientCode: string;
-  };
-  projectId: {
+  } | null;
+  projectId?: {
     _id: string;
     name: string;
     projectCode: string;
-  };
+  } | null;
   invoiceId?: {
     _id: string;
     invoiceNumber: string;
-  };
+  } | null;
 }
 
 interface ClientBrief {
@@ -77,7 +77,7 @@ export default function PaymentsPage() {
 
       const res = await fetch(`/api/payments?${query.toString()}`);
       const json = await res.json();
-      if (json.success) {
+      if (json.success && Array.isArray(json.data)) {
         setPayments(json.data);
       }
     } catch (err) {
@@ -128,7 +128,7 @@ export default function PaymentsPage() {
     }));
     
     // Filter projects matching selected client
-    const matches = projectsList.filter((p) => p.clientId.toString() === clientId || (p.clientId as any)._id === clientId);
+    const matches = projectsList.filter((p) => p.clientId?.toString() === clientId || (p.clientId as any)?._id === clientId);
     setFilteredProjects(matches);
   };
 
@@ -283,16 +283,24 @@ export default function PaymentsPage() {
                   <tr key={p._id} className="hover:bg-slate-900/20 transition-all">
                     <td className="px-4 sm:px-6 py-4 font-bold text-slate-200">{p.paymentNumber}</td>
                     <td className="px-4 sm:px-6 py-4">
-                      <Link
-                        href={`/dashboard/clients/${p.clientId._id}`}
-                        className="font-medium text-indigo-400 hover:underline"
-                      >
-                        {p.clientId.name}
-                      </Link>
-                      <div className="text-xs text-slate-500 mt-0.5">Code: {p.clientId.clientCode}</div>
+                      {p.clientId ? (
+                        <>
+                          <Link
+                            href={`/dashboard/clients/${p.clientId._id}`}
+                            className="font-medium text-indigo-400 hover:underline"
+                          >
+                            {p.clientId.name}
+                          </Link>
+                          <div className="text-xs text-slate-500 mt-0.5">Code: {p.clientId.clientCode}</div>
+                        </>
+                      ) : (
+                        <span className="text-slate-500 italic">Unassigned Client</span>
+                      )}
                     </td>
                     <td className="px-4 sm:px-6 py-4">
-                      <div className="text-slate-350">{p.projectId.name}</div>
+                      <div className="text-slate-350">
+                        {p.projectId?.name || <span className="text-slate-500 italic">Unassigned Project</span>}
+                      </div>
                       <div className="text-xs text-slate-500 mt-0.5">
                         {p.invoiceId ? `Invoice: ${p.invoiceId.invoiceNumber}` : 'Direct Deposit'}
                       </div>
@@ -304,10 +312,10 @@ export default function PaymentsPage() {
                       )}
                     </td>
                     <td className="px-4 sm:px-6 py-4 text-slate-400 whitespace-nowrap">
-                      {new Date(p.paymentDate).toLocaleDateString('en-IN')}
+                      {p.paymentDate ? new Date(p.paymentDate).toLocaleDateString('en-IN') : '-'}
                     </td>
                     <td className="px-4 sm:px-6 py-4 text-right font-bold text-slate-100 whitespace-nowrap">
-                      {p.currency} {p.amount.toLocaleString('en-IN')}
+                      {p.currency} {p.amount ? p.amount.toLocaleString('en-IN') : 0}
                     </td>
                     <td className="px-4 sm:px-6 py-4 text-right">{getStatusBadge(p.status)}</td>
                   </tr>

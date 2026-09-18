@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/lib/db/connect';
 import Payment from '@/models/Payment';
 import Client from '@/models/Client';
+import Project from '@/models/Project';
+import Invoice from '@/models/Invoice';
 import { PaymentService } from '@/services/payment.service';
 import { NotificationService } from '@/services/notification.service';
 
@@ -32,6 +34,7 @@ export async function GET(req: NextRequest) {
     const payments = await Payment.find(query)
       .populate('clientId', 'name clientCode company')
       .populate('projectId', 'name projectCode')
+      .populate('invoiceId', 'invoiceNumber')
       .sort({ paymentDate: -1 });
 
     return NextResponse.json({ success: true, data: payments });

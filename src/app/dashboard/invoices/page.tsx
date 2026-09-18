@@ -13,15 +13,15 @@ interface Invoice {
   invoiceDate: string;
   dueDate?: string;
   telegramSent: boolean;
-  clientId: {
+  clientId?: {
     _id: string;
     name: string;
     clientCode: string;
-    telegramConnected: boolean;
-  };
-  projectId: {
+    telegramConnected?: boolean;
+  } | null;
+  projectId?: {
     name: string;
-  };
+  } | null;
 }
 
 export default function InvoicesPage() {
@@ -42,7 +42,7 @@ export default function InvoicesPage() {
 
       const res = await fetch(`/api/invoices?${query.toString()}`);
       const json = await res.json();
-      if (json.success) {
+      if (json.success && Array.isArray(json.data)) {
         setInvoices(json.data);
       }
     } catch (err) {
@@ -191,23 +191,31 @@ export default function InvoicesPage() {
                   <tr key={inv._id} className="hover:bg-slate-900/20 transition-all">
                     <td className="px-4 sm:px-6 py-4 font-bold text-slate-200">{inv.invoiceNumber}</td>
                     <td className="px-4 sm:px-6 py-4">
-                      <Link
-                        href={`/dashboard/clients/${inv.clientId._id}`}
-                        className="font-medium text-indigo-400 hover:underline"
-                      >
-                        {inv.clientId.name}
-                      </Link>
-                      <div className="text-xs text-slate-500 mt-0.5">Code: {inv.clientId.clientCode}</div>
+                      {inv.clientId ? (
+                        <>
+                          <Link
+                            href={`/dashboard/clients/${inv.clientId._id}`}
+                            className="font-medium text-indigo-400 hover:underline"
+                          >
+                            {inv.clientId.name}
+                          </Link>
+                          <div className="text-xs text-slate-500 mt-0.5">Code: {inv.clientId.clientCode}</div>
+                        </>
+                      ) : (
+                        <span className="text-slate-500 italic">Unassigned Client</span>
+                      )}
                     </td>
-                    <td className="px-4 sm:px-6 py-4 text-slate-350">{inv.projectId.name}</td>
+                    <td className="px-4 sm:px-6 py-4 text-slate-350">
+                      {inv.projectId?.name || <span className="text-slate-500 italic">Unassigned Project</span>}
+                    </td>
                     <td className="px-4 sm:px-6 py-4 text-slate-400 whitespace-nowrap">
-                      {new Date(inv.invoiceDate).toLocaleDateString('en-IN')}
+                      {inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString('en-IN') : '-'}
                     </td>
                     <td className="px-4 sm:px-6 py-4 text-slate-400 whitespace-nowrap">
                       {inv.dueDate ? new Date(inv.dueDate).toLocaleDateString('en-IN') : 'On Receipt'}
                     </td>
                     <td className="px-4 sm:px-6 py-4 text-right font-bold text-slate-100 whitespace-nowrap">
-                      {inv.currency} {inv.total.toLocaleString('en-IN')}
+                      {inv.currency} {inv.total ? inv.total.toLocaleString('en-IN') : 0}
                     </td>
                     <td className="px-4 sm:px-6 py-4 text-center">
                       {inv.telegramSent ? (
@@ -230,14 +238,14 @@ export default function InvoicesPage() {
                         </a>
                         <button
                           onClick={() => handleSendTelegram(inv._id)}
-                          disabled={!inv.clientId.telegramConnected || sendingId === inv._id}
+                          disabled={!inv.clientId?.telegramConnected || sendingId === inv._id}
                           className={`p-2 rounded-lg border text-xs font-semibold flex items-center transition-all
-                            ${inv.clientId.telegramConnected 
+                            ${inv.clientId?.telegramConnected 
                               ? 'bg-indigo-650/15 hover:bg-indigo-650/25 border-indigo-500/20 text-indigo-400' 
                               : 'bg-slate-900 border-slate-800 text-slate-650 cursor-not-allowed'
                             }
                           `}
-                          title={inv.clientId.telegramConnected ? 'Send via Telegram' : 'Client Telegram not connected'}
+                          title={inv.clientId?.telegramConnected ? 'Send via Telegram' : 'Client Telegram not connected'}
                         >
                           {sendingId === inv._id ? (
                             <Loader2 className="w-4 h-4 animate-spin" />

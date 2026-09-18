@@ -352,7 +352,7 @@ export class InvoiceService {
     }
 
     const invoices = await Invoice.find(query)
-      .populate('clientId', 'name company clientCode')
+      .populate('clientId', 'name company clientCode telegramConnected')
       .populate('projectId', 'name projectCode')
       .sort({ createdAt: -1 });
 
