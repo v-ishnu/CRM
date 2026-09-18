@@ -33,29 +33,49 @@ export class ProjectService {
   static async createProject(projectData: Partial<IProject>, actor: string): Promise<IProject> {
     await dbConnect();
 
-    let code = projectData.projectCode?.toUpperCase().trim();
-    if (!code) {
-      code = await this.generateNextProjectCode();
-    } else {
-      const existingProject = await Project.findOne({ projectCode: code });
-      if (existingProject) {
-        throw new Error(`Project with code "${code}" already exists`);
-      }
-    }
-
     // Verify client exists
     const client = await Client.findById(projectData.clientId);
     if (!client) {
       throw new Error('Client not found');
     }
 
-    const project = new Project({
-      ...projectData,
-      projectCode: code,
-      status: projectData.status || 'PLANNED',
-    });
+    const isAutoCode = !projectData.projectCode;
+    let attempts = 0;
+    let savedProject: any = null;
 
-    const savedProject = await project.save();
+    while (attempts < 5) {
+      try {
+        let code = projectData.projectCode?.toUpperCase().trim();
+        if (!code) {
+          code = await this.generateNextProjectCode();
+        } else if (attempts === 0) {
+          const existingProject = await Project.findOne({ projectCode: code });
+          if (existingProject) {
+            throw new Error(`Project with code "${code}" already exists`);
+          }
+        }
+
+        const project = new Project({
+          ...projectData,
+          projectCode: code,
+          status: projectData.status || 'PLANNED',
+        });
+
+        savedProject = await project.save();
+        break;
+      } catch (err: any) {
+        if (isAutoCode && err.code === 11000 && attempts < 4) {
+          attempts++;
+          await new Promise((resolve) => setTimeout(resolve, 20 + Math.random() * 50));
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    if (!savedProject) {
+      throw new Error('Failed to create project due to concurrency conflict after 5 attempts');
+    }
 
     await AuditService.logAction(actor, 'PROJECT_CREATED', 'Project', savedProject._id, {
       name: savedProject.name,

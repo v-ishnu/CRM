@@ -28,20 +28,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       );
     }
 
-    // Regenerate on-demand if missing in storage metadata
-    if (!invoice.pdfStoragePath) {
+    let fileBuffer: Buffer | null = null;
+    if (invoice.pdfStoragePath) {
+      try {
+        fileBuffer = await StorageService.getInvoicePDF(invoice.pdfStoragePath);
+      } catch (storageErr) {
+        console.warn('PDF not found at recorded path, regenerating on-demand:', storageErr);
+      }
+    }
+
+    // Regenerate on-demand if missing in storage metadata or fileBuffer couldn't be loaded
+    if (!fileBuffer) {
       const generatedInvoice = await InvoiceService.generatePDF(id);
       invoice.pdfStoragePath = generatedInvoice.pdfStoragePath;
+      fileBuffer = await StorageService.getInvoicePDF(invoice.pdfStoragePath!);
     }
-
-    if (!invoice.pdfStoragePath) {
-      return NextResponse.json(
-        { success: false, error: { code: 'FILE_NOT_FOUND', message: 'Invoice PDF file could not be generated' } },
-        { status: 500 }
-      );
-    }
-
-    const fileBuffer = await StorageService.getInvoicePDF(invoice.pdfStoragePath);
 
     return new Response(new Uint8Array(fileBuffer), {
       headers: {

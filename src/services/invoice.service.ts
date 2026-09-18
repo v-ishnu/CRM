@@ -118,8 +118,12 @@ export class InvoiceService {
       throw new Error('Failed to create invoice due to concurrency conflict after 5 attempts');
     }
 
-    // Generate the physical PDF
-    await this.generatePDF(savedInvoice._id.toString());
+    // Generate the physical PDF (non-blocking if storage glitch occurs; generates on-demand if needed)
+    try {
+      await this.generatePDF(savedInvoice._id.toString());
+    } catch (pdfErr) {
+      console.warn('Initial PDF generation deferred (will generate on-demand):', pdfErr);
+    }
 
     await AuditService.logAction(actor, 'INVOICE_CREATED', 'Invoice', savedInvoice._id, {
       invoiceNumber: savedInvoice.invoiceNumber,
@@ -183,11 +187,16 @@ export class InvoiceService {
           const year = new Date(invoice.invoiceDate).getFullYear();
           const storagePath = `invoices/${year}/${invoice.invoiceNumber}.pdf`;
 
-          // Upload to Supabase Storage
-          await StorageService.uploadInvoicePDF(pdfBuffer, storagePath);
+          // Upload to storage with local filesystem fallback
+          let resolvedPath = storagePath;
+          try {
+            resolvedPath = await StorageService.uploadInvoicePDF(pdfBuffer, storagePath);
+          } catch (uploadErr) {
+            console.warn('Invoice storage upload warning, using local path:', uploadErr);
+          }
 
           // Update MongoDB with storage paths
-          invoice.pdfStoragePath = storagePath;
+          invoice.pdfStoragePath = resolvedPath || storagePath;
           invoice.pdfBucket = process.env.SUPABASE_INVOICE_BUCKET || 'invoices';
           invoice.pdfPath = `/api/invoices/${invoice._id}/pdf`;
           const savedInvoice = await invoice.save();

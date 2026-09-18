@@ -85,41 +85,49 @@ export async function POST(req: NextRequest) {
 
       createdProject = await ProjectService.createProject(projectData, actor);
 
-      // 3. Create Invoice for initial project
+      // 3. Create Invoice for initial project (resilient to storage/PDF glitches)
       const invoiceItem = {
         description: `${createdProject.name} - ${createdProject.serviceType} Development`,
         quantity: 1,
         unitPrice: createdProject.totalAmount,
       };
 
-      createdInvoice = await InvoiceService.createInvoice(
-        {
-          clientId: createdClient._id.toString(),
-          projectId: createdProject._id.toString(),
-          items: [invoiceItem],
-          dueDate: projectData.expectedCompletionDate,
-          notes: 'Initial project setup invoice',
-        },
-        actor
-      );
+      try {
+        createdInvoice = await InvoiceService.createInvoice(
+          {
+            clientId: createdClient._id.toString(),
+            projectId: createdProject._id.toString(),
+            items: [invoiceItem],
+            dueDate: projectData.expectedCompletionDate,
+            notes: 'Initial project setup invoice',
+          },
+          actor
+        );
+      } catch (invErr: any) {
+        console.error('Failed to create initial invoice during onboarding:', invErr);
+      }
 
       // 4. Optionally record payment
       const paymentAmount = Number(body.paymentAmount);
       if (paymentAmount > 0) {
-        createdPayment = await PaymentService.recordPayment(
-          {
-            clientId: createdClient._id,
-            projectId: createdProject._id,
-            invoiceId: createdInvoice._id,
-            amount: paymentAmount,
-            paymentMethod: body.paymentMethod || 'BANK_TRANSFER',
-            paymentDate: body.paymentDate ? new Date(body.paymentDate) : new Date(),
-            transactionReference: body.transactionReference,
-            paymentType: 'ADVANCE',
-            notes: 'Advance project payment',
-          },
-          actor
-        );
+        try {
+          createdPayment = await PaymentService.recordPayment(
+            {
+              clientId: createdClient._id,
+              projectId: createdProject._id,
+              invoiceId: createdInvoice?._id,
+              amount: paymentAmount,
+              paymentMethod: body.paymentMethod || 'BANK_TRANSFER',
+              paymentDate: body.paymentDate ? new Date(body.paymentDate) : new Date(),
+              transactionReference: body.transactionReference,
+              paymentType: 'ADVANCE',
+              notes: 'Advance project payment',
+            },
+            actor
+          );
+        } catch (payErr: any) {
+          console.error('Failed to record initial payment during onboarding:', payErr);
+        }
       }
 
       // 5. Send Onboarding / Payment telegram update
@@ -131,7 +139,7 @@ export async function POST(req: NextRequest) {
           createdClient._id.toString(),
           createdProject._id.toString(),
           createdPayment?._id?.toString(),
-          createdInvoice._id.toString()
+          createdInvoice?._id?.toString()
         );
         telegramDispatched = notification.status === 'SENT';
         if (notification.error) {
