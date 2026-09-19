@@ -55,7 +55,7 @@ export class ClientService {
     });
 
     const savedClient = await client.save();
-    
+
     await AuditService.logAction(actor, 'CLIENT_CREATED', 'Client', savedClient._id, {
       name: savedClient.name,
       code: savedClient.clientCode,
@@ -163,7 +163,7 @@ export class ClientService {
     }
 
     const token = crypto.randomBytes(16).toString('hex');
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour expiration
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hour expiration
 
     client.telegramConnectionToken = token;
     client.telegramConnectionTokenExpiresAt = expiresAt;
@@ -206,7 +206,7 @@ export class ClientService {
     client.telegramUserId = telegramInfo.telegramUserId;
     client.telegramUsername = telegramInfo.telegramUsername || '';
     client.telegramChatId = telegramInfo.telegramChatId;
-    
+
     // Invalidate token
     client.telegramConnectionToken = undefined;
     client.telegramConnectionTokenExpiresAt = undefined;
