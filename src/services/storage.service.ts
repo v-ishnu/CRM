@@ -211,6 +211,9 @@ export class StorageService {
 
     // Local static URL fallback
     const fileName = path.basename(storagePath);
+    if (storagePath.includes('task-submissions') || storagePath.startsWith('uploads/')) {
+      return `/uploads/${fileName}`;
+    }
     return `/invoices/${fileName}`;
   }
 
@@ -218,15 +221,22 @@ export class StorageService {
    * Delete an invoice PDF from local storage and Supabase Storage
    */
   static async deleteInvoicePDF(storagePath: string): Promise<boolean> {
+    return this.deleteFile(storagePath, 'invoices');
+  }
+
+  /**
+   * Delete any file from storage (Supabase, local filesystem, or test mock)
+   */
+  static async deleteFile(storagePath: string, subfolder: 'invoices' | 'uploads' = 'uploads'): Promise<boolean> {
     // 1. Delete from local filesystem
     try {
       const fileName = path.basename(storagePath);
-      const localPath = path.join(process.cwd(), 'public', 'invoices', fileName);
+      const localPath = path.join(process.cwd(), 'public', subfolder, fileName);
       if (fs.existsSync(localPath)) {
         fs.unlinkSync(localPath);
       }
     } catch (fsErr) {
-      console.warn('Local invoice delete warning:', fsErr);
+      console.warn('Local file delete warning:', fsErr);
     }
 
     // 2. Delete from test mock storage
@@ -246,5 +256,44 @@ export class StorageService {
     }
 
     return true;
+  }
+
+  /**
+   * Download any file buffer from storage (mock, local, or Supabase)
+   */
+  static async downloadFile(storagePath: string, subfolder: 'invoices' | 'uploads' = 'uploads'): Promise<Buffer> {
+    // 1. Check in-memory mock if in test environment
+    if (globalThis.mockStorage && globalThis.mockStorage[storagePath]) {
+      return globalThis.mockStorage[storagePath];
+    }
+
+    // 2. Check local filesystem
+    const fileName = path.basename(storagePath);
+    const localPath = path.join(process.cwd(), 'public', subfolder, fileName);
+    if (fs.existsSync(localPath)) {
+      try {
+        return fs.readFileSync(localPath);
+      } catch (readErr) {
+        console.warn('Local file read warning:', readErr);
+      }
+    }
+
+    // 3. Check Supabase Storage if configured
+    if (this.isConfigured()) {
+      try {
+        const { data, error } = await supabase!.storage
+          .from(bucketName)
+          .download(storagePath);
+
+        if (!error && data) {
+          const arrayBuffer = await data.arrayBuffer();
+          return Buffer.from(arrayBuffer);
+        }
+      } catch (cloudErr: any) {
+        console.warn('Supabase download error:', cloudErr.message);
+      }
+    }
+
+    throw new Error(`File not found in storage: ${storagePath}`);
   }
 }

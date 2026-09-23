@@ -8,13 +8,14 @@ export async function middleware(req: NextRequest) {
   const isAuthRoute = pathname.startsWith('/api/auth');
   const isWebhookRoute = pathname.startsWith('/api/telegram/webhook');
   const isLatencyRoute = pathname.startsWith('/api/telegram/test-latency');
+  const isTeamInviteRoute = pathname.startsWith('/team/invite') || pathname.startsWith('/api/team/invite');
   const isLoginRoute = pathname === '/login';
   
   // Grab session cookie
   const sessionToken = req.cookies.get('session')?.value;
 
   // Let public routes pass
-  if (isAuthRoute || isWebhookRoute || isLatencyRoute) {
+  if (isAuthRoute || isWebhookRoute || isLatencyRoute || isTeamInviteRoute) {
     return NextResponse.next();
   }
 

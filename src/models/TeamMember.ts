@@ -11,6 +11,31 @@ export type TeamPermission =
   | 'MANAGE_PROJECT'
   | 'VIEW_TASKS';
 
+export interface IBankDetails {
+  accountHolderName?: string;
+  accountNumberEncrypted?: {
+    ciphertext: string;
+    iv: string;
+    authTag: string;
+  };
+  ifscEncrypted?: {
+    ciphertext: string;
+    iv: string;
+    authTag: string;
+  };
+  bankName?: string;
+  upiIdEncrypted?: {
+    ciphertext: string;
+    iv: string;
+    authTag: string;
+  };
+  accountNumberMasked?: string;
+  ifscMasked?: string;
+  upiIdMasked?: string;
+  isComplete: boolean;
+  updatedAt?: Date;
+}
+
 export interface ITeamMember extends Document {
   name: string;
   email: string;
@@ -25,6 +50,7 @@ export interface ITeamMember extends Document {
   status: 'ACTIVE' | 'INACTIVE' | 'DEACTIVATED';
   permissions: TeamPermission[];
   isPrimaryAdmin?: boolean;
+  bankDetails?: IBankDetails;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -94,6 +120,30 @@ const TeamMemberSchema = new Schema<ITeamMember>(
     isPrimaryAdmin: {
       type: Boolean,
       default: false,
+    },
+    bankDetails: {
+      accountHolderName: { type: String, trim: true },
+      accountNumberEncrypted: {
+        ciphertext: { type: String },
+        iv: { type: String },
+        authTag: { type: String },
+      },
+      ifscEncrypted: {
+        ciphertext: { type: String },
+        iv: { type: String },
+        authTag: { type: String },
+      },
+      bankName: { type: String, trim: true },
+      upiIdEncrypted: {
+        ciphertext: { type: String },
+        iv: { type: String },
+        authTag: { type: String },
+      },
+      accountNumberMasked: { type: String },
+      ifscMasked: { type: String },
+      upiIdMasked: { type: String },
+      isComplete: { type: Boolean, default: false },
+      updatedAt: { type: Date },
     },
   },
   {

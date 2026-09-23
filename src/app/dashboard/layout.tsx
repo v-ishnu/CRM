@@ -19,6 +19,7 @@ import {
   Menu,
   X,
   User,
+  Server,
 } from 'lucide-react';
 
 interface SidebarItem {
@@ -39,6 +40,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'Projects', href: '/dashboard/projects', icon: FolderKanban },
     { name: 'Team Members', href: '/dashboard/team', icon: UserCheck },
     { name: 'Tasks', href: '/dashboard/tasks', icon: CheckSquare },
+    { name: 'Hosting', href: '/dashboard/hosting', icon: Server },
     { name: 'Team Payments', href: '/dashboard/team-payments', icon: Wallet },
     { name: 'Client Payments', href: '/dashboard/payments', icon: CreditCard },
     { name: 'Invoices', href: '/dashboard/invoices', icon: FileText },

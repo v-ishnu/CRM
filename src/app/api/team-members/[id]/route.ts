@@ -16,6 +16,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const actor = req.headers.get('x-user-email') || 'admin';
+  const role = req.headers.get('x-user-role');
+  if (role && role !== 'ADMIN') {
+    return NextResponse.json(
+      { success: false, error: { code: 'FORBIDDEN', message: 'Admin access required' } },
+      { status: 403 }
+    );
+  }
   try {
     const { id } = await params;
     const body = await req.json();
@@ -31,6 +38,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const actor = req.headers.get('x-user-email') || 'admin';
+  const role = req.headers.get('x-user-role');
+  if (role && role !== 'ADMIN') {
+    return NextResponse.json(
+      { success: false, error: { code: 'FORBIDDEN', message: 'Admin access required' } },
+      { status: 403 }
+    );
+  }
   try {
     const { id } = await params;
     await TeamMemberService.deleteTeamMember(id, actor);

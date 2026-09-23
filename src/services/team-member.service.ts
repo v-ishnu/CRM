@@ -1,10 +1,19 @@
 import crypto from 'crypto';
 import mongoose from 'mongoose';
-import TeamMember, { ITeamMember, TeamPermission, TeamRole } from '@/models/TeamMember';
+import TeamMember, { ITeamMember, TeamPermission, TeamRole, IBankDetails } from '@/models/TeamMember';
 import Project from '@/models/Project';
 import Task from '@/models/Task';
+import { encrypt, decrypt } from '@/lib/security/encryption';
 import { AuditService } from './audit.service';
 import { dbConnect } from '@/lib/db/connect';
+
+export interface BankDetailsInputDTO {
+  accountHolderName?: string;
+  accountNumber?: string;
+  ifsc?: string;
+  bankName?: string;
+  upiId?: string;
+}
 
 export interface CreateTeamMemberDTO {
   name: string;
@@ -15,6 +24,7 @@ export interface CreateTeamMemberDTO {
   telegramUsername?: string;
   permissions?: TeamPermission[];
   isPrimaryAdmin?: boolean;
+  bankDetails?: BankDetailsInputDTO;
 }
 
 export interface UpdateTeamMemberDTO {
@@ -26,6 +36,7 @@ export interface UpdateTeamMemberDTO {
   telegramUsername?: string;
   permissions?: TeamPermission[];
   status?: 'ACTIVE' | 'INACTIVE' | 'DEACTIVATED';
+  bankDetails?: BankDetailsInputDTO;
 }
 
 export class TeamMemberService {
@@ -47,6 +58,8 @@ export class TeamMemberService {
           ? ['VIEW_CREDENTIALS', 'REQUEST_CREDENTIALS', 'MANAGE_TASKS', 'VIEW_PROJECT', 'VIEW_CLIENT', 'MANAGE_PROJECT', 'VIEW_TASKS']
           : ['VIEW_PROJECT', 'VIEW_TASKS']);
 
+    const bankDetails = this.buildEncryptedBankDetails(data.bankDetails);
+
     const teamMember = new TeamMember({
       name: data.name.trim(),
       email,
@@ -58,6 +71,7 @@ export class TeamMemberService {
       status: 'ACTIVE',
       permissions: defaultPermissions,
       isPrimaryAdmin: data.isPrimaryAdmin || false,
+      bankDetails,
     });
 
     await teamMember.save();
@@ -72,6 +86,7 @@ export class TeamMemberService {
         email: teamMember.email,
         role: teamMember.role,
         permissions: teamMember.permissions,
+        hasBankDetails: !!bankDetails?.isComplete,
       },
     });
 
@@ -108,6 +123,19 @@ export class TeamMemberService {
     if (data.telegramUsername !== undefined) teamMember.telegramUsername = data.telegramUsername.trim() || undefined;
     if (data.permissions !== undefined) teamMember.permissions = data.permissions;
     if (data.status !== undefined) teamMember.status = data.status;
+
+    if (data.bankDetails !== undefined) {
+      teamMember.bankDetails = this.buildEncryptedBankDetails(data.bankDetails, teamMember.bankDetails);
+      await AuditService.log({
+        actor,
+        action: 'BANK_DETAILS_UPDATED',
+        entityType: 'TeamMember',
+        entityId: teamMember._id,
+        metadata: {
+          isComplete: teamMember.bankDetails?.isComplete,
+        },
+      });
+    }
 
     await teamMember.save();
 
@@ -315,7 +343,7 @@ export class TeamMemberService {
       })
     );
 
-    return enriched;
+    return enriched.map((m) => this.sanitizeBankDetails(m));
   }
 
   /**
@@ -338,10 +366,164 @@ export class TeamMemberService {
       Task.find({ assignedTo: member._id }).populate('projectId', 'name projectCode').sort({ dueDate: 1 }).lean(),
     ]);
 
-    return {
+    return this.sanitizeBankDetails({
       ...member,
       assignedProjects: projects,
       assignedTasks: tasks,
+    });
+  }
+
+  /**
+   * Helper to sanitize bank details (strips encrypted ciphertext, iv, authTag from response)
+   */
+  static sanitizeBankDetails(member: any): any {
+    if (!member || !member.bankDetails) return member;
+    const sanitized = { ...member };
+    const { accountNumberEncrypted: _a, ifscEncrypted: _i, upiIdEncrypted: _u, ...safeBank } = member.bankDetails;
+    sanitized.bankDetails = safeBank;
+    return sanitized;
+  }
+
+  /**
+   * Encrypt and mask bank details input
+   */
+  static buildEncryptedBankDetails(
+    input?: BankDetailsInputDTO,
+    existing?: IBankDetails
+  ): IBankDetails | undefined {
+    if (!input) return existing;
+
+    const result: IBankDetails = existing
+      ? { ...existing }
+      : { isComplete: false };
+
+    if (input.accountHolderName !== undefined) {
+      result.accountHolderName = input.accountHolderName.trim();
+    }
+    if (input.bankName !== undefined) {
+      result.bankName = input.bankName.trim();
+    }
+
+    if (input.accountNumber !== undefined) {
+      const acc = input.accountNumber.trim();
+      if (acc) {
+        result.accountNumberEncrypted = encrypt(acc, 'accountNumber');
+        const last4 = acc.length >= 4 ? acc.slice(-4) : acc;
+        result.accountNumberMasked = `•••• •••• ${last4}`;
+      } else {
+        result.accountNumberEncrypted = undefined;
+        result.accountNumberMasked = undefined;
+      }
+    }
+
+    if (input.ifsc !== undefined) {
+      const ifsc = input.ifsc.trim().toUpperCase();
+      if (ifsc) {
+        result.ifscEncrypted = encrypt(ifsc, 'ifsc');
+        const first4 = ifsc.length >= 4 ? ifsc.slice(0, 4) : ifsc;
+        result.ifscMasked = `${first4}•••••••`;
+      } else {
+        result.ifscEncrypted = undefined;
+        result.ifscMasked = undefined;
+      }
+    }
+
+    if (input.upiId !== undefined) {
+      const upi = input.upiId.trim();
+      if (upi) {
+        result.upiIdEncrypted = encrypt(upi, 'upiId');
+        if (upi.includes('@')) {
+          const [handle, domain] = upi.split('@');
+          const prefix = handle.length > 2 ? handle.slice(0, 2) : handle.slice(0, 1);
+          result.upiIdMasked = `${prefix}••••@${domain}`;
+        } else {
+          result.upiIdMasked = `${upi.slice(0, 2)}••••`;
+        }
+      } else {
+        result.upiIdEncrypted = undefined;
+        result.upiIdMasked = undefined;
+      }
+    }
+
+    result.isComplete = !!(
+      result.accountHolderName &&
+      result.accountNumberMasked &&
+      result.ifscMasked
+    );
+    result.updatedAt = new Date();
+
+    return result;
+  }
+
+  /**
+   * Reveal decrypted bank details for authorized admin
+   */
+  static async revealBankDetails(
+    id: string,
+    actor: string = 'system'
+  ): Promise<{
+    accountHolderName?: string;
+    bankName?: string;
+    accountNumber?: string;
+    ifsc?: string;
+    upiId?: string;
+    isComplete: boolean;
+  }> {
+    await dbConnect();
+
+    const member = await TeamMember.findById(id);
+    if (!member) {
+      throw new Error('Team member not found');
+    }
+
+    if (!member.bankDetails) {
+      throw new Error('No bank details on file for this team member');
+    }
+
+    let accountNumber: string | undefined;
+    let ifsc: string | undefined;
+    let upiId: string | undefined;
+
+    if (member.bankDetails.accountNumberEncrypted) {
+      try {
+        accountNumber = decrypt(member.bankDetails.accountNumberEncrypted as any);
+      } catch (err: any) {
+        console.warn('Failed to decrypt account number:', err);
+      }
+    }
+    if (member.bankDetails.ifscEncrypted) {
+      try {
+        ifsc = decrypt(member.bankDetails.ifscEncrypted as any);
+      } catch (err: any) {
+        console.warn('Failed to decrypt IFSC:', err);
+      }
+    }
+    if (member.bankDetails.upiIdEncrypted) {
+      try {
+        upiId = decrypt(member.bankDetails.upiIdEncrypted as any);
+      } catch (err: any) {
+        console.warn('Failed to decrypt UPI ID:', err);
+      }
+    }
+
+    await AuditService.log({
+      actor,
+      action: 'BANK_DETAILS_REVEALED',
+      entityType: 'TeamMember',
+      entityId: member._id,
+      metadata: {
+        memberEmail: member.email,
+        memberName: member.name,
+      },
+    });
+
+    return {
+      accountHolderName: member.bankDetails.accountHolderName,
+      bankName: member.bankDetails.bankName,
+      accountNumber,
+      ifsc,
+      upiId,
+      isComplete: member.bankDetails.isComplete,
     };
   }
 

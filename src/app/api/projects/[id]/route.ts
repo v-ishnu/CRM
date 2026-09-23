@@ -76,34 +76,42 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const newStatus = body.status;
     const notifyClient = body.notifyClient !== false; // Default to true
 
-    // Extract other parameters to update
-    const updatableFields = ['name', 'description', 'serviceType', 'totalAmount', 'currency', 'startDate', 'expectedCompletionDate', 'notes'];
+    // Extract updatable fields including scope and terms
+    const updatableFields = [
+      'name',
+      'description',
+      'serviceType',
+      'totalAmount',
+      'currency',
+      'startDate',
+      'expectedCompletionDate',
+      'notes',
+      'scope',
+      'terms',
+      'status',
+    ];
+
+    const updatePayload: Record<string, any> = {};
     for (const field of updatableFields) {
       if (body[field] !== undefined) {
-        (project as any)[field] = body[field];
+        updatePayload[field] = body[field];
       }
     }
 
-    // Save project fields
-    let updatedProject: any = await project.save();
+    const updatedProject = await ProjectService.updateProject(id, updatePayload, actor);
 
-    // Handle status change explicitly through service to log audit and optionally notify
-    if (newStatus && newStatus !== oldStatus) {
-      updatedProject = await ProjectService.updateProjectStatus(id, newStatus, actor);
-
-      // If status changed and we want to notify client, send Telegram message
-      if (notifyClient) {
-        const client = await Client.findById(updatedProject.clientId);
-        if (client && client.telegramConnected) {
-          try {
-            await NotificationService.sendProjectStatusNotification(
-              client._id.toString(),
-              updatedProject._id.toString(),
-              newStatus
-            );
-          } catch (notifError) {
-            console.error('Failed to dispatch project status notification:', notifError);
-          }
+    // If status changed and we want to notify client, send Telegram message
+    if (newStatus && newStatus !== oldStatus && notifyClient) {
+      const client = await Client.findById(updatedProject.clientId);
+      if (client && client.telegramConnected) {
+        try {
+          await NotificationService.sendProjectStatusNotification(
+            client._id.toString(),
+            updatedProject._id.toString(),
+            newStatus
+          );
+        } catch (notifError) {
+          console.error('Failed to dispatch project status notification:', notifError);
         }
       }
     }

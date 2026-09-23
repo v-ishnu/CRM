@@ -8,11 +8,15 @@ export interface IProject extends Document {
   serviceType: 'WEBSITE' | 'WEB_APPLICATION' | 'MOBILE_APPLICATION' | 'API_DEVELOPMENT' | 'WORDPRESS' | 'ECOMMERCE' | 'MAINTENANCE' | 'OTHER';
   totalAmount: number;
   currency: string;
-  status: 'PLANNED' | 'ONBOARDING' | 'IN_PROGRESS' | 'REVIEW' | 'COMPLETED' | 'CANCELLED' | 'ON_HOLD';
+  status: 'PLANNED' | 'PENDING_AGREEMENT' | 'ACTIVE' | 'ONBOARDING' | 'IN_PROGRESS' | 'REVIEW' | 'COMPLETED' | 'CANCELLED' | 'ON_HOLD';
   startDate?: Date;
   expectedCompletionDate?: Date;
   completionDate?: Date;
   notes?: string;
+  scope?: string;
+  terms?: string;
+  agreementId?: mongoose.Types.ObjectId;
+  requireAgreement?: boolean;
   teamMemberIds?: mongoose.Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
@@ -61,7 +65,7 @@ const ProjectSchema = new Schema<IProject>(
     },
     status: {
       type: String,
-      enum: ['PLANNED', 'ONBOARDING', 'IN_PROGRESS', 'REVIEW', 'COMPLETED', 'CANCELLED', 'ON_HOLD'],
+      enum: ['PLANNED', 'PENDING_AGREEMENT', 'ACTIVE', 'ONBOARDING', 'IN_PROGRESS', 'REVIEW', 'COMPLETED', 'CANCELLED', 'ON_HOLD'],
       default: 'PLANNED',
       required: true,
     },
@@ -76,6 +80,21 @@ const ProjectSchema = new Schema<IProject>(
     },
     notes: {
       type: String,
+    },
+    scope: {
+      type: String,
+    },
+    terms: {
+      type: String,
+    },
+    agreementId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Agreement',
+      index: true,
+    },
+    requireAgreement: {
+      type: Boolean,
+      default: false,
     },
     teamMemberIds: [
       {

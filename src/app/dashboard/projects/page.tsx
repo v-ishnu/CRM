@@ -216,13 +216,23 @@ export default function ProjectsPage() {
                       <div>Due: {proj.expectedCompletionDate ? new Date(proj.expectedCompletionDate).toLocaleDateString() : '—'}</div>
                     </td>
                     <td className="px-4 sm:px-6 py-4 text-right">
-                      <Link
-                        href={`/dashboard/clients/${proj.clientId._id}`}
-                        className="inline-flex items-center px-3 py-1.5 bg-slate-900 hover:bg-indigo-600/10 hover:text-indigo-400 border border-slate-800 hover:border-indigo-500/20 text-slate-355 text-xs font-medium rounded-lg transition-all"
-                      >
-                        <Eye className="w-3.5 h-3.5 mr-1.5" />
-                        Client Profile
-                      </Link>
+                      <div className="inline-flex items-center gap-1.5">
+                        <Link
+                          href={`/dashboard/projects/${proj._id}`}
+                          className="inline-flex items-center px-2.5 py-1.5 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 border border-indigo-500/20 text-xs font-semibold rounded-lg transition-all"
+                        >
+                          <FolderKanban className="w-3.5 h-3.5 mr-1" />
+                          View Project
+                        </Link>
+                        <Link
+                          href={`/dashboard/clients/${proj.clientId._id}`}
+                          className="inline-flex items-center px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-355 text-xs font-medium border border-slate-800 rounded-lg transition-all"
+                          title="Client Profile"
+                        >
+                          <Eye className="w-3.5 h-3.5 mr-1" />
+                          Client
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}

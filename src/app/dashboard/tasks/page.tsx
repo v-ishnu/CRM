@@ -16,12 +16,15 @@ import {
   Send,
   Lock,
   Unlock,
-  ShieldCheck,
   History,
-  DollarSign,
   Coins,
   AlertTriangle,
-  RotateCw,
+  UploadCloud,
+  ExternalLink,
+  FileText,
+  Download,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 export default function TasksPage() {
@@ -52,7 +55,22 @@ export default function TasksPage() {
     agreedAmount: '',
     requiredCredentialIds: [] as string[],
     autoShareCredentials: false,
+    submissionRequired: false,
+    submissionTypes: ['url', 'file'] as ('url' | 'file')[],
+    maxFileSizeMb: 25,
+    submissionInstructions: '',
   });
+
+  // Task Completion Submission Modal State
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [submittingTask, setSubmittingTask] = useState<any>(null);
+  const [submissionNotes, setSubmissionNotes] = useState('');
+  const [submissionUrls, setSubmissionUrls] = useState<string[]>(['']);
+  const [submissionFiles, setSubmissionFiles] = useState<any[]>([]);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [submissionSubmitting, setSubmissionSubmitting] = useState(false);
+  const [submissionError, setSubmissionError] = useState('');
+  const [expandedHistoryTaskId, setExpandedHistoryTaskId] = useState<string | null>(null);
 
   // Share / Revoke / History modals
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
@@ -80,6 +98,81 @@ export default function TasksPage() {
   const [bannerSuccess, setBannerSuccess] = useState<string | null>(null);
   const [bannerError, setBannerError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  // Manual Credential Modal State
+  const [showManualCredModal, setShowManualCredModal] = useState(false);
+  const [manualCredLoading, setManualCredLoading] = useState(false);
+  const [manualCredError, setManualCredError] = useState<string | null>(null);
+  const [manualCredData, setManualCredData] = useState({
+    projectId: '',
+    taskId: '',
+    service: '',
+    credentialType: 'WORDPRESS',
+    loginUrl: '',
+    username: '',
+    password: '',
+    notes: '',
+    port: '22',
+    privateKey: '',
+  });
+
+  const handleOpenAddCredForTask = (task?: any) => {
+    setManualCredData({
+      projectId: task ? (task.projectId?._id || task.projectId) : (projects[0]?._id || ''),
+      taskId: task ? task._id : '',
+      service: '',
+      credentialType: 'WORDPRESS',
+      loginUrl: '',
+      username: '',
+      password: '',
+      notes: '',
+      port: '22',
+      privateKey: '',
+    });
+    setManualCredError(null);
+    setShowManualCredModal(true);
+  };
+
+  const handleManualCredSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualCredData.projectId || !manualCredData.service) {
+      setManualCredError('Project and Service name are required.');
+      return;
+    }
+    setManualCredLoading(true);
+    setManualCredError(null);
+    try {
+      const res = await fetch('/api/credentials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: manualCredData.projectId,
+          taskId: manualCredData.taskId || undefined,
+          service: manualCredData.service,
+          credentialType: manualCredData.credentialType,
+          loginUrl: manualCredData.loginUrl || undefined,
+          username: manualCredData.username || undefined,
+          password: manualCredData.password || undefined,
+          notes: manualCredData.notes || undefined,
+          port: manualCredData.port ? Number(manualCredData.port) : undefined,
+          privateKey: manualCredData.privateKey || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBannerSuccess(`Credential for "${manualCredData.service}" securely saved with AES-256-GCM.`);
+        setTimeout(() => setBannerSuccess(null), 5000);
+        setShowManualCredModal(false);
+        fetchData();
+      } else {
+        setManualCredError(data.error?.message || 'Failed to save credential.');
+      }
+    } catch (err: any) {
+      setManualCredError(err.message || 'An error occurred while saving credential.');
+    } finally {
+      setManualCredLoading(false);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -159,6 +252,10 @@ export default function TasksPage() {
       agreedAmount: '',
       requiredCredentialIds: [],
       autoShareCredentials: false,
+      submissionRequired: false,
+      submissionTypes: ['url', 'file'],
+      maxFileSizeMb: 25,
+      submissionInstructions: '',
     });
     if (defaultProjId) {
       handleProjectSelect(defaultProjId);
@@ -208,7 +305,139 @@ export default function TasksPage() {
     }
   };
 
+  const handleOpenCompleteModal = (task: any) => {
+    setSubmittingTask(task);
+    setSubmissionNotes(task.submission?.submissionNotes || '');
+    setSubmissionUrls(
+      task.submission?.submissionUrls && task.submission?.submissionUrls.length > 0
+        ? [...task.submission.submissionUrls]
+        : ['']
+    );
+    setSubmissionFiles([]);
+    setSubmissionError('');
+    setShowCompleteModal(true);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!submittingTask || !e.target.files || e.target.files.length === 0) return;
+    const file = e.target.files[0];
+
+    const maxMb = submittingTask.maxFileSizeMb || 25;
+    if (file.size > maxMb * 1024 * 1024) {
+      setSubmissionError(`File ${file.name} exceeds max allowed size of ${maxMb}MB.`);
+      return;
+    }
+
+    try {
+      setUploadingFile(true);
+      setSubmissionError('');
+      const formDataUpload = new FormData();
+      formDataUpload.append('file', file);
+
+      const res = await fetch(`/api/tasks/${submittingTask._id}/submissions/upload`, {
+        method: 'POST',
+        body: formDataUpload,
+      });
+
+      const data = await res.json();
+      if (data.success && data.data) {
+        setSubmissionFiles((prev) => [...prev, data.data]);
+      } else {
+        setSubmissionError(data.error?.message || 'File upload failed');
+      }
+    } catch (err: any) {
+      setSubmissionError('Network error uploading file');
+    } finally {
+      setUploadingFile(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleSubmitCompletion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!submittingTask) return;
+
+    const cleanUrls = submissionUrls.map((u) => u.trim()).filter(Boolean);
+
+    // Validation if required
+    if (submittingTask.submissionRequired) {
+      const types = submittingTask.submissionTypes && submittingTask.submissionTypes.length > 0
+        ? submittingTask.submissionTypes
+        : ['url', 'file'];
+      const requiresUrl = types.includes('url') && !types.includes('file');
+      const requiresFile = types.includes('file') && !types.includes('url');
+
+      if (requiresUrl && cleanUrls.length === 0) {
+        setSubmissionError('Please provide at least one valid submission URL');
+        return;
+      }
+      if (requiresFile && submissionFiles.length === 0) {
+        setSubmissionError('Please upload at least one submission deliverable file');
+        return;
+      }
+      if (!requiresUrl && !requiresFile && cleanUrls.length === 0 && submissionFiles.length === 0) {
+        setSubmissionError('Please provide at least one deliverable (URL or uploaded file)');
+        return;
+      }
+    }
+
+    try {
+      setSubmissionSubmitting(true);
+      setSubmissionError('');
+
+      const existingFiles = submittingTask.submission?.submissionFiles || [];
+      const allFiles = [...existingFiles, ...submissionFiles];
+
+      const res = await fetch(`/api/tasks/${submittingTask._id}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          submissionNotes,
+          submissionUrls: cleanUrls,
+          submissionFiles: allFiles,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setShowCompleteModal(false);
+        setBannerSuccess(`Task "${submittingTask.title}" marked completed with deliverables!`);
+        setTimeout(() => setBannerSuccess(null), 4000);
+        fetchData();
+      } else {
+        setSubmissionError(data.error?.message || 'Failed to complete task');
+      }
+    } catch (err) {
+      setSubmissionError('Failed to communicate with server');
+    } finally {
+      setSubmissionSubmitting(false);
+    }
+  };
+
+  const handleDownloadFile = async (taskId: string, fileIndex: number, historyIndex?: number) => {
+    try {
+      const url = `/api/tasks/${taskId}/submissions/files/${fileIndex}/signed-url${
+        historyIndex !== undefined ? `?historyIndex=${historyIndex}` : ''
+      }`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.success && data.data?.signedUrl) {
+        window.open(data.data.signedUrl, '_blank');
+      } else {
+        alert(data.error?.message || 'Failed to generate download URL');
+      }
+    } catch (err) {
+      alert('Error fetching file download link');
+    }
+  };
+
   const handleStatusChange = async (taskId: string, newStatus: string) => {
+    const task = tasks.find((t) => t._id === taskId);
+    if (newStatus === 'COMPLETED' && task) {
+      handleOpenCompleteModal(task);
+      return;
+    }
+
     try {
       const res = await fetch(`/api/tasks/${taskId}`, {
         method: 'PATCH',
@@ -407,13 +636,22 @@ export default function TasksPage() {
             Least-privilege task credential access, status workflows, and developer compensation tracking.
           </p>
         </div>
-        <button
-          onClick={handleOpenCreate}
-          className="inline-flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-lg shadow-indigo-600/20 transition-all cursor-pointer shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span>+ Create Task</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => handleOpenAddCredForTask()}
+            className="inline-flex items-center justify-center space-x-2 px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-850 border border-slate-750 text-slate-200 text-sm font-semibold transition-all cursor-pointer shrink-0"
+          >
+            <Lock className="w-4 h-4 text-amber-400" />
+            <span>+ Add Credential Manually</span>
+          </button>
+          <button
+            onClick={handleOpenCreate}
+            className="inline-flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-lg shadow-indigo-600/20 transition-all cursor-pointer shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ Create Task</span>
+          </button>
+        </div>
       </div>
 
       {/* Alert Banners */}
@@ -538,6 +776,12 @@ export default function TasksPage() {
                       <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border ${pBadge.bg} ${pBadge.text}`}>
                         {pBadge.label}
                       </span>
+                      {task.submissionRequired && (
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md border bg-amber-950/40 border-amber-800/40 text-amber-300 flex items-center gap-1">
+                          <UploadCloud className="w-3 h-3 text-amber-400" />
+                          <span>Deliverable Required</span>
+                        </span>
+                      )}
                       {task.agreedAmount ? (
                         <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md border bg-emerald-950/50 border-emerald-800/40 text-emerald-400">
                           ₹{task.agreedAmount.toLocaleString('en-IN')}
@@ -647,6 +891,15 @@ export default function TasksPage() {
                     )}
 
                     <button
+                      onClick={() => handleOpenAddCredForTask(task)}
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded text-[11px] font-medium cursor-pointer transition-colors"
+                      title="Add or link credential to this task"
+                    >
+                      <Plus className="w-3 h-3 text-indigo-400" />
+                      <span>Add Cred</span>
+                    </button>
+
+                    <button
                       onClick={() => handleViewHistory(task)}
                       className="inline-flex items-center gap-1 px-2 py-1 text-slate-400 hover:text-slate-200 cursor-pointer transition-colors"
                       title="View credential share history"
@@ -669,6 +922,160 @@ export default function TasksPage() {
                     )}
                   </div>
                 </div>
+
+                {/* Task Deliverables / Submission Section */}
+                {(task.submission || task.status === 'COMPLETED' || task.submissionRequired) && (
+                  <div className="pt-3 border-t border-slate-800/60 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                        <UploadCloud className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Task Completion & Deliverables</span>
+                      </span>
+
+                      <button
+                        onClick={() => handleOpenCompleteModal(task)}
+                        className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-emerald-950/40 hover:bg-emerald-950/60 border border-emerald-800/40 text-emerald-300 flex items-center gap-1 cursor-pointer transition-all"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                        <span>{task.submission ? 'Resubmit Deliverables' : 'Submit Deliverables'}</span>
+                      </button>
+                    </div>
+
+                    {task.submission ? (
+                      <div className="bg-[#14141b] border border-slate-800/80 rounded-xl p-3.5 space-y-2.5 text-xs">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-slate-400 text-[11px] pb-2 border-b border-slate-800/50">
+                          <span>
+                            Submitted by <b className="text-slate-200">{task.submission.submittedBy}</b>
+                          </span>
+                          <span>
+                            {new Date(task.submission.submittedAt).toLocaleDateString('en-IN', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                        </div>
+
+                        {task.submission.submissionNotes && (
+                          <div>
+                            <span className="text-slate-400 font-medium">Notes:</span>
+                            <p className="text-slate-300 mt-0.5 whitespace-pre-wrap">{task.submission.submissionNotes}</p>
+                          </div>
+                        )}
+
+                        {task.submission.submissionUrls && task.submission.submissionUrls.length > 0 && (
+                          <div className="space-y-1">
+                            <span className="text-slate-400 font-medium">Submitted URLs:</span>
+                            <div className="space-y-1">
+                              {task.submission.submissionUrls.map((url: string, uIdx: number) => (
+                                <a
+                                  key={uIdx}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 font-mono text-[11px] hover:underline"
+                                >
+                                  <ExternalLink className="w-3 h-3 shrink-0" />
+                                  <span className="truncate">{url}</span>
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {task.submission.submissionFiles && task.submission.submissionFiles.length > 0 && (
+                          <div className="space-y-1.5">
+                            <span className="text-slate-400 font-medium">Submitted Files:</span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {task.submission.submissionFiles.map((file: any, fIdx: number) => {
+                                const sizeMb = (file.fileSize / (1024 * 1024)).toFixed(2);
+                                return (
+                                  <div
+                                    key={fIdx}
+                                    className="flex items-center justify-between p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-[11px]"
+                                  >
+                                    <div className="flex items-center gap-2 truncate pr-2">
+                                      <FileText className="w-4 h-4 text-emerald-400 shrink-0" />
+                                      <div className="truncate">
+                                        <p className="font-medium text-slate-200 truncate">{file.fileName}</p>
+                                        <p className="text-[10px] text-slate-500 font-mono">{sizeMb} MB</p>
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={() => handleDownloadFile(task._id, fIdx)}
+                                      className="p-1 text-indigo-400 hover:text-white rounded hover:bg-zinc-800 cursor-pointer shrink-0"
+                                      title="Download with secure signed URL"
+                                    >
+                                      <Download className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* History Accordion if resubmissions exist */}
+                        {task.submissionHistory && task.submissionHistory.length > 0 && (
+                          <div className="pt-2 border-t border-slate-800/50">
+                            <button
+                              onClick={() =>
+                                setExpandedHistoryTaskId(expandedHistoryTaskId === task._id ? null : task._id)
+                              }
+                              className="text-[11px] text-zinc-400 hover:text-zinc-200 flex items-center gap-1 cursor-pointer font-medium"
+                            >
+                              <History className="w-3 h-3 text-indigo-400" />
+                              <span>
+                                Previous Submissions ({task.submissionHistory.length})
+                              </span>
+                              {expandedHistoryTaskId === task._id ? (
+                                <ChevronUp className="w-3 h-3" />
+                              ) : (
+                                <ChevronDown className="w-3 h-3" />
+                              )}
+                            </button>
+
+                            {expandedHistoryTaskId === task._id && (
+                              <div className="mt-2 space-y-2 pl-2 border-l border-zinc-800">
+                                {task.submissionHistory.map((hist: any, hIdx: number) => (
+                                  <div key={hIdx} className="bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800/60 text-[11px] space-y-1">
+                                    <div className="flex justify-between text-zinc-500 text-[10px]">
+                                      <span>By {hist.submittedBy}</span>
+                                      <span>{new Date(hist.submittedAt).toLocaleString('en-IN')}</span>
+                                    </div>
+                                    {hist.submissionNotes && <p className="text-zinc-300">{hist.submissionNotes}</p>}
+                                    {hist.submissionUrls?.map((u: string, idx: number) => (
+                                      <a key={idx} href={u} target="_blank" rel="noopener noreferrer" className="block text-indigo-400 truncate text-[10px]">
+                                        {u}
+                                      </a>
+                                    ))}
+                                    {hist.submissionFiles?.map((f: any, fIdx: number) => (
+                                      <div key={fIdx} className="flex justify-between items-center text-[10px] text-zinc-400">
+                                        <span className="truncate">{f.fileName}</span>
+                                        <button
+                                          onClick={() => handleDownloadFile(task._id, fIdx, hIdx)}
+                                          className="text-indigo-400 hover:underline cursor-pointer"
+                                        >
+                                          Download
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-zinc-900/30 border border-zinc-800/40 rounded-xl text-zinc-500 text-xs flex items-center justify-between">
+                        <span>No submission deliverables attached yet.</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -851,6 +1258,95 @@ export default function TasksPage() {
                 )}
               </div>
 
+              {/* Task Deliverable Requirements */}
+              <div className="space-y-3 pt-3 border-t border-slate-800/80">
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.submissionRequired}
+                    onChange={(e) => setFormData({ ...formData, submissionRequired: e.target.checked })}
+                    className="rounded text-emerald-500 focus:ring-0 cursor-pointer"
+                  />
+                  <span className="flex items-center gap-1.5">
+                    <UploadCloud className="w-4 h-4 text-emerald-400" />
+                    <span>Require Completion Deliverables (Files / URLs)</span>
+                  </span>
+                </label>
+
+                {formData.submissionRequired && (
+                  <div className="p-3.5 bg-zinc-900/90 border border-zinc-800 rounded-xl space-y-3 text-xs">
+                    <div>
+                      <label className="block text-zinc-400 mb-1.5 font-medium">Deliverable Types</label>
+                      <div className="flex items-center gap-4">
+                        <label className="flex items-center gap-1.5 cursor-pointer text-zinc-300">
+                          <input
+                            type="checkbox"
+                            checked={formData.submissionTypes.includes('url')}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setFormData((prev) => ({
+                                ...prev,
+                                submissionTypes: checked
+                                  ? [...prev.submissionTypes, 'url']
+                                  : prev.submissionTypes.filter((t) => t !== 'url'),
+                              }));
+                            }}
+                            className="rounded text-indigo-500 focus:ring-0"
+                          />
+                          <span>URLs / Links (PRs, Figma, Staging)</span>
+                        </label>
+
+                        <label className="flex items-center gap-1.5 cursor-pointer text-zinc-300">
+                          <input
+                            type="checkbox"
+                            checked={formData.submissionTypes.includes('file')}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setFormData((prev) => ({
+                                ...prev,
+                                submissionTypes: checked
+                                  ? [...prev.submissionTypes, 'file']
+                                  : prev.submissionTypes.filter((t) => t !== 'file'),
+                              }));
+                            }}
+                            className="rounded text-indigo-500 focus:ring-0"
+                          />
+                          <span>Files (ZIP, PDF, DOCX, Images)</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-zinc-400 mb-1 font-medium">Max File Size (MB)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={formData.maxFileSizeMb}
+                          onChange={(e) =>
+                            setFormData({ ...formData, maxFileSizeMb: Number(e.target.value) || 25 })
+                          }
+                          className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-zinc-400 mb-1 font-medium">Assignee Instructions (Optional)</label>
+                        <input
+                          type="text"
+                          value={formData.submissionInstructions}
+                          onChange={(e) =>
+                            setFormData({ ...formData, submissionInstructions: e.target.value })
+                          }
+                          placeholder="e.g. Provide build ZIP and release notes link"
+                          className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="flex justify-end space-x-3 pt-3 border-t border-slate-800">
                 <button
                   type="button"
@@ -864,6 +1360,191 @@ export default function TasksPage() {
                   className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/20 cursor-pointer"
                 >
                   Create Task
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Complete Task Deliverables Modal */}
+      {showCompleteModal && submittingTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-[#0d0d12] border border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-5 my-8">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <UploadCloud className="w-5 h-5 text-emerald-400" />
+                  Task Completion Deliverables
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {submittingTask.title} (<span className="font-mono text-indigo-400">{submittingTask.taskCode}</span>)
+                </p>
+              </div>
+              <button
+                onClick={() => setShowCompleteModal(false)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {submittingTask.submissionInstructions && (
+              <div className="p-3 bg-indigo-950/30 border border-indigo-500/20 rounded-xl text-xs text-indigo-200">
+                <span className="font-semibold text-indigo-300">Instructions: </span>
+                {submittingTask.submissionInstructions}
+              </div>
+            )}
+
+            {submissionError && (
+              <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-300">
+                {submissionError}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmitCompletion} className="space-y-4 text-sm">
+              {/* URLs Section */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                    <ExternalLink className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Submission URLs / Links</span>
+                    {submittingTask.submissionRequired && submittingTask.submissionTypes?.includes('url') && (
+                      <span className="text-amber-400">*</span>
+                    )}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setSubmissionUrls([...submissionUrls, ''])}
+                    className="text-[11px] text-indigo-400 hover:text-indigo-300 cursor-pointer"
+                  >
+                    + Add Link
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {submissionUrls.map((url, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <input
+                        type="url"
+                        value={url}
+                        onChange={(e) => {
+                          const updated = [...submissionUrls];
+                          updated[idx] = e.target.value;
+                          setSubmissionUrls(updated);
+                        }}
+                        placeholder="https://github.com/... or https://figma.com/..."
+                        className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                      />
+                      {submissionUrls.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setSubmissionUrls(submissionUrls.filter((_, i) => i !== idx))}
+                          className="text-slate-500 hover:text-red-400 p-1 cursor-pointer"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* File Upload Section */}
+              <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Deliverable Files</span>
+                    {submittingTask.submissionRequired && submittingTask.submissionTypes?.includes('file') && (
+                      <span className="text-amber-400">*</span>
+                    )}
+                  </label>
+                  <span className="text-[10px] text-slate-500">
+                    Max {submittingTask.maxFileSizeMb || 25}MB per file
+                  </span>
+                </div>
+
+                <div className="border border-dashed border-zinc-700/80 rounded-xl p-4 text-center hover:border-emerald-500/50 transition-colors">
+                  <input
+                    type="file"
+                    id="submission-file-input"
+                    disabled={uploadingFile}
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="submission-file-input"
+                    className="cursor-pointer inline-flex flex-col items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200"
+                  >
+                    <UploadCloud className="w-6 h-6 text-emerald-400 mb-1" />
+                    <span className="font-semibold text-white">
+                      {uploadingFile ? 'Uploading file...' : 'Click to upload deliverable file'}
+                    </span>
+                    <span className="text-[10px] text-zinc-500">
+                      ZIP, PDF, DOCX, XLSX, images, tar.gz
+                    </span>
+                  </label>
+                </div>
+
+                {/* Uploaded Files Table */}
+                {submissionFiles.length > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    {submissionFiles.map((file, idx) => {
+                      const sizeMb = (file.fileSize / (1024 * 1024)).toFixed(2);
+                      return (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs"
+                        >
+                          <div className="flex items-center gap-2 truncate pr-2">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <span className="font-medium text-white truncate">{file.fileName}</span>
+                            <span className="text-[10px] text-zinc-500 font-mono">({sizeMb} MB)</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSubmissionFiles(submissionFiles.filter((_, i) => i !== idx))}
+                            className="text-zinc-500 hover:text-red-400 p-1 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Notes */}
+              <div className="pt-2 border-t border-slate-800/80">
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Completion Notes (Optional)
+                </label>
+                <textarea
+                  rows={3}
+                  value={submissionNotes}
+                  onChange={(e) => setSubmissionNotes(e.target.value)}
+                  placeholder="Summary of changes, test instructions, or notes for the admin..."
+                  className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowCompleteModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submissionSubmitting || uploadingFile}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-900/30 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{submissionSubmitting ? 'Submitting...' : 'Complete Task'}</span>
                 </button>
               </div>
             </form>
@@ -1046,6 +1727,196 @@ export default function TasksPage() {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Credential Modal */}
+      {showManualCredModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+          <div className="bg-[#0d0d12] border border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Lock className="w-5 h-5 text-amber-400" />
+                <div>
+                  <h2 className="text-base font-bold text-white">Add Credential Manually</h2>
+                  <p className="text-[11px] text-slate-400">Encrypted with AES-256-GCM authentication</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowManualCredModal(false)}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {manualCredError && (
+              <div className="p-3 bg-red-950/40 border border-red-800/50 rounded-xl text-xs text-red-300 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                <span>{manualCredError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleManualCredSubmit} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Project *</label>
+                  <select
+                    required
+                    value={manualCredData.projectId}
+                    onChange={(e) => setManualCredData({ ...manualCredData, projectId: e.target.value })}
+                    className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="">Select Project</option>
+                    {projects.map((p) => (
+                      <option key={p._id} value={p._id}>
+                        {p.name} ({p.projectCode})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Link to Task (Optional)</label>
+                  <select
+                    value={manualCredData.taskId}
+                    onChange={(e) => setManualCredData({ ...manualCredData, taskId: e.target.value })}
+                    className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="">None (Project-wide)</option>
+                    {tasks
+                      .filter((t) => !manualCredData.projectId || (t.projectId?._id || t.projectId) === manualCredData.projectId)
+                      .map((t) => (
+                        <option key={t._id} value={t._id}>
+                          {t.taskCode} - {t.title}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Service / Title *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Staging WP Admin"
+                    value={manualCredData.service}
+                    onChange={(e) => setManualCredData({ ...manualCredData, service: e.target.value })}
+                    className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Credential Type</label>
+                  <select
+                    value={manualCredData.credentialType}
+                    onChange={(e) => setManualCredData({ ...manualCredData, credentialType: e.target.value })}
+                    className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="WORDPRESS">WordPress Admin</option>
+                    <option value="HOSTING">Hosting / cPanel</option>
+                    <option value="SSH">SSH / VPS Server</option>
+                    <option value="DATABASE">Database</option>
+                    <option value="API_KEY">API Key / Token</option>
+                    <option value="CUSTOM">Custom Credential</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  {manualCredData.credentialType === 'SSH' ? 'Host / IP Address' : 'Login URL / Endpoint'}
+                </label>
+                <input
+                  type="text"
+                  placeholder={manualCredData.credentialType === 'SSH' ? '192.168.1.1 or server.example.com' : 'https://example.com/wp-admin'}
+                  value={manualCredData.loginUrl}
+                  onChange={(e) => setManualCredData({ ...manualCredData, loginUrl: e.target.value })}
+                  className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Username / Email / Key ID</label>
+                  <input
+                    type="text"
+                    placeholder="admin or root"
+                    value={manualCredData.username}
+                    onChange={(e) => setManualCredData({ ...manualCredData, username: e.target.value })}
+                    className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Password / Secret Key</label>
+                  <input
+                    type="password"
+                    placeholder="••••••••••••"
+                    value={manualCredData.password}
+                    onChange={(e) => setManualCredData({ ...manualCredData, password: e.target.value })}
+                    className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {manualCredData.credentialType === 'SSH' && (
+                <div className="space-y-3 p-3 bg-slate-900/60 border border-slate-800 rounded-xl">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">SSH Port</label>
+                    <input
+                      type="number"
+                      value={manualCredData.port}
+                      onChange={(e) => setManualCredData({ ...manualCredData, port: e.target.value })}
+                      placeholder="22"
+                      className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">SSH Private Key (Encrypted)</label>
+                    <textarea
+                      rows={3}
+                      value={manualCredData.privateKey}
+                      onChange={(e) => setManualCredData({ ...manualCredData, privateKey: e.target.value })}
+                      placeholder="-----BEGIN OPENSSH PRIVATE KEY-----..."
+                      className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white font-mono text-[11px] focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Notes / Instructions</label>
+                <textarea
+                  rows={2}
+                  value={manualCredData.notes}
+                  onChange={(e) => setManualCredData({ ...manualCredData, notes: e.target.value })}
+                  placeholder="Additional access instructions or 2FA recovery keys..."
+                  className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowManualCredModal(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={manualCredLoading}
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-semibold flex items-center gap-2 shadow-lg shadow-indigo-600/20 disabled:opacity-50"
+                >
+                  {manualCredLoading ? 'Encrypting & Saving...' : 'Save Credential'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

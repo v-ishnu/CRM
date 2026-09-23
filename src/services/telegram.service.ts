@@ -659,6 +659,52 @@ export class TelegramService {
   }
 
   /**
+   * Send task submission notification to admin
+   */
+  static async sendTaskSubmissionNotificationToAdmin(
+    task: any,
+    submission: any,
+    submitterName: string,
+    projectName?: string
+  ): Promise<boolean> {
+    const adminChatId = process.env.ADMIN_TELEGRAM_ID;
+    if (!adminChatId) return false;
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://crm.drdebuggers.com';
+    const taskLink = `${appUrl}/dashboard/tasks?task=${task._id}`;
+
+    let filesSummary = '';
+    if (submission.submissionFiles && submission.submissionFiles.length > 0) {
+      filesSummary = '\n<b>Files:</b>\n' + submission.submissionFiles.map((f: any) => {
+        const sizeMb = (f.fileSize / (1024 * 1024)).toFixed(2);
+        return `• <code>${f.fileName}</code> (${sizeMb} MB, ${f.mimeType})`;
+      }).join('\n');
+    }
+
+    let urlsSummary = '';
+    if (submission.submissionUrls && submission.submissionUrls.length > 0) {
+      urlsSummary = '\n<b>URLs:</b>\n' + submission.submissionUrls.map((u: string) => `• ${u}`).join('\n');
+    }
+
+    let notesSummary = '';
+    if (submission.submissionNotes) {
+      notesSummary = `\n<b>Notes:</b> ${submission.submissionNotes}\n`;
+    }
+
+    const text = `📋 <b>Task Completed with Submission</b>\n\n` +
+      `<b>Task:</b> ${task.title} (<code>${task.taskCode}</code>)\n` +
+      (projectName ? `<b>Project:</b> ${projectName}\n` : '') +
+      `<b>Submitted by:</b> ${submitterName}\n` +
+      notesSummary +
+      urlsSummary +
+      filesSummary +
+      `\n\n<a href="${taskLink}">View Task in Dashboard</a>`;
+
+    const res = await this.sendMessageRaw(String(adminChatId), text);
+    return res.success;
+  }
+
+  /**
    * Send notification to a team member when a team payment is recorded, marked paid, or cancelled
    */
   static async sendTeamPaymentNotification(
@@ -717,6 +763,18 @@ export class TelegramService {
     try {
       // Resolve user identity
       const identity = await this.resolveTelegramIdentity(fromUserId, cbChatId);
+
+      // Handle Project Agreement callback (agree:accept: or agree:reject:)
+      if (cbData.startsWith('agree:accept:') || cbData.startsWith('agree:reject:')) {
+        const { AgreementService } = await import('./agreement.service');
+        return await AgreementService.handleAgreementCallback(
+          cbId,
+          fromUserId,
+          cbChatId,
+          cbData,
+          timings
+        );
+      }
 
       if (
         cbData.startsWith('team_task:') ||
@@ -984,6 +1042,15 @@ export class TelegramService {
         }
         if (task.status === 'CANCELLED') {
           await this.sendMessageRaw(chatId, '⚠️ <b>This task is cancelled.</b>');
+          return { action, success: false };
+        }
+
+        if (task.submissionRequired) {
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://crm.drdebuggers.com';
+          await this.sendMessageRaw(
+            chatId,
+            `⚠️ <b>Submission Required</b>\n\nThis task requires submission of deliverables (URLs or files). Please complete this task with your submission on the web dashboard:\n<a href="${appUrl}/dashboard/tasks?task=${task._id}">Open Task Dashboard</a>`
+          );
           return { action, success: false };
         }
 

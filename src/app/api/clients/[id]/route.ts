@@ -72,6 +72,22 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // Requests
     const requests = await DataRequest.find({ clientId: id }).sort({ createdAt: -1 });
 
+    // Hostings
+    const Hosting = (await import('@/models/Hosting')).default;
+    const { HostingService } = await import('@/services/hosting.service');
+    const rawHostings = await Hosting.find({ clientId: id }).sort({ expiryDate: 1 }).lean();
+    const hostings = rawHostings.map((h: any) => ({
+      _id: h._id,
+      domain: h.domain,
+      hostingProvider: h.hostingProvider,
+      hostingType: h.hostingType,
+      panelUrl: h.panelUrl,
+      expiryDate: h.expiryDate,
+      daysRemaining: HostingService.calculateDaysRemaining(h.expiryDate),
+      status: h.status,
+      autoRenewal: h.autoRenewal,
+    }));
+
     return NextResponse.json({
       success: true,
       data: {
@@ -81,6 +97,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         payments,
         auditLogs,
         requests,
+        hostings,
         financials: {
           totalProjectValue,
           totalPaid,

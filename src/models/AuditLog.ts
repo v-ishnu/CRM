@@ -68,8 +68,30 @@ export interface IAuditLog extends Document {
     | 'INQUIRY_CLIENT_MESSAGE'
     | 'INQUIRY_CONVERTED_TO_CLIENT'
     | 'INQUIRY_CLOSED'
-    | 'INQUIRY_BOT_RESUMED';
-  entityType: 'Client' | 'Project' | 'Payment' | 'Invoice' | 'Notification' | 'Auth' | 'DataRequest' | 'RequestResponse' | 'Credential' | 'TeamMember' | 'Task' | 'TeamPayment' | 'Inquiry';
+    | 'INQUIRY_BOT_RESUMED'
+    | 'CREDENTIAL_CREATED'
+    | 'CREDENTIAL_UPDATED'
+    | 'HOSTING_CREATED'
+    | 'HOSTING_UPDATED'
+    | 'HOSTING_RENEWED'
+    | 'HOSTING_CANCELLED'
+    | 'HOSTING_EXPIRED'
+    | 'HOSTING_DELETED'
+    | 'HOSTING_SECRET_VIEWED'
+    | 'AGREEMENT_CREATED'
+    | 'AGREEMENT_SENT'
+    | 'AGREEMENT_ACCEPTED'
+    | 'AGREEMENT_REJECTED'
+    | 'AGREEMENT_REVISED'
+    | 'TASK_SUBMISSION_CREATED'
+    | 'TASK_SUBMISSION_FILE_UPLOADED'
+    | 'TASK_SUBMISSION_RESUBMITTED'
+    | 'INVITATION_CREATED'
+    | 'INVITATION_REVOKED'
+    | 'INVITATION_USED'
+    | 'BANK_DETAILS_REVEALED'
+    | 'BANK_DETAILS_UPDATED';
+  entityType: 'Client' | 'Project' | 'Payment' | 'Invoice' | 'Notification' | 'Auth' | 'DataRequest' | 'RequestResponse' | 'Credential' | 'TeamMember' | 'Task' | 'TeamPayment' | 'Inquiry' | 'Hosting' | 'Agreement' | 'TeamMemberInvitation' | 'TaskSubmission';
   entityId?: mongoose.Types.ObjectId | string;
   metadata?: Record<string, any>;
   timestamp: Date;
@@ -105,6 +127,8 @@ const AuditLogSchema = new Schema<IAuditLog>(
         'CREDENTIAL_REVEALED',
         'CREDENTIAL_COPIED',
         'CREDENTIAL_DELETED',
+        'CREDENTIAL_CREATED',
+        'CREDENTIAL_UPDATED',
         'DATA_REQUEST_CREATED',
         'DATA_REQUEST_SENT',
         'DATA_REQUEST_RECEIVED',
@@ -152,13 +176,33 @@ const AuditLogSchema = new Schema<IAuditLog>(
         'INQUIRY_CONVERTED_TO_CLIENT',
         'INQUIRY_CLOSED',
         'INQUIRY_BOT_RESUMED',
+        'HOSTING_CREATED',
+        'HOSTING_UPDATED',
+        'HOSTING_RENEWED',
+        'HOSTING_CANCELLED',
+        'HOSTING_EXPIRED',
+        'HOSTING_DELETED',
+        'HOSTING_SECRET_VIEWED',
+        'AGREEMENT_CREATED',
+        'AGREEMENT_SENT',
+        'AGREEMENT_ACCEPTED',
+        'AGREEMENT_REJECTED',
+        'AGREEMENT_REVISED',
+        'TASK_SUBMISSION_CREATED',
+        'TASK_SUBMISSION_FILE_UPLOADED',
+        'TASK_SUBMISSION_RESUBMITTED',
+        'INVITATION_CREATED',
+        'INVITATION_REVOKED',
+        'INVITATION_USED',
+        'BANK_DETAILS_REVEALED',
+        'BANK_DETAILS_UPDATED',
       ],
       required: true,
       index: true,
     },
     entityType: {
       type: String,
-      enum: ['Client', 'Project', 'Payment', 'Invoice', 'Notification', 'Auth', 'DataRequest', 'RequestResponse', 'Credential', 'TeamMember', 'Task', 'TeamPayment', 'Inquiry'],
+      enum: ['Client', 'Project', 'Payment', 'Invoice', 'Notification', 'Auth', 'DataRequest', 'RequestResponse', 'Credential', 'TeamMember', 'Task', 'TeamPayment', 'Inquiry', 'Hosting', 'Agreement', 'TeamMemberInvitation', 'TaskSubmission'],
       required: true,
       index: true,
     },

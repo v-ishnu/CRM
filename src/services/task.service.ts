@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
-import Task, { ITask, TaskPriority, TaskStatus } from '@/models/Task';
+import Task, { ITask, TaskPriority, TaskStatus, SubmissionType } from '@/models/Task';
 import Project from '@/models/Project';
-import Client from '@/models/Client';
 import TeamMember from '@/models/TeamMember';
 import { AuditService } from './audit.service';
 import { TelegramService } from './telegram.service';
@@ -19,6 +18,10 @@ export interface CreateTaskDTO {
   requiredCredentialIds?: Array<string | mongoose.Types.ObjectId>;
   agreedAmount?: number;
   autoShareCredentials?: boolean;
+  submissionRequired?: boolean;
+  submissionTypes?: SubmissionType[];
+  maxFileSizeMb?: number;
+  submissionInstructions?: string;
 }
 
 export interface UpdateTaskDTO {
@@ -33,6 +36,22 @@ export interface UpdateTaskDTO {
   agreedAmount?: number;
   autoShareCredentials?: boolean;
   credentialAccessRevoked?: boolean;
+  submissionRequired?: boolean;
+  submissionTypes?: SubmissionType[];
+  maxFileSizeMb?: number;
+  submissionInstructions?: string;
+}
+
+export interface SubmitTaskDTO {
+  submissionNotes?: string;
+  submissionUrls?: string[];
+  submissionFiles?: Array<{
+    fileName: string;
+    fileSize: number;
+    mimeType: string;
+    storagePath: string;
+    uploadedAt?: Date;
+  }>;
 }
 
 export class TaskService {
@@ -108,6 +127,10 @@ export class TaskService {
       agreedAmount: data.agreedAmount !== undefined ? Number(data.agreedAmount) : undefined,
       autoShareCredentials: !!data.autoShareCredentials,
       credentialAccessRevoked: false,
+      submissionRequired: !!data.submissionRequired,
+      submissionTypes: data.submissionTypes && data.submissionTypes.length > 0 ? data.submissionTypes : ['url', 'file'],
+      maxFileSizeMb: data.maxFileSizeMb || 25,
+      submissionInstructions: data.submissionInstructions?.trim(),
     });
 
     await task.save();
@@ -196,6 +219,18 @@ export class TaskService {
     }
     if (data.credentialAccessRevoked !== undefined) {
       task.credentialAccessRevoked = data.credentialAccessRevoked;
+    }
+    if (data.submissionRequired !== undefined) {
+      task.submissionRequired = data.submissionRequired;
+    }
+    if (data.submissionTypes !== undefined) {
+      task.submissionTypes = data.submissionTypes;
+    }
+    if (data.maxFileSizeMb !== undefined) {
+      task.maxFileSizeMb = Number(data.maxFileSizeMb);
+    }
+    if (data.submissionInstructions !== undefined) {
+      task.submissionInstructions = data.submissionInstructions?.trim();
     }
 
     if (data.assignedTo !== undefined) {
@@ -404,5 +439,144 @@ export class TaskService {
     }
 
     return task;
+  }
+
+  /**
+   * Submit completion details and mark task as completed (or resubmit)
+   */
+  static async submitAndCompleteTask(
+    id: string,
+    data: SubmitTaskDTO,
+    actor: string = 'system',
+    actorRole: string = 'ADMIN',
+    actorTeamMemberId?: string
+  ): Promise<ITask> {
+    await dbConnect();
+
+    const task = await Task.findById(id);
+    if (!task) {
+      throw new Error('Task not found');
+    }
+
+    // Authorization check: Only assigned team member or Admin can submit
+    if (actorRole !== 'ADMIN') {
+      if (!task.assignedTo || (actorTeamMemberId && task.assignedTo.toString() !== actorTeamMemberId.toString())) {
+        throw new Error('Unauthorized: You can only submit completion for tasks assigned to you');
+      }
+    }
+
+    // Validate URLs if provided
+    const urls = (data.submissionUrls || []).map(u => u.trim()).filter(Boolean);
+    for (const url of urls) {
+      try {
+        const parsed = new URL(url);
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+          throw new Error('Invalid URL protocol');
+        }
+      } catch {
+        throw new Error(`Invalid submission URL: ${url}`);
+      }
+    }
+
+    const files = data.submissionFiles || [];
+    const maxMb = task.maxFileSizeMb && task.maxFileSizeMb > 0 ? task.maxFileSizeMb : 25;
+    const maxBytes = maxMb * 1024 * 1024;
+
+    for (const f of files) {
+      if (f.fileSize > maxBytes) {
+        throw new Error(`File ${f.fileName} exceeds maximum allowed size of ${maxMb}MB`);
+      }
+    }
+
+    // Enforce submission requirements if submissionRequired is true
+    if (task.submissionRequired) {
+      const types = task.submissionTypes && task.submissionTypes.length > 0
+        ? task.submissionTypes
+        : (['url', 'file'] as SubmissionType[]);
+
+      const requiresUrl = types.includes('url') && !types.includes('file');
+      const requiresFile = types.includes('file') && !types.includes('url');
+
+      if (requiresUrl && urls.length === 0) {
+        throw new Error('This task requires at least one URL submission');
+      }
+      if (requiresFile && files.length === 0) {
+        throw new Error('This task requires at least one file submission');
+      }
+      if (!requiresUrl && !requiresFile && urls.length === 0 && files.length === 0) {
+        throw new Error('This task requires at least one URL or file submission');
+      }
+    }
+
+    const isResubmission = !!task.submission && !!task.completedAt;
+
+    // Archive previous submission into submissionHistory if present
+    if (task.submission) {
+      task.submissionHistory = task.submissionHistory || [];
+      task.submissionHistory.push(task.submission as any);
+    }
+
+    task.submission = {
+      submissionNotes: data.submissionNotes?.trim(),
+      submissionUrls: urls,
+      submissionFiles: files.map(f => ({
+        fileName: f.fileName,
+        fileSize: f.fileSize,
+        mimeType: f.mimeType,
+        storagePath: f.storagePath,
+        uploadedAt: f.uploadedAt || new Date(),
+      })),
+      submittedBy: actor,
+      submittedAt: new Date(),
+    };
+
+    task.status = 'COMPLETED';
+    if (!task.completedAt) {
+      task.completedAt = new Date();
+    }
+
+    await task.save();
+
+    await AuditService.log({
+      actor,
+      action: isResubmission ? 'TASK_SUBMISSION_RESUBMITTED' : 'TASK_SUBMISSION_CREATED',
+      entityType: 'Task',
+      entityId: task._id,
+      metadata: {
+        taskCode: task.taskCode,
+        submissionUrlsCount: urls.length,
+        submissionFilesCount: files.length,
+        hasNotes: !!data.submissionNotes?.trim(),
+        isResubmission,
+      },
+    });
+
+    // Send Telegram Notification to Admin
+    try {
+      const project = await Project.findById(task.projectId).select('name projectCode');
+      await TelegramService.sendTaskSubmissionNotificationToAdmin(
+        task,
+        task.submission,
+        actor,
+        project?.name
+      );
+    } catch (telegramErr) {
+      console.error('Failed to send task submission notification to admin:', telegramErr);
+    }
+
+    return task;
+  }
+
+  /**
+   * Resubmit task completion details
+   */
+  static async resubmitTask(
+    id: string,
+    data: SubmitTaskDTO,
+    actor: string = 'system',
+    actorRole: string = 'ADMIN',
+    actorTeamMemberId?: string
+  ): Promise<ITask> {
+    return this.submitAndCompleteTask(id, data, actor, actorRole, actorTeamMemberId);
   }
 }

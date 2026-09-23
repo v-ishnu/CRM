@@ -743,7 +743,7 @@ describe('Data Request & Secure Credential Collection Tests', () => {
         body: JSON.stringify({ password: 'SecretAdminPassword123' }),
       });
 
-      const res = await decryptCredentialRoute(req, { params: Promise.resolve({ id: cred!.requestId.toString() }) });
+      const res = await decryptCredentialRoute(req, { params: Promise.resolve({ id: cred!.requestId!.toString() }) });
       const json = await res.json();
 
       expect(res.status).toBe(200);
@@ -763,7 +763,7 @@ describe('Data Request & Secure Credential Collection Tests', () => {
         body: JSON.stringify({ password: 'WrongPassword' }),
       });
 
-      const res = await decryptCredentialRoute(req, { params: Promise.resolve({ id: cred!.requestId.toString() }) });
+      const res = await decryptCredentialRoute(req, { params: Promise.resolve({ id: cred!.requestId!.toString() }) });
       const json = await res.json();
 
       expect(res.status).toBe(401);
@@ -778,7 +778,7 @@ describe('Data Request & Secure Credential Collection Tests', () => {
         body: JSON.stringify({ action: 'CREDENTIAL_COPIED', field: 'password' }),
       });
 
-      const res = await logAuditRoute(req, { params: Promise.resolve({ id: cred!.requestId.toString() }) });
+      const res = await logAuditRoute(req, { params: Promise.resolve({ id: cred!.requestId!.toString() }) });
       const json = await res.json();
 
       expect(res.status).toBe(200);
@@ -795,7 +795,7 @@ describe('Data Request & Secure Credential Collection Tests', () => {
         headers: getAdminHeaders(),
       });
 
-      const res = await deleteRequestRoute(req, { params: Promise.resolve({ id: cred!.requestId.toString() }) });
+      const res = await deleteRequestRoute(req, { params: Promise.resolve({ id: cred!.requestId!.toString() }) });
       const json = await res.json();
 
       expect(res.status).toBe(200);

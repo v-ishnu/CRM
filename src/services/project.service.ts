@@ -217,4 +217,62 @@ export class ProjectService {
 
     return updatedProject;
   }
+
+  /**
+   * Update a project's details independently without mutating tasks or payments
+   */
+  static async updateProject(
+    projectId: string,
+    updateData: Partial<IProject>,
+    actor: string
+  ): Promise<IProject> {
+    await dbConnect();
+
+    const project = await Project.findById(projectId);
+    if (!project) {
+      throw new Error('Project not found');
+    }
+
+    const updatableFields = [
+      'name',
+      'description',
+      'serviceType',
+      'totalAmount',
+      'currency',
+      'startDate',
+      'expectedCompletionDate',
+      'notes',
+      'scope',
+      'terms',
+      'status',
+    ];
+
+    const updatedFields: string[] = [];
+    const oldValues: Record<string, any> = {};
+
+    for (const field of updatableFields) {
+      if ((updateData as any)[field] !== undefined) {
+        oldValues[field] = (project as any)[field];
+        (project as any)[field] = (updateData as any)[field];
+        updatedFields.push(field);
+      }
+    }
+
+    if (updateData.status === 'COMPLETED' && !project.completionDate) {
+      project.completionDate = new Date();
+    } else if (updateData.status && updateData.status !== 'COMPLETED') {
+      project.completionDate = undefined;
+    }
+
+    const saved = await project.save();
+
+    await AuditService.logAction(actor, 'PROJECT_UPDATED', 'Project', saved._id, {
+      projectCode: saved.projectCode,
+      name: saved.name,
+      updatedFields,
+      oldValues,
+    });
+
+    return saved;
+  }
 }

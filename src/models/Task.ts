@@ -10,6 +10,31 @@ export interface ITaskAttachment {
   type?: string;
 }
 
+export type SubmissionType = 'url' | 'file';
+
+export interface ITaskSubmissionFile {
+  name?: string;
+  originalName?: string;
+  fileName?: string;
+  fileSize?: number;
+  size?: number;
+  storagePath: string;
+  mimeType: string;
+  uploadedAt?: Date;
+}
+
+export interface ITaskSubmission {
+  submittedAt: Date;
+  submittedBy: string | mongoose.Types.ObjectId;
+  submittedByName?: string;
+  note?: string;
+  submissionNotes?: string;
+  urls?: string[];
+  submissionUrls?: string[];
+  files?: ITaskSubmissionFile[];
+  submissionFiles?: ITaskSubmissionFile[];
+}
+
 export interface ITask extends Document {
   taskCode: string;
   title: string;
@@ -26,6 +51,12 @@ export interface ITask extends Document {
   agreedAmount?: number;
   autoShareCredentials?: boolean;
   credentialAccessRevoked?: boolean;
+  submissionRequired?: boolean;
+  submissionTypes?: SubmissionType[];
+  maxFileSizeMb?: number;
+  submissionInstructions?: string;
+  submission?: ITaskSubmission;
+  submissionHistory?: ITaskSubmission[];
   completedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -116,8 +147,50 @@ const TaskSchema = new Schema<ITask>(
       type: Boolean,
       default: false,
     },
+    submissionRequired: {
+      type: Boolean,
+      default: false,
+    },
+    submissionTypes: {
+      type: [String],
+      enum: ['url', 'file'],
+      default: ['url', 'file'],
+    },
+    maxFileSizeMb: {
+      type: Number,
+      default: 25,
+    },
+    submissionInstructions: {
+      type: String,
+      trim: true,
+    },
+    submission: {
+      submittedAt: { type: Date },
+      submittedBy: { type: Schema.Types.Mixed },
+      submittedByName: { type: String, trim: true },
+      note: { type: String, trim: true },
+      submissionNotes: { type: String, trim: true },
+      urls: [{ type: String, trim: true }],
+      submissionUrls: [{ type: String, trim: true }],
+      files: [{ type: Schema.Types.Mixed }],
+      submissionFiles: [{ type: Schema.Types.Mixed }],
+    },
+    submissionHistory: [
+      {
+        submittedAt: { type: Date },
+        submittedBy: { type: Schema.Types.Mixed },
+        submittedByName: { type: String, trim: true },
+        note: { type: String, trim: true },
+        submissionNotes: { type: String, trim: true },
+        urls: [{ type: String, trim: true }],
+        submissionUrls: [{ type: String, trim: true }],
+        files: [{ type: Schema.Types.Mixed }],
+        submissionFiles: [{ type: Schema.Types.Mixed }],
+      },
+    ],
     completedAt: {
       type: Date,
+      index: true,
     },
   },
   {

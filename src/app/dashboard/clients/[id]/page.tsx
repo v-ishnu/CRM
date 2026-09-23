@@ -25,6 +25,9 @@ import {
   ArrowRight,
   Lock,
   X,
+  Server,
+  FolderKanban,
+  Edit2,
 } from 'lucide-react';
 
 interface Project {
@@ -94,6 +97,7 @@ interface ClientDetails {
   invoices: Invoice[];
   payments: Payment[];
   auditLogs: AuditLog[];
+  hostings?: any[];
   financials: {
     totalProjectValue: number;
     totalPaid: number;
@@ -147,6 +151,75 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const [deleteProjectModalOpen, setDeleteProjectModalOpen] = useState(false);
   const [deletingProject, setDeletingProject] = useState(false);
+
+  // Edit Project States
+  const [editProjectModalOpen, setEditProjectModalOpen] = useState(false);
+  const [projectToEdit, setProjectToEdit] = useState<Project | null>(null);
+  const [editProjectName, setEditProjectName] = useState('');
+  const [editProjectServiceType, setEditProjectServiceType] = useState('WEBSITE');
+  const [editProjectBudget, setEditProjectBudget] = useState('');
+  const [editProjectCurrency, setEditProjectCurrency] = useState('INR');
+  const [editProjectStatus, setEditProjectStatus] = useState('PLANNED');
+  const [editProjectStartDate, setEditProjectStartDate] = useState('');
+  const [editProjectEndDate, setEditProjectEndDate] = useState('');
+  const [editProjectScope, setEditProjectScope] = useState('');
+  const [editProjectTerms, setEditProjectTerms] = useState('');
+  const [editProjectNotes, setEditProjectNotes] = useState('');
+  const [editProjectError, setEditProjectError] = useState<string | null>(null);
+  const [updatingProject, setUpdatingProject] = useState(false);
+
+  const openEditProject = (proj: Project) => {
+    setProjectToEdit(proj);
+    setEditProjectName(proj.name);
+    setEditProjectServiceType(proj.serviceType);
+    setEditProjectBudget(String(proj.totalAmount));
+    setEditProjectCurrency(proj.currency || 'INR');
+    setEditProjectStatus(proj.status);
+    setEditProjectStartDate(proj.startDate ? new Date(proj.startDate).toISOString().split('T')[0] : '');
+    setEditProjectEndDate(proj.expectedCompletionDate ? new Date(proj.expectedCompletionDate).toISOString().split('T')[0] : '');
+    setEditProjectScope((proj as any).scope || '');
+    setEditProjectTerms((proj as any).terms || '');
+    setEditProjectNotes('');
+    setEditProjectError(null);
+    setEditProjectModalOpen(true);
+  };
+
+  const handleEditProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!projectToEdit) return;
+    setUpdatingProject(true);
+    setEditProjectError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectToEdit._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editProjectName,
+          serviceType: editProjectServiceType,
+          totalAmount: parseFloat(editProjectBudget) || 0,
+          currency: editProjectCurrency,
+          status: editProjectStatus,
+          startDate: editProjectStartDate ? new Date(editProjectStartDate) : undefined,
+          expectedCompletionDate: editProjectEndDate ? new Date(editProjectEndDate) : undefined,
+          scope: editProjectScope,
+          terms: editProjectTerms,
+          notes: editProjectNotes,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setEditProjectModalOpen(false);
+        setProjectToEdit(null);
+        await fetchClientDetails();
+      } else {
+        setEditProjectError(json.error?.message || 'Failed to update project');
+      }
+    } catch (err: any) {
+      setEditProjectError(err.message || 'Error updating project');
+    } finally {
+      setUpdatingProject(false);
+    }
+  };
 
   // Requests States
   const [requests, setRequests] = useState<any[]>([]);
@@ -602,7 +675,7 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
     );
   }
 
-  const { client, projects, invoices, payments, auditLogs, financials } = data;
+  const { client, projects, invoices, payments, auditLogs, financials, hostings = [] } = data;
 
   return (
     <div className="space-y-8">
@@ -880,12 +953,19 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
 
                         <div className="flex items-center gap-1.5 shrink-0">
                           <Link
-                            href={`/dashboard/projects`}
+                            href={`/dashboard/projects/${proj._id}`}
                             className="p-2 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200 rounded-lg transition-all"
-                            title="View Projects"
+                            title="View Project Detail"
                           >
                             <ArrowRight className="w-4 h-4" />
                           </Link>
+                          <button
+                            onClick={() => openEditProject(proj)}
+                            className="p-2 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200 rounded-lg transition-all"
+                            title="Edit Project"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
                           <button
                             onClick={() => {
                               setProjectToDelete(proj);
@@ -1015,6 +1095,69 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
                         <td className="px-4 py-3">{new Date(pay.paymentDate).toLocaleDateString()}</td>
                         <td className="px-4 py-3 text-right font-bold text-slate-200">
                           Rs. {pay.amount.toLocaleString('en-IN')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Hosting Accounts Panel */}
+          <div className="bg-[#0d0d12]/30 border border-slate-850 p-6 rounded-2xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+              <h2 className="text-base font-bold text-slate-200 flex items-center">
+                <Server className="w-5 h-5 mr-2 text-indigo-400" />
+                Hosting & Infrastructure
+              </h2>
+              <Link
+                href="/dashboard/hosting"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 text-xs font-semibold rounded-xl transition-all"
+              >
+                <span>Manage Hosting</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            {hostings.length === 0 ? (
+              <p className="text-sm text-slate-550 py-4 text-center">No hosting accounts recorded for this client.</p>
+            ) : (
+              <div className="overflow-x-auto border border-slate-850/50 rounded-xl">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-900/30 border-b border-slate-850 text-slate-450 font-semibold uppercase">
+                      <th className="px-4 py-3">Server / Domain</th>
+                      <th className="px-4 py-3">Provider</th>
+                      <th className="px-4 py-3">IP Address</th>
+                      <th className="px-4 py-3">Expiry Date</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-850 text-slate-350">
+                    {hostings.map((h: any) => (
+                      <tr key={h._id} className="hover:bg-slate-900/10">
+                        <td className="px-4 py-3 font-semibold text-slate-200">{h.serverName || h.domainName || 'Unnamed'}</td>
+                        <td className="px-4 py-3 text-slate-400">{h.provider}</td>
+                        <td className="px-4 py-3 font-mono text-slate-400">{h.ipAddress || '—'}</td>
+                        <td className="px-4 py-3 text-slate-300">{h.expiryDate ? new Date(h.expiryDate).toLocaleDateString() : '—'}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                            h.status === 'ACTIVE' ? 'bg-emerald-950/30 text-emerald-450 border border-emerald-900/30' :
+                            h.status === 'EXPIRING_SOON' ? 'bg-amber-950/30 text-amber-400 border border-amber-900/30' :
+                            'bg-red-950/30 text-red-400 border border-red-900/30'
+                          }`}>
+                            {h.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <Link
+                            href="/dashboard/hosting"
+                            className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded border border-slate-800 hover:border-slate-700 transition-colors"
+                          >
+                            Details
+                          </Link>
                         </td>
                       </tr>
                     ))}
@@ -2196,6 +2339,171 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Project Modal */}
+      {editProjectModalOpen && projectToEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+          <div className="bg-slate-950 border border-slate-850 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-slate-850 pb-3">
+              <h3 className="text-base font-bold text-slate-200 flex items-center gap-2">
+                <FolderKanban className="w-5 h-5 text-indigo-400" />
+                Edit Project ({projectToEdit.projectCode})
+              </h3>
+              <button
+                onClick={() => setEditProjectModalOpen(false)}
+                className="text-slate-500 hover:text-slate-300 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {editProjectError && (
+              <div className="p-3 bg-red-950/30 border border-red-900/40 rounded-xl text-xs text-red-400 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{editProjectError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleEditProject} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-450 font-semibold mb-1">Project Name</label>
+                <input
+                  type="text"
+                  required
+                  value={editProjectName}
+                  onChange={(e) => setEditProjectName(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-850 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-450 font-semibold mb-1">Service Type</label>
+                  <select
+                    value={editProjectServiceType}
+                    onChange={(e) => setEditProjectServiceType(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-850 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="WEB_DEVELOPMENT">Web Development</option>
+                    <option value="APP_DEVELOPMENT">App Development</option>
+                    <option value="UI_UX_DESIGN">UI/UX Design</option>
+                    <option value="SEO">SEO</option>
+                    <option value="DIGITAL_MARKETING">Digital Marketing</option>
+                    <option value="MAINTENANCE">Maintenance</option>
+                    <option value="CONSULTING">Consulting</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-450 font-semibold mb-1">Status</label>
+                  <select
+                    value={editProjectStatus}
+                    onChange={(e) => setEditProjectStatus(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-850 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="PENDING_AGREEMENT">Pending Agreement</option>
+                    <option value="NOT_STARTED">Not Started</option>
+                    <option value="ACTIVE">Active</option>
+                    <option value="IN_PROGRESS">In Progress</option>
+                    <option value="ON_HOLD">On Hold</option>
+                    <option value="COMPLETED">Completed</option>
+                    <option value="CANCELLED">Cancelled</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-450 font-semibold mb-1">Total Amount</label>
+                  <input
+                    type="number"
+                    min="0"
+                    required
+                    value={editProjectBudget}
+                    onChange={(e) => setEditProjectBudget(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-850 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-450 font-semibold mb-1">Currency</label>
+                  <select
+                    value={editProjectCurrency}
+                    onChange={(e) => setEditProjectCurrency(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-850 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="INR">INR (₹)</option>
+                    <option value="USD">USD ($)</option>
+                    <option value="EUR">EUR (€)</option>
+                    <option value="GBP">GBP (£)</option>
+                    <option value="AED">AED (AED)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-450 font-semibold mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    value={editProjectStartDate}
+                    onChange={(e) => setEditProjectStartDate(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-850 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-450 font-semibold mb-1">Expected Completion</label>
+                  <input
+                    type="date"
+                    value={editProjectEndDate}
+                    onChange={(e) => setEditProjectEndDate(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-850 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-450 font-semibold mb-1">Project Scope</label>
+                <textarea
+                  rows={2}
+                  value={editProjectScope}
+                  onChange={(e) => setEditProjectScope(e.target.value)}
+                  placeholder="Scope of work..."
+                  className="w-full bg-slate-900 border border-slate-850 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-450 font-semibold mb-1">Terms & Conditions</label>
+                <textarea
+                  rows={2}
+                  value={editProjectTerms}
+                  onChange={(e) => setEditProjectTerms(e.target.value)}
+                  placeholder="Terms for this project..."
+                  className="w-full bg-slate-900 border border-slate-850 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-850">
+                <button
+                  type="button"
+                  onClick={() => setEditProjectModalOpen(false)}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-850 text-slate-400 rounded-xl font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updatingProject}
+                  className="px-5 py-2 bg-indigo-650 hover:bg-indigo-500 text-white rounded-xl font-semibold flex items-center gap-2 disabled:opacity-50"
+                >
+                  {updatingProject && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Save Changes
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -16,14 +16,18 @@ export interface IEncryptedField {
 }
 
 export interface ICredential extends Document {
-  requestId: mongoose.Types.ObjectId;
+  requestId?: mongoose.Types.ObjectId;
   clientId: mongoose.Types.ObjectId;
   projectId?: mongoose.Types.ObjectId;
+  taskId?: mongoose.Types.ObjectId;
+  credentialType?: string;
+  source: 'MANUAL' | 'CLIENT_REQUEST' | 'IMPORTED';
   service: IEncryptedField;
   username: IEncryptedField;
   password: IEncryptedField;
   loginUrl?: IEncryptedField;
   additionalInfo?: IEncryptedField;
+  isRevoked?: boolean;
   version: number;
   createdAt: Date;
   updatedAt: Date;
@@ -34,8 +38,9 @@ const CredentialSchema = new Schema<ICredential>(
     requestId: {
       type: Schema.Types.ObjectId,
       ref: 'DataRequest',
-      required: true,
+      required: false,
       unique: true,
+      sparse: true,
       index: true,
     },
     clientId: {
@@ -47,6 +52,24 @@ const CredentialSchema = new Schema<ICredential>(
     projectId: {
       type: Schema.Types.ObjectId,
       ref: 'Project',
+      index: true,
+    },
+    taskId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Task',
+      index: true,
+    },
+    credentialType: {
+      type: String,
+      default: 'CUSTOM',
+      trim: true,
+      index: true,
+    },
+    source: {
+      type: String,
+      enum: ['MANUAL', 'CLIENT_REQUEST', 'IMPORTED'],
+      default: 'CLIENT_REQUEST',
+      required: true,
       index: true,
     },
     service: {
@@ -66,6 +89,11 @@ const CredentialSchema = new Schema<ICredential>(
     },
     additionalInfo: {
       type: EncryptedFieldSchema,
+    },
+    isRevoked: {
+      type: Boolean,
+      default: false,
+      index: true,
     },
     version: {
       type: Number,
