@@ -288,21 +288,21 @@ export default function InquiryDetailPage() {
   const renderAttachment = (att: InquiryAttachment, index: number) => {
     if (att.type === 'IMAGE') {
       return (
-        <div key={index} className="mt-2 group relative max-w-sm rounded-xl overflow-hidden border border-slate-700/60 bg-black/40">
+        <div key={index} className="mt-2 group relative max-w-sm rounded-none md:rounded-xs overflow-hidden border border-[#242428] bg-black">
           {att.fileUrl ? (
             <a href={att.fileUrl} target="_blank" rel="noopener noreferrer" className="block relative">
               <img
                 src={att.fileUrl}
                 alt={att.fileName || 'Attachment'}
-                className="max-h-60 w-full object-contain bg-black/40 transition-transform duration-200 group-hover:scale-[1.02]"
+                className="max-h-60 w-full object-contain bg-black transition-transform duration-200 group-hover:scale-[1.02]"
               />
-              <div className="absolute bottom-2 right-2 bg-black/70 text-slate-200 text-[10px] px-2 py-0.5 rounded backdrop-blur flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="absolute bottom-2 right-2 bg-black/80 text-white font-mono text-[10px] px-2 py-0.5 rounded-none md:rounded-xs backdrop-blur-xs flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <ExternalLink className="w-3 h-3" /> View
               </div>
             </a>
           ) : (
-            <div className="p-3 flex items-center space-x-2 text-xs text-slate-300">
-              <ImageIcon className="w-4 h-4 text-indigo-400 shrink-0" />
+            <div className="p-3 flex items-center space-x-2 text-xs font-mono text-[#a1a1aa]">
+              <ImageIcon className="w-4 h-4 text-[#ff3e00] shrink-0" />
               <span className="truncate">{att.fileName}</span>
             </div>
           )}
@@ -312,14 +312,14 @@ export default function InquiryDetailPage() {
 
     if (att.type === 'VIDEO') {
       return (
-        <div key={index} className="mt-2 max-w-sm rounded-xl overflow-hidden border border-slate-700/60 bg-black/40">
+        <div key={index} className="mt-2 max-w-sm rounded-none md:rounded-xs overflow-hidden border border-[#242428] bg-black">
           {att.fileUrl ? (
-            <video controls src={att.fileUrl} className="max-h-60 w-full rounded-xl" />
+            <video controls src={att.fileUrl} className="max-h-60 w-full rounded-none md:rounded-xs" />
           ) : (
-            <div className="p-3 flex items-center space-x-2 text-xs text-slate-300">
-              <Film className="w-4 h-4 text-purple-400 shrink-0" />
+            <div className="p-3 flex items-center space-x-2 text-xs font-mono text-[#a1a1aa]">
+              <Film className="w-4 h-4 text-[#ff3e00] shrink-0" />
               <span className="truncate">{att.fileName}</span>
-              {att.size && <span className="text-[10px] text-slate-500">({formatFileSize(att.size)})</span>}
+              {att.size && <span className="text-[10px] text-[#88888e]">({formatFileSize(att.size)})</span>}
             </div>
           )}
         </div>
@@ -328,18 +328,18 @@ export default function InquiryDetailPage() {
 
     if (att.type === 'AUDIO') {
       return (
-        <div key={index} className="mt-2 max-w-md p-2 rounded-xl border border-slate-700/60 bg-slate-900/60">
+        <div key={index} className="mt-2 max-w-md p-2 rounded-none md:rounded-xs border border-[#242428] bg-[#0a0a0a]">
           {att.fileUrl ? (
             <div className="space-y-1">
-              <div className="flex items-center gap-2 text-xs text-slate-300 px-1">
-                <Music className="w-3.5 h-3.5 text-pink-400" />
+              <div className="flex items-center gap-2 text-xs font-mono text-[#a1a1aa] px-1">
+                <Music className="w-3.5 h-3.5 text-[#ff3e00]" />
                 <span className="truncate">{att.fileName}</span>
               </div>
               <audio controls src={att.fileUrl} className="w-full h-8" />
             </div>
           ) : (
-            <div className="flex items-center space-x-2 text-xs text-slate-300">
-              <Music className="w-4 h-4 text-pink-400 shrink-0" />
+            <div className="flex items-center space-x-2 text-xs font-mono text-[#a1a1aa]">
+              <Music className="w-4 h-4 text-[#ff3e00] shrink-0" />
               <span className="truncate">{att.fileName}</span>
             </div>
           )}
@@ -349,14 +349,14 @@ export default function InquiryDetailPage() {
 
     // Default DOCUMENT
     return (
-      <div key={index} className="mt-2 flex items-center justify-between p-2.5 rounded-xl border border-slate-700/60 bg-slate-900/70 max-w-sm">
+      <div key={index} className="mt-2 flex items-center justify-between p-2.5 rounded-none md:rounded-xs border border-[#242428] bg-[#0a0a0a] max-w-sm">
         <div className="flex items-center space-x-2.5 min-w-0 pr-2">
-          <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0">
-            <FileText className="w-4 h-4 text-indigo-400" />
+          <div className="w-8 h-8 rounded-none md:rounded-xs bg-[#18181b] border border-[#242428] flex items-center justify-center shrink-0">
+            <FileText className="w-4 h-4 text-[#ff3e00]" />
           </div>
-          <div className="truncate">
-            <p className="text-xs font-medium text-slate-200 truncate">{att.fileName}</p>
-            {att.size && <p className="text-[10px] text-slate-400">{formatFileSize(att.size)}</p>}
+          <div className="truncate font-mono">
+            <p className="text-xs font-medium text-white truncate">{att.fileName}</p>
+            {att.size && <p className="text-[10px] text-[#88888e]">{formatFileSize(att.size)}</p>}
           </div>
         </div>
         {att.fileUrl && (
@@ -364,7 +364,7 @@ export default function InquiryDetailPage() {
             href={att.fileUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="p-1.5 bg-slate-800 hover:bg-slate-750 text-indigo-400 border border-slate-700 rounded-lg text-xs flex items-center gap-1 transition-colors shrink-0"
+            className="p-1.5 bg-[#18181b] hover:bg-[#242428] text-[#88888e] hover:text-white border border-[#242428] rounded-none md:rounded-xs text-xs flex items-center gap-1 transition-colors shrink-0"
           >
             <ExternalLink className="w-3.5 h-3.5" />
           </a>
@@ -375,10 +375,10 @@ export default function InquiryDetailPage() {
 
   if (loading || !inquiry) {
     return (
-      <div className="h-full flex items-center justify-center p-8 text-center text-slate-500">
+      <div className="h-full flex items-center justify-center p-8 text-center text-[#88888e]">
         <div>
-          <RefreshCw className="w-8 h-8 mx-auto mb-3 animate-spin text-indigo-400" />
-          <p className="text-sm">Loading inquiry conversation...</p>
+          <RefreshCw className="w-8 h-8 mx-auto mb-3 animate-spin text-[#ff3e00]" />
+          <p className="font-mono text-xs uppercase tracking-wider">SYS::LOADING_INQUIRY_CONVERSATION...</p>
         </div>
       </div>
     );
@@ -386,40 +386,40 @@ export default function InquiryDetailPage() {
 
   return (
     <div className="flex flex-col flex-1 h-full max-w-5xl w-full mx-auto space-y-4 min-h-0">
-      {/* Mobile Breadcrumb & Header Card (shown only on mobile directly below main header) */}
-      <div className="md:hidden shrink-0 bg-[#0d0d12]/90 border border-slate-800/80 rounded-2xl p-3 space-y-2.5 shadow-md">
+      {/* Mobile Breadcrumb & Header Card */}
+      <div className="md:hidden shrink-0 bg-[#141416] border border-[#242428] rounded-none md:rounded-xs p-3 space-y-2.5">
         {/* Top Row: Back button, Inquiry Number, Name, Mode */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center space-x-2 min-w-0">
             <Link
               href="/dashboard/inquiries"
-              className="p-1.5 bg-slate-850 hover:bg-slate-800 border border-slate-750 text-slate-300 rounded-lg transition-colors shrink-0"
+              className="p-1.5 bg-[#18181b] hover:bg-[#242428] border border-[#242428] text-[#88888e] hover:text-white rounded-none md:rounded-xs transition-colors shrink-0"
               title="Back to Inquiries"
             >
               <ArrowLeft className="w-4 h-4" />
             </Link>
             <div className="min-w-0">
               <div className="flex items-center space-x-1.5 flex-wrap gap-y-0.5">
-                <span className="font-mono font-bold text-xs text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20 shrink-0">
+                <span className="font-mono font-bold text-xs text-[#ff3e00] bg-[#ff3e00]/10 px-2 py-0.5 rounded-none md:rounded-xs border border-[#ff3e00]/20 shrink-0">
                   {inquiry.inquiryNumber}
                 </span>
-                <h1 className="text-sm font-bold text-slate-100 truncate">{inquiry.name || 'Anonymous Lead'}</h1>
+                <h1 className="text-sm font-bold text-white truncate">{inquiry.name || 'Anonymous Lead'}</h1>
               </div>
             </div>
           </div>
           <div className="shrink-0">
             {inquiry.conversationMode === 'HUMAN' ? (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-none md:rounded-xs font-mono text-[10px] font-bold uppercase tracking-wider bg-amber-950/40 text-amber-400 border border-amber-500/30">
                 <AlertCircle className="w-2.5 h-2.5 mr-1" />
                 Human Mode
               </span>
             ) : inquiry.status === 'CLOSED' ? (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-none md:rounded-xs font-mono text-[10px] font-bold uppercase tracking-wider bg-[#18181b] text-[#88888e] border border-[#242428]">
                 <CheckCircle2 className="w-2.5 h-2.5 mr-1" />
                 Closed
               </span>
             ) : (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-none md:rounded-xs font-mono text-[10px] font-bold uppercase tracking-wider bg-[#00d664]/10 text-[#00d664] border border-[#00d664]/30">
                 <Bot className="w-2.5 h-2.5 mr-1" />
                 Bot Mode
               </span>
@@ -428,8 +428,8 @@ export default function InquiryDetailPage() {
         </div>
 
         {/* Telegram User ID & Created Date */}
-        <p className="text-[11px] text-slate-400 leading-tight">
-          Telegram User ID: <code>{inquiry.telegramUserId}</code> {inquiry.telegramUsername && `(@${inquiry.telegramUsername})`} • Created{' '}
+        <p className="font-mono text-[11px] text-[#88888e] leading-tight">
+          TG_ID: <code>{inquiry.telegramUserId}</code> {inquiry.telegramUsername && `(@${inquiry.telegramUsername})`} • Created{' '}
           {new Date(inquiry.createdAt).toLocaleDateString('en-IN', {
             month: 'short',
             day: 'numeric',
@@ -439,23 +439,23 @@ export default function InquiryDetailPage() {
         </p>
 
         {/* Mobile Action Controls */}
-        <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-800/60">
+        <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-[#242428]">
           {inquiry.status !== 'CLOSED' && (
             <>
               {inquiry.conversationMode === 'HUMAN' ? (
                 <button
                   onClick={() => handleAction('return_to_bot')}
                   disabled={actionLoading}
-                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-750 text-indigo-400 border border-slate-700 rounded-lg text-[11px] font-medium flex items-center transition-colors"
+                  className="px-2.5 py-1 bg-[#18181b] hover:bg-[#242428] text-white border border-[#242428] rounded-none md:rounded-xs font-mono text-[11px] font-semibold uppercase tracking-wider flex items-center transition-colors"
                 >
-                  <Bot className="w-3 h-3 mr-1" />
+                  <Bot className="w-3 h-3 mr-1 text-[#ff3e00]" />
                   Return to Bot
                 </button>
               ) : (
                 <button
                   onClick={() => handleAction('take')}
                   disabled={actionLoading}
-                  className="px-2.5 py-1 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 rounded-lg text-[11px] font-medium flex items-center transition-colors"
+                  className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-none md:rounded-xs font-mono text-[11px] font-semibold uppercase tracking-wider flex items-center transition-colors"
                 >
                   <UserCheck className="w-3 h-3 mr-1" />
                   Take Inquiry
@@ -466,20 +466,20 @@ export default function InquiryDetailPage() {
                 <button
                   onClick={() => setShowConvertModal(true)}
                   disabled={actionLoading}
-                  className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] font-medium flex items-center shadow-sm transition-colors"
+                  className="crm-btn-primary px-2.5 py-1 text-[11px] flex items-center"
                 >
                   <UserPlus className="w-3 h-3 mr-1" />
-                  Convert to Client
+                  Convert
                 </button>
               )}
 
               <button
                 onClick={() => handleAction('close')}
                 disabled={actionLoading}
-                className="px-2.5 py-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-[11px] font-medium flex items-center transition-colors"
+                className="px-2.5 py-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-none md:rounded-xs font-mono text-[11px] font-semibold uppercase tracking-wider flex items-center transition-colors"
               >
                 <XCircle className="w-3 h-3 mr-1" />
-                Close Inquiry
+                Close
               </button>
             </>
           )}
@@ -487,7 +487,7 @@ export default function InquiryDetailPage() {
           {inquiry.convertedToClientId && (
             <Link
               href={`/dashboard/clients/${inquiry.convertedToClientId._id}`}
-              className="px-2.5 py-1 bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 rounded-lg text-[11px] font-semibold flex items-center"
+              className="px-2.5 py-1 bg-[#00d664]/10 text-[#00d664] border border-[#00d664]/30 rounded-none md:rounded-xs font-mono text-[11px] font-bold uppercase tracking-wider flex items-center"
             >
               <CheckCircle2 className="w-3 h-3 mr-1" />
               Converted: {inquiry.convertedToClientId.clientCode}
@@ -497,39 +497,39 @@ export default function InquiryDetailPage() {
       </div>
 
       {/* Desktop Header & Action Controls */}
-      <div className="hidden md:flex shrink-0 flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="hidden md:flex shrink-0 flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-[#242428]">
         <div className="flex items-center space-x-3">
           <Link
             href="/dashboard/inquiries"
-            className="p-2 bg-slate-850 hover:bg-slate-800 border border-slate-750 text-slate-300 rounded-xl transition-colors shrink-0"
+            className="p-2 bg-[#18181b] hover:bg-[#242428] border border-[#242428] text-[#88888e] hover:text-white rounded-none md:rounded-xs transition-colors shrink-0"
           >
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div>
             <div className="flex items-center space-x-2.5 flex-wrap gap-y-1">
-              <span className="font-mono font-bold text-sm text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded border border-indigo-500/20">
+              <span className="font-mono font-bold text-xs text-[#ff3e00] bg-[#ff3e00]/10 px-2.5 py-0.5 rounded-none md:rounded-xs border border-[#ff3e00]/20">
                 {inquiry.inquiryNumber}
               </span>
-              <h1 className="text-lg sm:text-xl font-bold text-slate-100">{inquiry.name || 'Anonymous Lead'}</h1>
+              <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight">{inquiry.name || 'Anonymous Lead'}</h1>
               {inquiry.conversationMode === 'HUMAN' ? (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-none md:rounded-xs font-mono text-[10px] font-bold uppercase tracking-wider bg-amber-950/40 text-amber-400 border border-amber-500/30">
                   <AlertCircle className="w-3 h-3 mr-1" />
                   Human Mode
                 </span>
               ) : inquiry.status === 'CLOSED' ? (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-none md:rounded-xs font-mono text-[10px] font-bold uppercase tracking-wider bg-[#18181b] text-[#88888e] border border-[#242428]">
                   <CheckCircle2 className="w-3 h-3 mr-1" />
                   Closed
                 </span>
               ) : (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-none md:rounded-xs font-mono text-[10px] font-bold uppercase tracking-wider bg-[#00d664]/10 text-[#00d664] border border-[#00d664]/30">
                   <Bot className="w-3 h-3 mr-1" />
                   Bot Mode
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-400 mt-1">
-              Telegram User ID: <code>{inquiry.telegramUserId}</code> {inquiry.telegramUsername && `(@${inquiry.telegramUsername})`} • Created{' '}
+            <p className="font-mono text-xs text-[#88888e] mt-1">
+              TG_ID: <code>{inquiry.telegramUserId}</code> {inquiry.telegramUsername && `(@${inquiry.telegramUsername})`} • Created{' '}
               {new Date(inquiry.createdAt).toLocaleDateString('en-IN', {
                 month: 'short',
                 day: 'numeric',
@@ -548,16 +548,16 @@ export default function InquiryDetailPage() {
                 <button
                   onClick={() => handleAction('return_to_bot')}
                   disabled={actionLoading}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-750 text-indigo-400 border border-slate-700 rounded-xl text-xs font-medium flex items-center transition-colors"
+                  className="crm-btn-secondary px-3 py-1.5 text-xs flex items-center"
                 >
-                  <Bot className="w-3.5 h-3.5 mr-1.5" />
+                  <Bot className="w-3.5 h-3.5 mr-1.5 text-[#ff3e00]" />
                   Return to Bot
                 </button>
               ) : (
                 <button
                   onClick={() => handleAction('take')}
                   disabled={actionLoading}
-                  className="px-3 py-1.5 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-medium flex items-center transition-colors"
+                  className="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-none md:rounded-xs font-mono text-xs uppercase tracking-wider font-semibold flex items-center transition-colors"
                 >
                   <UserCheck className="w-3.5 h-3.5 mr-1.5" />
                   Take Inquiry
@@ -568,7 +568,7 @@ export default function InquiryDetailPage() {
                 <button
                   onClick={() => setShowConvertModal(true)}
                   disabled={actionLoading}
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-medium flex items-center shadow-sm transition-colors"
+                  className="crm-btn-primary px-3 py-1.5 text-xs flex items-center"
                 >
                   <UserPlus className="w-3.5 h-3.5 mr-1.5" />
                   Convert to Client
@@ -578,7 +578,7 @@ export default function InquiryDetailPage() {
               <button
                 onClick={() => handleAction('close')}
                 disabled={actionLoading}
-                className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl text-xs font-medium flex items-center transition-colors"
+                className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-none md:rounded-xs font-mono text-xs uppercase tracking-wider font-semibold flex items-center transition-colors"
               >
                 <XCircle className="w-3.5 h-3.5 mr-1.5" />
                 Close Inquiry
@@ -589,7 +589,7 @@ export default function InquiryDetailPage() {
           {inquiry.convertedToClientId && (
             <Link
               href={`/dashboard/clients/${inquiry.convertedToClientId._id}`}
-              className="px-3 py-1.5 bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-semibold flex items-center"
+              className="px-3 py-1.5 bg-[#00d664]/10 text-[#00d664] border border-[#00d664]/30 rounded-none md:rounded-xs font-mono text-xs font-bold uppercase tracking-wider flex items-center"
             >
               <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
               Converted: {inquiry.convertedToClientId.clientCode}
@@ -598,8 +598,8 @@ export default function InquiryDetailPage() {
         </div>
       </div>
 
-      {/* Conversation Thread - Responsive Container */}
-      <div className="bg-[#0d0d12] border border-slate-800/80 rounded-2xl shadow-xl flex flex-col flex-1 min-h-0 overflow-hidden">
+      {/* Conversation Thread */}
+      <div className="bg-[#141416] border border-[#242428] rounded-none md:rounded-xs flex flex-col flex-1 min-h-0 overflow-hidden shadow-2xl">
         {/* Messages Scroll Area */}
         <div className="flex-1 min-h-0 overflow-hidden p-3 sm:p-6 pb-2">
           <div
@@ -611,8 +611,8 @@ export default function InquiryDetailPage() {
               if (msg.sender === 'SYSTEM') {
                 return (
                   <div key={index} className="flex justify-center my-2">
-                    <span className="text-[11px] font-medium text-slate-400 bg-slate-850 px-3 py-1 rounded-full border border-slate-750/60 text-center">
-                      ⚙️ {msg.text} • {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    <span className="font-mono text-[11px] text-[#88888e] bg-[#0a0a0a] px-3 py-1 rounded-none md:rounded-xs border border-[#242428] text-center">
+                      SYS:: {msg.text} • {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
                 );
@@ -621,10 +621,10 @@ export default function InquiryDetailPage() {
               if (msg.sender === 'CLIENT') {
                 return (
                   <div key={index} className="flex flex-col items-start max-w-[88%] sm:max-w-[75%] space-y-1">
-                    <span className="text-[11px] font-semibold text-slate-400 ml-1">
+                    <span className="font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] ml-1">
                       {inquiry.name || 'Lead'} {inquiry.telegramUsername && `(@${inquiry.telegramUsername})`}
                     </span>
-                    <div className="bg-slate-800/90 text-slate-100 rounded-2xl rounded-tl-sm px-3.5 sm:px-4 py-2.5 text-sm border border-slate-700/60 shadow-sm max-w-full overflow-hidden">
+                    <div className="bg-[#18181b] text-white rounded-none md:rounded-xs px-3.5 sm:px-4 py-2.5 text-xs sm:text-sm border border-[#242428] shadow-xs max-w-full overflow-hidden">
                       {msg.text && <div className="whitespace-pre-wrap break-words">{msg.text}</div>}
                       {msg.attachments && msg.attachments.length > 0 && (
                         <div className="space-y-2">
@@ -632,7 +632,7 @@ export default function InquiryDetailPage() {
                         </div>
                       )}
                     </div>
-                    <span className="text-[10px] text-slate-500 ml-1">
+                    <span className="font-mono text-[10px] text-[#52525b] ml-1">
                       {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
@@ -642,10 +642,10 @@ export default function InquiryDetailPage() {
               if (msg.sender === 'BOT') {
                 return (
                   <div key={index} className="flex flex-col items-start max-w-[88%] sm:max-w-[75%] space-y-1">
-                    <span className="text-[11px] font-semibold text-indigo-400 ml-1 flex items-center gap-1">
+                    <span className="font-mono text-[10px] uppercase font-bold tracking-wider text-[#00d664] ml-1 flex items-center gap-1">
                       <Bot className="w-3 h-3" /> Dr. Debuggers Bot
                     </span>
-                    <div className="bg-indigo-950/40 text-indigo-200 rounded-2xl rounded-tl-sm px-3.5 sm:px-4 py-2.5 text-sm border border-indigo-800/40 shadow-sm max-w-full overflow-hidden">
+                    <div className="bg-[#0a0a0a] text-[#f5f5f2] rounded-none md:rounded-xs px-3.5 sm:px-4 py-2.5 text-xs sm:text-sm border border-[#00d664]/30 shadow-xs max-w-full overflow-hidden">
                       <div className="whitespace-pre-wrap break-words">{msg.text}</div>
                       {msg.attachments && msg.attachments.length > 0 && (
                         <div className="space-y-2">
@@ -653,7 +653,7 @@ export default function InquiryDetailPage() {
                         </div>
                       )}
                     </div>
-                    <span className="text-[10px] text-slate-500 ml-1">
+                    <span className="font-mono text-[10px] text-[#52525b] ml-1">
                       {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
@@ -663,10 +663,10 @@ export default function InquiryDetailPage() {
               if (msg.sender === 'ADMIN') {
                 return (
                   <div key={index} className="flex flex-col items-end max-w-[88%] sm:max-w-[75%] ml-auto space-y-1">
-                    <span className="text-[11px] font-semibold text-emerald-400 mr-1 flex items-center gap-1">
+                    <span className="font-mono text-[10px] uppercase font-bold tracking-wider text-[#ff3e00] mr-1 flex items-center gap-1">
                       <User className="w-3 h-3" /> {msg.adminName || 'Admin'}
                     </span>
-                    <div className="bg-emerald-950/40 text-emerald-100 rounded-2xl rounded-tr-sm px-3.5 sm:px-4 py-2.5 text-sm border border-emerald-800/40 shadow-sm max-w-full overflow-hidden">
+                    <div className="bg-[#ff3e00]/10 text-white rounded-none md:rounded-xs px-3.5 sm:px-4 py-2.5 text-xs sm:text-sm border border-[#ff3e00]/30 shadow-xs max-w-full overflow-hidden">
                       {msg.text && <div className="whitespace-pre-wrap break-words">{msg.text}</div>}
                       {msg.attachments && msg.attachments.length > 0 && (
                         <div className="space-y-2">
@@ -674,7 +674,7 @@ export default function InquiryDetailPage() {
                         </div>
                       )}
                     </div>
-                    <span className="text-[10px] text-slate-500 mr-1">
+                    <span className="font-mono text-[10px] text-[#52525b] mr-1">
                       {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
@@ -689,40 +689,40 @@ export default function InquiryDetailPage() {
 
         {/* Message Composer */}
         {inquiry.status !== 'CLOSED' ? (
-          <div className="shrink-0 p-3 sm:p-4 md:p-6 pt-2 sm:pt-3 border-t border-slate-800/80 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
+          <div className="shrink-0 p-3 sm:p-4 md:p-6 pt-2 sm:pt-3 border-t border-[#242428] pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
             {/* Attachment Preview Chip */}
             {selectedFile && (
-              <div className="mb-2 flex items-center justify-between p-2 rounded-xl bg-slate-900 border border-indigo-500/30 max-w-md">
+              <div className="mb-2 flex items-center justify-between p-2 rounded-none md:rounded-xs bg-[#0a0a0a] border border-[#ff3e00]/30 max-w-md">
                 <div className="flex items-center space-x-2.5 min-w-0">
                   {filePreviewUrl ? (
                     <img
                       src={filePreviewUrl}
                       alt="Preview"
-                      className="w-9 h-9 object-cover rounded-lg border border-slate-700 shrink-0"
+                      className="w-9 h-9 object-cover rounded-none md:rounded-xs border border-[#242428] shrink-0"
                     />
                   ) : selectedFile.type.startsWith('video/') ? (
-                    <div className="w-9 h-9 bg-purple-500/10 border border-purple-500/30 rounded-lg flex items-center justify-center shrink-0">
-                      <Film className="w-4 h-4 text-purple-400" />
+                    <div className="w-9 h-9 bg-[#18181b] border border-[#242428] rounded-none md:rounded-xs flex items-center justify-center shrink-0">
+                      <Film className="w-4 h-4 text-[#ff3e00]" />
                     </div>
                   ) : selectedFile.type.startsWith('audio/') ? (
-                    <div className="w-9 h-9 bg-pink-500/10 border border-pink-500/30 rounded-lg flex items-center justify-center shrink-0">
-                      <Music className="w-4 h-4 text-pink-400" />
+                    <div className="w-9 h-9 bg-[#18181b] border border-[#242428] rounded-none md:rounded-xs flex items-center justify-center shrink-0">
+                      <Music className="w-4 h-4 text-[#ff3e00]" />
                     </div>
                   ) : (
-                    <div className="w-9 h-9 bg-indigo-500/10 border border-indigo-500/30 rounded-lg flex items-center justify-center shrink-0">
-                      <FileText className="w-4 h-4 text-indigo-400" />
+                    <div className="w-9 h-9 bg-[#18181b] border border-[#242428] rounded-none md:rounded-xs flex items-center justify-center shrink-0">
+                      <FileText className="w-4 h-4 text-[#ff3e00]" />
                     </div>
                   )}
-                  <div className="truncate">
-                    <p className="text-xs font-semibold text-slate-200 truncate">{selectedFile.name}</p>
-                    <p className="text-[10px] text-slate-400">{formatFileSize(selectedFile.size)}</p>
+                  <div className="truncate font-mono">
+                    <p className="text-xs font-semibold text-white truncate">{selectedFile.name}</p>
+                    <p className="text-[10px] text-[#88888e]">{formatFileSize(selectedFile.size)}</p>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={handleRemoveAttachment}
                   disabled={sending}
-                  className="p-1 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors ml-2"
+                  className="p-1 text-[#88888e] hover:text-red-400 hover:bg-red-500/10 rounded-none md:rounded-xs transition-colors ml-2"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -730,7 +730,7 @@ export default function InquiryDetailPage() {
             )}
 
             {fileError && (
-              <p className="text-xs text-red-400 mb-2 flex items-center gap-1">
+              <p className="font-mono text-xs text-red-400 mb-2 flex items-center gap-1">
                 <AlertCircle className="w-3.5 h-3.5" />
                 {fileError}
               </p>
@@ -753,7 +753,7 @@ export default function InquiryDetailPage() {
                 onClick={() => fileInputRef.current?.click()}
                 disabled={sending}
                 title="Attach file (Images, PDFs, Docs, Audio, Video)"
-                className="p-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-750 text-slate-400 hover:text-slate-200 disabled:opacity-50 rounded-xl transition-colors shrink-0"
+                className="p-2.5 bg-[#0a0a0a] hover:bg-[#18181b] border border-[#242428] hover:border-[#ff3e00] text-[#88888e] hover:text-white disabled:opacity-50 rounded-none md:rounded-xs transition-colors shrink-0"
               >
                 <Paperclip className="w-4 h-4" />
               </button>
@@ -768,13 +768,13 @@ export default function InquiryDetailPage() {
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
                 disabled={sending}
-                className="flex-1 bg-slate-900 border border-slate-750 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors min-w-0"
+                className="flex-1 bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-4 py-2.5 text-xs sm:text-sm font-mono text-white placeholder-[#52525b] focus:outline-none focus:border-[#ff3e00] transition-colors min-w-0"
               />
 
               <button
                 type="submit"
                 disabled={sending || (!replyText.trim() && !selectedFile)}
-                className="px-4 sm:px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-sm font-semibold flex items-center gap-2 shadow-lg shadow-indigo-600/20 transition-all shrink-0 min-w-[85px] justify-center"
+                className="crm-btn-primary px-4 sm:px-5 py-2.5 text-xs font-mono uppercase font-bold tracking-wider flex items-center gap-2 disabled:opacity-50 shrink-0 min-w-[85px] justify-center"
               >
                 {sending ? (
                   <>
@@ -791,92 +791,98 @@ export default function InquiryDetailPage() {
             </form>
           </div>
         ) : (
-          <div className="shrink-0 p-4 border-t border-slate-800/80 text-center text-xs text-slate-500 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
-            This inquiry is closed. Reopen or message from client dashboard if converted.
+          <div className="shrink-0 p-4 border-t border-[#242428] text-center font-mono text-xs text-[#88888e] pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
+            SYS::INQUIRY_CLOSED. Reopen or message from client dashboard if converted.
           </div>
         )}
       </div>
 
       {/* Convert to Client Modal */}
       {showConvertModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-          <div className="bg-[#0d0d12] border border-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
-            <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-              <UserPlus className="w-5 h-5 text-indigo-400" />
-              Convert Inquiry to CRM Client
-            </h2>
-            <p className="text-xs text-slate-400">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-[#141416] border border-[#242428] rounded-none md:rounded-xs p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#242428]">
+              <div className="flex items-center gap-2 font-mono text-xs font-bold text-white uppercase tracking-wider">
+                <div className="w-2 h-2 rounded-full bg-[#ff3e00]" />
+                <span>SYS::CONVERT_INQUIRY_TO_CLIENT</span>
+              </div>
+              <button onClick={() => setShowConvertModal(false)} className="text-[#88888e] hover:text-white transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="font-mono text-xs text-[#88888e]">
               This will create a new CRM Client record and automatically link their Telegram ID (<code>{inquiry.telegramUserId}</code>).
             </p>
 
             <form onSubmit={handleConvertSubmit} className="space-y-3.5">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Client Name *</label>
+                <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Client Name *</label>
                 <input
                   type="text"
                   required
                   value={convertName}
                   onChange={(e) => setConvertName(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-750 rounded-xl px-3.5 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-xs font-mono text-white focus:outline-none focus:border-[#ff3e00]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Email Address *</label>
+                <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Email Address *</label>
                 <input
                   type="email"
                   required
                   value={convertEmail}
                   onChange={(e) => setConvertEmail(e.target.value)}
                   placeholder="client@example.com"
-                  className="w-full bg-slate-900 border border-slate-750 rounded-xl px-3.5 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-xs font-mono text-white placeholder-[#52525b] focus:outline-none focus:border-[#ff3e00]"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Phone</label>
+                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Phone</label>
                   <input
                     type="text"
                     value={convertPhone}
                     onChange={(e) => setConvertPhone(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-750 rounded-xl px-3.5 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-xs font-mono text-white focus:outline-none focus:border-[#ff3e00]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Company</label>
+                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Company</label>
                   <input
                     type="text"
                     value={convertCompany}
                     onChange={(e) => setConvertCompany(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-750 rounded-xl px-3.5 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-xs font-mono text-white focus:outline-none focus:border-[#ff3e00]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Notes</label>
+                <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Notes</label>
                 <textarea
                   rows={2}
                   value={convertNotes}
                   onChange={(e) => setConvertNotes(e.target.value)}
                   placeholder="Additional context from inquiry..."
-                  className="w-full bg-slate-900 border border-slate-750 rounded-xl px-3.5 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-xs font-mono text-white placeholder-[#52525b] focus:outline-none focus:border-[#ff3e00]"
                 />
               </div>
 
-              <div className="flex justify-end gap-2.5 pt-2">
+              <div className="flex justify-end gap-2.5 pt-2 border-t border-[#242428]">
                 <button
                   type="button"
                   onClick={() => setShowConvertModal(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"
+                  className="crm-btn-secondary px-4 py-2 text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={actionLoading}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-md"
+                  className="crm-btn-primary px-4 py-2 text-xs disabled:opacity-50"
                 >
                   Create & Link Client
                 </button>

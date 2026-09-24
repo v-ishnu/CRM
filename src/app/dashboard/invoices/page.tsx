@@ -1,8 +1,11 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Search, FileText, Download, Send, AlertCircle, Loader2 } from 'lucide-react';
+import { Search, FileText, Download, Send, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 
 interface Invoice {
   _id: string;
@@ -71,71 +74,73 @@ export default function InvoicesPage() {
       const res = await fetch(`/api/invoices/${invoiceId}/send-telegram`, { method: 'POST' });
       const json = await res.json();
       if (json.success) {
-        setActionSuccess(json.message || 'Invoice sent via Telegram!');
+        setActionSuccess(json.message || 'Invoice dispatched via Telegram successfully.');
         fetchInvoices(); // Reload
       } else {
         setActionError(json.error?.message || 'Failed to dispatch invoice via Telegram');
       }
     } catch (err) {
-      setActionError('An error occurred connecting to server.');
+      setActionError('An error occurred connecting to telemetry server.');
     } finally {
       setSendingId(null);
     }
   };
 
-  const getStatusBadge = (status: Invoice['status']) => {
-    const styles = {
-      DRAFT: 'bg-slate-905 border border-slate-700 text-slate-400',
-      ISSUED: 'bg-blue-950/40 text-blue-400 border border-blue-900/30',
-      PARTIALLY_PAID: 'bg-amber-950/40 text-amber-400 border border-amber-900/30',
-      PAID: 'bg-emerald-950/40 text-emerald-400 border border-emerald-900/30',
-      OVERDUE: 'bg-red-950/40 text-red-400 border border-red-900/30',
-      CANCELLED: 'bg-slate-900 border border-slate-800 text-slate-500',
-    };
-    return (
-      <span className={`px-2 py-0.5 text-[10px] font-bold rounded uppercase tracking-wider ${styles[status]}`}>
-        {status}
-      </span>
-    );
+  const renderStatusBadge = (status: Invoice['status']) => {
+    switch (status) {
+      case 'PAID':
+        return <Badge variant="active" size="sm">{status}</Badge>;
+      case 'PARTIALLY_PAID':
+        return <Badge variant="warning" size="sm">{status.replace('_', ' ')}</Badge>;
+      case 'ISSUED':
+        return <Badge variant="blue" size="sm">{status}</Badge>;
+      case 'OVERDUE':
+        return <Badge variant="danger" size="sm">{status}</Badge>;
+      case 'DRAFT':
+      case 'CANCELLED':
+      default:
+        return <Badge variant="neutral" size="sm">{status}</Badge>;
+    }
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-100">Invoices & Billing</h1>
-          <p className="text-slate-400 text-sm">Generate line items, download billing summaries, and audit payment balances.</p>
-        </div>
-      </div>
+      {/* Dr. Debuggers Standard Page Header */}
+      <PageHeader
+        tag="FINANCE // INVOICES & BILLING"
+        title="Invoices & Billing"
+        description="Audit client receivables, generate settlement PDFs, and dispatch automated Telegram notices."
+      />
 
       {actionError && (
-        <div className="p-4 bg-red-950/45 border border-red-500/20 text-red-300 rounded-xl text-sm">
-          {actionError}
+        <div className="p-3.5 bg-[#1c1110] border border-[#ff3e00]/40 text-[#ff8a7a] text-xs font-mono flex items-start gap-2.5">
+          <AlertCircle className="w-4 h-4 text-[#ff3e00] shrink-0 mt-0.5" />
+          <span>{actionError}</span>
         </div>
       )}
       {actionSuccess && (
-        <div className="p-4 bg-emerald-950/45 border border-emerald-500/20 text-emerald-305 rounded-xl text-sm">
-          {actionSuccess}
+        <div className="p-3.5 bg-[#0e1f15] border border-[#00d664]/40 text-[#00d664] text-xs font-mono flex items-start gap-2.5">
+          <CheckCircle2 className="w-4 h-4 text-[#00d664] shrink-0 mt-0.5" />
+          <span>{actionSuccess}</span>
         </div>
       )}
 
-      {/* Filters */}
-      <div className="bg-[#0d0d12]/60 border border-slate-850 p-4 rounded-xl flex flex-col sm:flex-row gap-3 sm:gap-4 justify-between items-stretch sm:items-center">
+      {/* Filters Toolbar */}
+      <div className="bg-[#141416] border border-[#242428] p-4 flex flex-col sm:flex-row gap-3 justify-between items-stretch sm:items-center">
         <form onSubmit={handleSearch} className="relative w-full sm:max-w-md">
-          <Search className="absolute left-3.5 top-3 w-4.5 h-4.5 text-slate-550" />
+          <Search className="absolute left-3 top-2.5 w-4 h-4 text-[#8a8a93]" />
           <input
             type="text"
-            placeholder="Search by invoice number..."
+            placeholder="Search by invoice number or client..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-11 pr-20 py-2 bg-slate-950/60 border border-slate-800 text-slate-100 placeholder-slate-600 rounded-xl outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm transition-all"
+            className="w-full pl-9 pr-20 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] placeholder-[#4a4a52] focus:outline-none focus:border-[#ff3e00] focus:ring-1 focus:ring-[#ff3e00] transition-colors"
           />
           <button
             type="submit"
-            className="absolute right-2 top-1.5 px-3 py-1 bg-indigo-650 hover:bg-indigo-500 text-white text-[10px] font-bold uppercase rounded-lg tracking-wider"
+            className="absolute right-1.5 top-1 px-3 py-1 bg-white text-black hover:bg-[#ff3e00] hover:text-white text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors cursor-pointer"
           >
-            Search
+            Filter
           </button>
         </form>
 
@@ -143,114 +148,122 @@ export default function InvoicesPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2 bg-slate-950/65 border border-slate-800 text-slate-350 text-sm rounded-xl outline-none focus:border-indigo-500 transition-all cursor-pointer w-full sm:w-44"
+            className="px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-[#8a8a93] text-xs font-mono rounded-none outline-none focus:border-[#ff3e00] transition-colors cursor-pointer w-full sm:w-48"
           >
-            <option value="">All Invoice States</option>
-            <option value="ISSUED">Issued</option>
-            <option value="PAID">Paid</option>
-            <option value="PARTIALLY_PAID">Partially Paid</option>
-            <option value="OVERDUE">Overdue</option>
-            <option value="DRAFT">Draft</option>
-            <option value="CANCELLED">Cancelled</option>
+            <option value="">ALL STATES</option>
+            <option value="ISSUED">ISSUED</option>
+            <option value="PAID">PAID</option>
+            <option value="PARTIALLY_PAID">PARTIALLY PAID</option>
+            <option value="OVERDUE">OVERDUE</option>
+            <option value="DRAFT">DRAFT</option>
+            <option value="CANCELLED">CANCELLED</option>
           </select>
         </div>
       </div>
 
       {/* Table */}
       {loading ? (
-        <div className="space-y-4">
+        <div className="space-y-2">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-16 w-full bg-slate-900 animate-pulse rounded-xl"></div>
+            <div key={i} className="h-16 w-full bg-[#141416] border border-[#242428] animate-pulse"></div>
           ))}
         </div>
       ) : invoices.length === 0 ? (
-        <div className="bg-[#0d0d12]/40 border border-slate-850 p-8 sm:p-12 rounded-xl text-center flex flex-col items-center justify-center text-slate-500">
-          <FileText className="w-12 h-12 mb-3 stroke-1 text-slate-650" />
-          <h3 className="font-bold text-slate-300">No invoices generated</h3>
-          <p className="text-sm text-slate-500 mt-1">Invoices are automatically created during client onboarding.</p>
+        <div className="bg-[#141416] border border-[#242428] p-12 text-center flex flex-col items-center justify-center text-[#8a8a93]">
+          <FileText className="w-10 h-10 mb-3 text-[#4a4a52] stroke-1" />
+          <h3 className="font-mono text-xs uppercase tracking-widest text-[#f5f5f2]">No invoices found</h3>
+          <p className="text-xs text-[#8a8a93] mt-1 font-mono">Invoices are automatically created during client onboarding or milestone triggers.</p>
         </div>
       ) : (
-        <div className="bg-[#0d0d12]/40 border border-slate-850 rounded-xl overflow-hidden shadow-2xl">
+        <div className="bg-[#141416] border border-[#242428] overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[700px]">
+            <table className="w-full text-left border-collapse min-w-[760px]">
               <thead>
-                <tr className="border-b border-slate-850 bg-slate-900/35 text-slate-400 text-xs font-semibold uppercase tracking-wider">
-                  <th className="px-4 sm:px-6 py-4">Invoice #</th>
-                  <th className="px-4 sm:px-6 py-4">Client</th>
-                  <th className="px-4 sm:px-6 py-4">Project</th>
-                  <th className="px-4 sm:px-6 py-4">Issue Date</th>
-                  <th className="px-4 sm:px-6 py-4">Due Date</th>
-                  <th className="px-4 sm:px-6 py-4 text-right">Total Amount</th>
-                  <th className="px-4 sm:px-6 py-4 text-center">Telegram</th>
-                  <th className="px-4 sm:px-6 py-4 text-right">Status</th>
-                  <th className="px-4 sm:px-6 py-4 text-right">Actions</th>
+                <tr className="border-b border-[#242428] bg-[#0a0a0a] text-[10px] font-mono text-[#8a8a93] uppercase tracking-wider">
+                  <th className="px-5 py-3 font-semibold">Invoice #</th>
+                  <th className="px-5 py-3 font-semibold">Client</th>
+                  <th className="px-5 py-3 font-semibold">Project</th>
+                  <th className="px-5 py-3 font-semibold">Issue Date</th>
+                  <th className="px-5 py-3 font-semibold">Due Date</th>
+                  <th className="px-5 py-3 font-semibold text-right">Total Amount</th>
+                  <th className="px-5 py-3 font-semibold text-center">Telegram</th>
+                  <th className="px-5 py-3 font-semibold text-right">Status</th>
+                  <th className="px-5 py-3 font-semibold text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-850 text-sm">
+              <tbody className="divide-y divide-[#242428] text-xs">
                 {invoices.map((inv) => (
-                  <tr key={inv._id} className="hover:bg-slate-900/20 transition-all">
-                    <td className="px-4 sm:px-6 py-4 font-bold text-slate-200">{inv.invoiceNumber}</td>
-                    <td className="px-4 sm:px-6 py-4">
+                  <tr key={inv._id} className="hover:bg-[#18181b] transition-colors">
+                    <td className="px-5 py-3.5 font-mono font-bold text-white tracking-wide">
+                      {inv.invoiceNumber}
+                    </td>
+                    <td className="px-5 py-3.5">
                       {inv.clientId ? (
                         <>
                           <Link
                             href={`/dashboard/clients/${inv.clientId._id}`}
-                            className="font-medium text-indigo-400 hover:underline"
+                            className="font-medium text-[#f5f5f2] hover:text-[#ff3e00] transition-colors"
                           >
                             {inv.clientId.name}
                           </Link>
-                          <div className="text-xs text-slate-500 mt-0.5">Code: {inv.clientId.clientCode}</div>
+                          <div className="text-[10px] font-mono text-[#8a8a93] mt-0.5">
+                            CODE: {inv.clientId.clientCode}
+                          </div>
                         </>
                       ) : (
-                        <span className="text-slate-500 italic">Unassigned Client</span>
+                        <span className="text-[#6b6b76] italic font-mono text-[11px]">Unassigned Client</span>
                       )}
                     </td>
-                    <td className="px-4 sm:px-6 py-4 text-slate-350">
-                      {inv.projectId?.name || <span className="text-slate-500 italic">Unassigned Project</span>}
+                    <td className="px-5 py-3.5 text-[#8a8a93]">
+                      {inv.projectId?.name || <span className="text-[#6b6b76] italic font-mono text-[11px]">Unassigned Project</span>}
                     </td>
-                    <td className="px-4 sm:px-6 py-4 text-slate-400 whitespace-nowrap">
+                    <td className="px-5 py-3.5 font-mono text-[#8a8a93] whitespace-nowrap">
                       {inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString('en-IN') : '-'}
                     </td>
-                    <td className="px-4 sm:px-6 py-4 text-slate-400 whitespace-nowrap">
-                      {inv.dueDate ? new Date(inv.dueDate).toLocaleDateString('en-IN') : 'On Receipt'}
+                    <td className="px-5 py-3.5 font-mono text-[#8a8a93] whitespace-nowrap">
+                      {inv.dueDate ? new Date(inv.dueDate).toLocaleDateString('en-IN') : 'ON RECEIPT'}
                     </td>
-                    <td className="px-4 sm:px-6 py-4 text-right font-bold text-slate-100 whitespace-nowrap">
+                    <td className="px-5 py-3.5 text-right font-mono font-bold text-white whitespace-nowrap">
                       {inv.currency} {inv.total ? inv.total.toLocaleString('en-IN') : 0}
                     </td>
-                    <td className="px-4 sm:px-6 py-4 text-center">
+                    <td className="px-5 py-3.5 text-center">
                       {inv.telegramSent ? (
-                        <span className="text-[10px] font-bold text-emerald-450 bg-emerald-950/20 px-2 py-0.5 rounded border border-emerald-900/30">Sent</span>
+                        <span className="text-[9px] font-mono font-bold text-[#00d664] bg-[#0e1f15] border border-[#00d664]/30 px-1.5 py-0.5 uppercase tracking-widest">
+                          SENT
+                        </span>
                       ) : (
-                        <span className="text-[10px] text-slate-500">Not Sent</span>
+                        <span className="text-[9px] font-mono text-[#6b6b76] uppercase tracking-widest">
+                          PENDING
+                        </span>
                       )}
                     </td>
-                    <td className="px-4 sm:px-6 py-4 text-right">{getStatusBadge(inv.status)}</td>
-                    <td className="px-4 sm:px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2">
+                    <td className="px-5 py-3.5 text-right">{renderStatusBadge(inv.status)}</td>
+                    <td className="px-5 py-3.5 text-right">
+                      <div className="flex justify-end gap-1.5">
                         <a
                           href={`/api/invoices/${inv._id}/pdf`}
                           target="_blank"
                           rel="noreferrer"
-                          className="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-450 hover:text-slate-205 rounded-lg transition-all"
-                          title="Download PDF"
+                          className="p-1.5 bg-[#0a0a0a] hover:bg-[#242428] border border-[#242428] text-[#8a8a93] hover:text-white transition-colors"
+                          title="Download PDF Invoice"
                         >
-                          <Download className="w-4 h-4" />
+                          <Download className="w-3.5 h-3.5" />
                         </a>
                         <button
                           onClick={() => handleSendTelegram(inv._id)}
                           disabled={!inv.clientId?.telegramConnected || sendingId === inv._id}
-                          className={`p-2 rounded-lg border text-xs font-semibold flex items-center transition-all
+                          className={`p-1.5 border text-xs font-semibold flex items-center transition-colors
                             ${inv.clientId?.telegramConnected 
-                              ? 'bg-indigo-650/15 hover:bg-indigo-650/25 border-indigo-500/20 text-indigo-400' 
-                              : 'bg-slate-900 border-slate-800 text-slate-650 cursor-not-allowed'
+                              ? 'bg-[#0a0a0a] hover:border-[#ff3e00] hover:text-[#ff3e00] border-[#242428] text-[#8a8a93] cursor-pointer' 
+                              : 'bg-[#0a0a0a] border-[#242428] text-[#4a4a52] cursor-not-allowed'
                             }
                           `}
-                          title={inv.clientId?.telegramConnected ? 'Send via Telegram' : 'Client Telegram not connected'}
+                          title={inv.clientId?.telegramConnected ? 'Dispatch Telegram Notification' : 'Telegram channel not connected'}
                         >
                           {sendingId === inv._id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#ff3e00]" />
                           ) : (
-                            <Send className="w-4 h-4" />
+                            <Send className="w-3.5 h-3.5" />
                           )}
                         </button>
                       </div>

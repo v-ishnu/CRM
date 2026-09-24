@@ -1,7 +1,10 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { History, RefreshCw, Terminal, Clock, Activity } from 'lucide-react';
+import { History, RefreshCw, Terminal, Clock, Activity, ShieldCheck } from 'lucide-react';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 
 interface AuditLog {
   _id: string;
@@ -36,71 +39,96 @@ export default function AuditLogsPage() {
     fetchLogs();
   }, []);
 
-  const getActionColor = (action: string) => {
-    if (action.includes('CREATED')) return 'text-emerald-400 bg-emerald-950/20 border-emerald-900/30';
-    if (action.includes('UPDATED')) return 'text-indigo-400 bg-indigo-950/20 border-indigo-900/30';
-    if (action.includes('STATUS')) return 'text-amber-405 bg-amber-950/20 border-amber-900/30';
-    return 'text-slate-400 bg-slate-900 border-slate-800';
+  const getActionBadgeVariant = (action: string): 'active' | 'blue' | 'warning' | 'orange' | 'neutral' => {
+    if (action.includes('CREATED')) return 'active';
+    if (action.includes('UPDATED')) return 'blue';
+    if (action.includes('STATUS')) return 'warning';
+    if (action.includes('DELETED')) return 'orange';
+    return 'neutral';
   };
 
   return (
     <div className="space-y-6 max-w-6xl">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-100">Audit Trail Ledger</h1>
-          <p className="text-slate-400 text-sm">Read-only historical transaction log for security auditing.</p>
-        </div>
-        <button
-          onClick={fetchLogs}
-          className="p-2 bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl text-slate-400 hover:text-slate-205 transition-all"
-        >
-          <RefreshCw className="w-4 h-4" />
-        </button>
-      </div>
+      {/* Page Header */}
+      <PageHeader
+        tag="SYSTEM // AUDIT TRAIL"
+        title="Audit Trail Ledger"
+        description="Immutable operational activity stream recording client onboarding, milestone updates, telemetry dispatches, and financial mutations."
+        action={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchLogs}
+            icon={<RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />}
+          >
+            REFRESH TELEMETRY
+          </Button>
+        }
+      />
 
       {/* Content */}
       {loading ? (
-        <div className="space-y-4">
+        <div className="space-y-2">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-14 w-full bg-slate-900 animate-pulse rounded-xl"></div>
+            <div key={i} className="h-16 w-full bg-[#141416] border border-[#242428] animate-pulse"></div>
           ))}
         </div>
       ) : logs.length === 0 ? (
-        <div className="bg-[#0d0d12]/40 border border-slate-850 p-12 rounded-xl text-center flex flex-col items-center justify-center text-slate-500">
-          <History className="w-12 h-12 mb-3 stroke-1 text-slate-650" />
-          <h3 className="font-bold text-slate-350">No events logged</h3>
-          <p className="text-sm text-slate-500 mt-1">Audit logs will appear as you create clients and record payments.</p>
+        <div className="bg-[#141416] border border-[#242428] p-12 text-center flex flex-col items-center justify-center text-[#8a8a93]">
+          <History className="w-10 h-10 mb-3 text-[#4a4a52] stroke-1" />
+          <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-[#f5f5f2]">No events logged</h3>
+          <p className="text-xs text-[#8a8a93] mt-1 font-mono">System activity events will record here in real-time as users interact with the CRM.</p>
         </div>
       ) : (
-        <div className="bg-[#0d0d12]/40 border border-slate-850 rounded-xl overflow-hidden shadow-2xl">
-          <div className="divide-y divide-slate-850 text-xs">
+        <div className="bg-[#141416] border border-[#242428] overflow-hidden">
+          {/* Terminal Titlebar */}
+          <div className="flex items-center justify-between px-4 py-2.5 bg-[#0a0a0a] border-b border-[#242428]">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#242428]" />
+              <span className="w-2 h-2 rounded-full bg-[#242428]" />
+              <span className="w-2 h-2 rounded-full bg-[#242428]" />
+              <span className="text-[10px] font-mono text-[#8a8a93] uppercase tracking-widest ml-1">
+                IMMUTABLE_TRANSACTION_RECORDS
+              </span>
+            </div>
+            <div className="flex items-center gap-2 font-mono text-[10px] text-[#00d664]">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              VERIFIED LEDGER
+            </div>
+          </div>
+
+          <div className="divide-y divide-[#242428] text-xs font-sans">
             {logs.map((log) => (
-              <div key={log._id} className="p-4 hover:bg-slate-900/10 transition-all flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+              <div key={log._id} className="p-4 hover:bg-[#18181b] transition-colors flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                 <div className="flex gap-3 items-start min-w-0">
-                  <div className="p-2 bg-slate-950 border border-slate-850 rounded-lg text-slate-450 shrink-0 mt-0.5">
-                    <Activity className="w-4 h-4" />
+                  <div className="p-2 bg-[#0a0a0a] border border-[#242428] text-[#ff3e00] shrink-0 mt-0.5">
+                    <Activity className="w-3.5 h-3.5" />
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-slate-205 text-sm">{log.actor}</span>
-                      <span className={`px-2 py-0.5 font-bold uppercase tracking-wider rounded border text-[9px] ${getActionColor(log.action)}`}>
+                      <span className="font-mono font-bold text-white text-xs tracking-wide">{log.actor}</span>
+                      <Badge variant={getActionBadgeVariant(log.action)} size="sm">
                         {log.action.replace(/_/g, ' ')}
-                      </span>
-                      <span className="text-[10px] bg-slate-950 text-indigo-405 border border-indigo-900/40 px-1.5 py-0.5 rounded font-mono">
+                      </Badge>
+                      <span className="text-[10px] bg-[#0a0a0a] text-[#8a8a93] border border-[#242428] px-1.5 py-0.5 font-mono">
                         {log.entityType}
                       </span>
+                      {log.entityId && (
+                        <span className="text-[10px] text-[#6b6b76] font-mono">
+                          ID: {log.entityId.slice(-8)}
+                        </span>
+                      )}
                     </div>
                     {log.metadata && Object.keys(log.metadata).length > 0 && (
-                      <div className="mt-2 text-[10px] text-slate-400 bg-slate-950/60 p-2.5 rounded-lg border border-slate-900 font-mono overflow-x-auto max-w-xl">
+                      <div className="mt-2.5 text-[11px] text-[#8a8a93] bg-[#0a0a0a] p-3 border border-[#242428] font-mono overflow-x-auto max-w-2xl">
                         <pre className="whitespace-pre-wrap">{JSON.stringify(log.metadata, null, 2)}</pre>
                       </div>
                     )}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 text-slate-500 shrink-0 text-right self-end sm:self-start">
-                  <Clock className="w-3.5 h-3.5" />
+                <div className="flex items-center gap-1.5 text-[#6b6b76] font-mono text-[10px] shrink-0 text-right self-end sm:self-start">
+                  <Clock className="w-3 h-3 text-[#4a4a52]" />
                   <span>{new Date(log.timestamp).toLocaleString()}</span>
                 </div>
               </div>

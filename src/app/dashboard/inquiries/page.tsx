@@ -12,7 +12,11 @@ import {
   ArrowRight,
   RefreshCw,
   AlertCircle,
+  Radio,
 } from 'lucide-react';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 
 interface InquiryItem {
   _id: string;
@@ -69,6 +73,7 @@ export default function InquiriesPage() {
 
   useEffect(() => {
     fetchInquiries();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, page]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -80,65 +85,60 @@ export default function InquiriesPage() {
   const getStatusBadge = (status: string, mode: string) => {
     if (mode === 'HUMAN' || status === 'HUMAN_HANDOFF') {
       return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 animate-pulse">
-          <AlertCircle className="w-3 h-3 mr-1" />
-          Human Handoff
-        </span>
+        <Badge variant="warning" size="sm" pulse>
+          HUMAN HANDOFF
+        </Badge>
       );
     }
     if (status === 'CLOSED') {
       return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700">
-          <CheckCircle2 className="w-3 h-3 mr-1" />
-          Closed
-        </span>
+        <Badge variant="neutral" size="sm">
+          CLOSED
+        </Badge>
       );
     }
     if (status === 'NEW') {
       return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-          New Lead
-        </span>
+        <Badge variant="orange" size="sm">
+          NEW LEAD
+        </Badge>
       );
     }
     return (
-      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-        Active
-      </span>
+      <Badge variant="active" size="sm">
+        ACTIVE BOT
+      </Badge>
     );
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2.5">
-            <MessageSquare className="w-7 h-7 text-indigo-450" />
-            Public Inquiries & Leads
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            Manage public inquiries from unlinked Telegram users with automated responses and human handoff.
-          </p>
-        </div>
-        <button
-          onClick={fetchInquiries}
-          className="inline-flex items-center justify-center px-4 py-2 bg-slate-850 hover:bg-slate-800 border border-slate-750 text-slate-200 rounded-xl text-sm font-medium transition-colors"
-        >
-          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
-      </div>
+    <div className="space-y-6">
+      {/* Page Header */}
+      <PageHeader
+        tag="OPERATIONS // LEAD TELEMETRY"
+        title="Public Inquiries & Leads"
+        description="Monitor lead inquiries from Telegram channels, manage automated bot triage, and process human handoffs."
+        action={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchInquiries}
+            icon={<RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />}
+          >
+            REFRESH STREAM
+          </Button>
+        }
+      />
 
       {/* Filter Tabs & Search */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center space-x-1.5 bg-[#0d0d12] p-1.5 rounded-xl border border-slate-800 overflow-x-auto scrollbar-hide">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-[#141416] border border-[#242428] p-3">
+        <div className="flex items-center space-x-1 overflow-x-auto scrollbar-hide">
           {[
-            { id: 'ALL', label: 'All Inquiries' },
-            { id: 'HUMAN', label: '🟠 Human Handoff' },
-            { id: 'NEW', label: 'New Leads' },
-            { id: 'BOT', label: 'Bot Active' },
-            { id: 'CLOSED', label: 'Closed' },
+            { id: 'ALL', label: 'ALL LEADS' },
+            { id: 'HUMAN', label: 'HUMAN HANDOFF' },
+            { id: 'NEW', label: 'NEW LEADS' },
+            { id: 'BOT', label: 'BOT AUTOMATION' },
+            { id: 'CLOSED', label: 'ARCHIVED / CLOSED' },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -146,10 +146,10 @@ export default function InquiriesPage() {
                 setActiveTab(tab.id as any);
                 setPage(1);
               }}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+              className={`px-3 py-1.5 text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors whitespace-nowrap cursor-pointer ${
                 activeTab === tab.id
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-850'
+                  ? 'bg-white text-black'
+                  : 'text-[#8a8a93] hover:text-white hover:bg-[#242428]'
               }`}
             >
               {tab.label}
@@ -157,84 +157,85 @@ export default function InquiriesPage() {
           ))}
         </div>
 
-        <form onSubmit={handleSearchSubmit} className="relative min-w-[280px]">
+        <form onSubmit={handleSearchSubmit} className="relative min-w-[260px]">
           <input
             type="text"
             placeholder="Search inquiries, lead names..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#0d0d12] border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+            className="w-full bg-[#0a0a0a] border border-[#242428] pl-8 pr-3 py-1.5 text-xs text-[#f5f5f2] placeholder-[#4a4a52] focus:outline-none focus:border-[#ff3e00] focus:ring-1 focus:ring-[#ff3e00] transition-colors"
           />
-          <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+          <Search className="w-3.5 h-3.5 text-[#8a8a93] absolute left-2.5 top-2.5" />
         </form>
       </div>
 
       {/* Inquiry List */}
-      <div className="bg-[#0d0d12] border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl">
+      <div className="bg-[#141416] border border-[#242428] overflow-hidden">
         {loading && inquiries.length === 0 ? (
-          <div className="py-16 text-center text-slate-500">
-            <RefreshCw className="w-8 h-8 mx-auto mb-3 animate-spin text-indigo-400" />
-            <p className="text-sm">Loading inquiries...</p>
+          <div className="py-16 text-center text-[#8a8a93]">
+            <RefreshCw className="w-6 h-6 mx-auto mb-3 animate-spin text-[#ff3e00]" />
+            <p className="text-xs font-mono uppercase tracking-widest">LOADING TELEGRAM INQUIRIES...</p>
           </div>
         ) : inquiries.length === 0 ? (
-          <div className="py-16 text-center text-slate-500">
-            <MessageSquare className="w-10 h-10 mx-auto mb-3 text-slate-600" />
-            <p className="text-base font-medium text-slate-400">No inquiries found</p>
-            <p className="text-xs text-slate-600 mt-1">
-              Public inquiries sent by unlinked Telegram users will appear here.
+          <div className="py-16 text-center text-[#8a8a93]">
+            <MessageSquare className="w-8 h-8 mx-auto mb-3 text-[#4a4a52] stroke-1" />
+            <p className="text-xs font-mono font-bold uppercase tracking-wider text-[#f5f5f2]">No inquiries found</p>
+            <p className="text-xs text-[#8a8a93] mt-1 font-mono">
+              Inbound messages from Telegram bot listeners will populate here automatically.
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-800/60">
+          <div className="divide-y divide-[#242428]">
             {inquiries.map((inquiry) => (
               <Link
                 key={inquiry._id}
                 href={`/dashboard/inquiries/${inquiry._id}`}
-                className="block p-4 sm:p-5 hover:bg-slate-850/40 transition-colors group"
+                className="block p-4 sm:p-5 hover:bg-[#18181b] transition-colors group"
               >
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                   <div className="space-y-1.5 min-w-0">
                     <div className="flex items-center space-x-2.5 flex-wrap gap-y-1">
-                      <span className="font-mono font-bold text-xs sm:text-sm text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20 shrink-0">
+                      <span className="font-mono font-bold text-xs text-white bg-[#0a0a0a] px-2 py-0.5 border border-[#242428] shrink-0">
                         {inquiry.inquiryNumber}
                       </span>
-                      <h3 className="font-semibold text-slate-200 group-hover:text-indigo-400 transition-colors text-sm sm:text-base truncate">
+                      <h3 className="font-semibold text-white group-hover:text-[#ff3e00] transition-colors text-sm truncate">
                         {inquiry.name || 'Anonymous Lead'}
                       </h3>
                       {inquiry.telegramUsername && (
-                        <span className="text-xs text-slate-500 truncate">@{inquiry.telegramUsername}</span>
+                        <span className="text-xs font-mono text-[#8a8a93] truncate">@{inquiry.telegramUsername}</span>
                       )}
                       {getStatusBadge(inquiry.status, inquiry.conversationMode)}
                     </div>
 
-                    <p className="text-xs sm:text-sm text-slate-400 line-clamp-1">
+                    <p className="text-xs text-[#8a8a93] line-clamp-1 font-sans">
                       {inquiry.message || 'No message preview'}
                     </p>
 
                     {inquiry.handoffReason && (
-                      <p className="text-xs text-amber-400/90 font-medium">
-                        Reason: {inquiry.handoffReason}
+                      <p className="text-[11px] font-mono text-[#f59e0b] flex items-center gap-1.5">
+                        <AlertCircle className="w-3 h-3" />
+                        <span>HANDOFF REASON: {inquiry.handoffReason}</span>
                       </p>
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between md:justify-end space-x-4 shrink-0 text-xs text-slate-500 pt-1 md:pt-0 border-t md:border-t-0 border-slate-850/40">
-                    <div className="flex items-center space-x-1">
-                      <Clock className="w-3.5 h-3.5" />
+                  <div className="flex items-center justify-between md:justify-end space-x-4 shrink-0 text-xs text-[#8a8a93] pt-2 md:pt-0 border-t md:border-t-0 border-[#242428]">
+                    <div className="flex items-center space-x-1.5 font-mono text-[11px]">
+                      <Clock className="w-3 h-3 text-[#6b6b76]" />
                       <span>{new Date(inquiry.lastMessageAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                     {inquiry.conversationMode === 'HUMAN' ? (
-                      <span className="flex items-center text-amber-400 font-semibold">
-                        <User className="w-3.5 h-3.5 mr-1" />
-                        Human Mode
+                      <span className="flex items-center text-[#f59e0b] font-mono text-[10px] uppercase font-bold tracking-wider">
+                        <User className="w-3 h-3 mr-1" />
+                        HUMAN OPERATOR
                       </span>
                     ) : (
-                      <span className="flex items-center text-slate-400">
-                        <Bot className="w-3.5 h-3.5 mr-1 text-indigo-400" />
-                        Bot Active
+                      <span className="flex items-center text-[#8a8a93] font-mono text-[10px] uppercase tracking-wider">
+                        <Bot className="w-3 h-3 mr-1 text-[#ff3e00]" />
+                        BOT RUNNING
                       </span>
                     )}
-                    <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-indigo-400 group-hover:translate-x-1 transition-all hidden sm:inline" />
+                    <ArrowRight className="w-3.5 h-3.5 text-[#6b6b76] group-hover:text-[#ff3e00] group-hover:translate-x-1 transition-all hidden sm:inline" />
                   </div>
                 </div>
               </Link>
@@ -244,25 +245,25 @@ export default function InquiriesPage() {
 
         {/* Pagination Footer */}
         {totalPages > 1 && (
-          <div className="p-4 border-t border-slate-800/80 flex flex-col sm:flex-row gap-3 items-center justify-between text-xs text-slate-400">
+          <div className="p-3 bg-[#0a0a0a] border-t border-[#242428] flex flex-col sm:flex-row gap-3 items-center justify-between text-xs font-mono text-[#8a8a93]">
             <span>
-              Showing {inquiries.length} of {totalCount} inquiries
+              SHOWING {inquiries.length} OF {totalCount} INQUIRIES
             </span>
-            <div className="flex space-x-2">
+            <div className="flex items-center space-x-2">
               <button
                 disabled={page <= 1}
                 onClick={() => setPage(page - 1)}
-                className="px-3 py-1 bg-slate-800 rounded disabled:opacity-40 hover:bg-slate-700"
+                className="px-2.5 py-1 bg-[#141416] border border-[#242428] disabled:opacity-30 hover:border-[#ff3e00] text-white uppercase text-[10px] transition-colors cursor-pointer"
               >
                 Previous
               </button>
-              <span className="px-2 py-1 font-semibold text-slate-300">
+              <span className="px-2 py-0.5 text-white">
                 {page} / {totalPages}
               </span>
               <button
                 disabled={page >= totalPages}
                 onClick={() => setPage(page + 1)}
-                className="px-3 py-1 bg-slate-800 rounded disabled:opacity-40 hover:bg-slate-700"
+                className="px-2.5 py-1 bg-[#141416] border border-[#242428] disabled:opacity-30 hover:border-[#ff3e00] text-white uppercase text-[10px] transition-colors cursor-pointer"
               >
                 Next
               </button>

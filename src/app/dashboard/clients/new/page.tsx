@@ -2,8 +2,9 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2, Save, User, Laptop, CreditCard } from 'lucide-react';
+import { ArrowLeft, Loader2, Save, User, Laptop, CreditCard, Terminal } from 'lucide-react';
 import Link from 'next/link';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 export default function NewClientPage() {
   const router = useRouter();
@@ -92,44 +93,59 @@ export default function NewClientPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6 max-w-4xl mx-auto font-sans selection:bg-[#ff3e00] selection:text-white">
       {/* Header */}
-      <div className="flex items-center space-x-4">
+      <div className="flex items-center gap-3">
         <Link
           href="/dashboard/clients"
-          className="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-slate-400 hover:text-slate-200 transition-all"
+          className="p-2 bg-[#141416] hover:bg-[#18181b] border border-[#242428] hover:border-[#ff3e00] text-[#8a8a93] hover:text-white transition-colors"
+          title="Back to Clients"
         >
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft className="w-4 h-4" />
         </Link>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-100">Client Onboarding Wizard</h1>
-          <p className="text-slate-405 text-sm">Register a new client, link project parameters, and log initial advances.</p>
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-mono text-[10px] uppercase tracking-widest font-bold text-[#ff3e00]">
+              CLIENTS // ONBOARDING WIZARD
+            </span>
+            <span className="text-[#3f3f46]">/</span>
+            <span className="font-mono text-[10px] uppercase tracking-wider text-[#8a8a93]">
+              REGISTRATION
+            </span>
+          </div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+            Client Onboarding Wizard
+          </h1>
+          <p className="text-xs text-[#8a8a93] mt-0.5">
+            Register a new client profile, configure project deliverables, and post initial retainer telemetry.
+          </p>
         </div>
       </div>
 
       {error && (
-        <div className="p-4 bg-red-950/45 border border-red-500/20 text-red-300 rounded-xl text-sm leading-relaxed">
-          {error}
+        <div className="p-3.5 bg-[#1c1110] border border-[#ff3e00]/40 text-[#ff8a7a] text-xs font-mono flex items-start gap-2.5">
+          <span className="text-[#ff3e00] font-bold">ERR:</span>
+          <span>{error}</span>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-8">
+      <form onSubmit={handleSubmit} className="space-y-6">
         {/* Step 1: Client Profile */}
-        <section className="bg-[#0d0d12]/60 border border-slate-850 p-6 rounded-2xl relative overflow-hidden">
-          <div className="flex items-center space-x-3 mb-6">
-            <div className="p-2.5 bg-indigo-600/10 border border-indigo-500/20 text-indigo-400 rounded-xl">
-              <User className="w-5 h-5" />
+        <section className="bg-[#141416] border border-[#242428] p-6 space-y-5">
+          <div className="flex items-center justify-between border-b border-[#242428] pb-3">
+            <div className="flex items-center space-x-2.5">
+              <User className="w-4 h-4 text-[#ff3e00]" />
+              <h2 className="text-xs font-mono font-semibold text-white uppercase tracking-wider">
+                01 // CLIENT PROFILE ATTRIBUTES
+              </h2>
             </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-200">1. Client Profile Details</h2>
-              <p className="text-xs text-slate-500">Contact information and address attributes</p>
-            </div>
+            <span className="text-[10px] font-mono text-[#8a8a93]">* REQUIRED FIELDS</span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Client Name <span className="text-red-500">*</span>
+              <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                Client Legal Name <span className="text-[#ff3e00]">*</span>
               </label>
               <input
                 type="text"
@@ -137,14 +153,14 @@ export default function NewClientPage() {
                 required
                 value={formData.clientName}
                 onChange={handleChange}
-                placeholder="Rahul Sharma"
-                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 text-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm transition-all"
+                placeholder="e.g. Rahul Sharma"
+                className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] placeholder-[#4a4a52] focus:outline-none focus:border-[#ff3e00] focus:ring-1 focus:ring-[#ff3e00] transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Email Address <span className="text-red-500">*</span>
+              <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                Email Address <span className="text-[#ff3e00]">*</span>
               </label>
               <input
                 type="email"
@@ -152,14 +168,14 @@ export default function NewClientPage() {
                 required
                 value={formData.email}
                 onChange={handleChange}
-                placeholder="rahul@example.com"
-                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 text-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm transition-all"
+                placeholder="client@domain.com"
+                className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] placeholder-[#4a4a52] focus:outline-none focus:border-[#ff3e00] focus:ring-1 focus:ring-[#ff3e00] transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Phone Number
+              <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                Phone / WhatsApp Number
               </label>
               <input
                 type="text"
@@ -167,12 +183,12 @@ export default function NewClientPage() {
                 value={formData.phone}
                 onChange={handleChange}
                 placeholder="+91 98765 43210"
-                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 text-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm transition-all"
+                className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] placeholder-[#4a4a52] focus:outline-none focus:border-[#ff3e00] focus:ring-1 focus:ring-[#ff3e00] transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+              <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
                 Company / Organization
               </label>
               <input
@@ -181,12 +197,12 @@ export default function NewClientPage() {
                 value={formData.company}
                 onChange={handleChange}
                 placeholder="Sharma Tech Solutions"
-                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 text-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm transition-all"
+                className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] placeholder-[#4a4a52] focus:outline-none focus:border-[#ff3e00] focus:ring-1 focus:ring-[#ff3e00] transition-colors"
               />
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+              <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
                 Street Address
               </label>
               <input
@@ -195,47 +211,47 @@ export default function NewClientPage() {
                 value={formData.address}
                 onChange={handleChange}
                 placeholder="Sector 62, Block C"
-                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 text-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm transition-all"
+                className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] placeholder-[#4a4a52] focus:outline-none focus:border-[#ff3e00] focus:ring-1 focus:ring-[#ff3e00] transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">City</label>
+              <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">City</label>
               <input
                 type="text"
                 name="city"
                 value={formData.city}
                 onChange={handleChange}
                 placeholder="Noida"
-                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 text-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm transition-all"
+                className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] placeholder-[#4a4a52] focus:outline-none focus:border-[#ff3e00] focus:ring-1 focus:ring-[#ff3e00] transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">State</label>
+              <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">State / Province</label>
               <input
                 type="text"
                 name="state"
                 value={formData.state}
                 onChange={handleChange}
                 placeholder="Uttar Pradesh"
-                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 text-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm transition-all"
+                className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] placeholder-[#4a4a52] focus:outline-none focus:border-[#ff3e00] focus:ring-1 focus:ring-[#ff3e00] transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Country</label>
+              <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">Country</label>
               <input
                 type="text"
                 name="country"
                 value={formData.country}
                 onChange={handleChange}
-                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 text-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm transition-all"
+                className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] placeholder-[#4a4a52] focus:outline-none focus:border-[#ff3e00] focus:ring-1 focus:ring-[#ff3e00] transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+              <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
                 Onboarding Date
               </label>
               <input
@@ -243,40 +259,40 @@ export default function NewClientPage() {
                 name="onboardingDate"
                 value={formData.onboardingDate}
                 onChange={handleChange}
-                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 text-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm transition-all cursor-pointer"
+                className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] font-mono focus:outline-none focus:border-[#ff3e00] cursor-pointer"
               />
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Notes</label>
+              <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">Client Notes</label>
               <textarea
                 name="clientNotes"
-                rows={3}
+                rows={2}
                 value={formData.clientNotes}
                 onChange={handleChange}
-                placeholder="Write any onboarding specifications here..."
-                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 text-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm transition-all"
+                placeholder="Add special client specifications or billing requirements..."
+                className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] placeholder-[#4a4a52] focus:outline-none focus:border-[#ff3e00] transition-colors"
               />
             </div>
           </div>
         </section>
 
-        {/* Step 2: Project Parameters */}
-        <section className="bg-[#0d0d12]/60 border border-slate-850 p-6 rounded-2xl relative overflow-hidden">
-          <div className="flex items-center space-x-3 mb-6">
-            <div className="p-2.5 bg-indigo-600/10 border border-indigo-500/20 text-indigo-400 rounded-xl">
-              <Laptop className="w-5 h-5" />
+        {/* Step 2: Project Specifications */}
+        <section className="bg-[#141416] border border-[#242428] p-6 space-y-5">
+          <div className="flex items-center justify-between border-b border-[#242428] pb-3">
+            <div className="flex items-center space-x-2.5">
+              <Laptop className="w-4 h-4 text-[#ff3e00]" />
+              <h2 className="text-xs font-mono font-semibold text-white uppercase tracking-wider">
+                02 // INITIAL PROJECT PARAMETERS
+              </h2>
             </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-200">2. Project Specifications</h2>
-              <p className="text-xs text-slate-500">Service attributes, budget configurations, and delivery milestones</p>
-            </div>
+            <span className="text-[10px] font-mono text-[#8a8a93]">SCOPE & DELIVERABLES</span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Project Name <span className="text-red-500">*</span>
+              <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                Project Name <span className="text-[#ff3e00]">*</span>
               </label>
               <input
                 type="text"
@@ -284,49 +300,49 @@ export default function NewClientPage() {
                 required
                 value={formData.projectName}
                 onChange={handleChange}
-                placeholder="Business Website Development"
-                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 text-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm transition-all"
+                placeholder="e.g. Enterprise CRM Architecture"
+                className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] placeholder-[#4a4a52] focus:outline-none focus:border-[#ff3e00] focus:ring-1 focus:ring-[#ff3e00] transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Service Type
+              <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                Service Category
               </label>
               <select
                 name="serviceType"
                 value={formData.serviceType}
                 onChange={handleChange}
-                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 text-slate-350 rounded-xl outline-none focus:border-indigo-500 text-sm transition-all cursor-pointer"
+                className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] font-mono focus:outline-none focus:border-[#ff3e00] cursor-pointer"
               >
-                <option value="WEBSITE">Website Development</option>
-                <option value="WEB_APPLICATION">Web Application</option>
-                <option value="MOBILE_APPLICATION">Mobile Application</option>
-                <option value="API_DEVELOPMENT">API Development</option>
-                <option value="WORDPRESS">WordPress Site</option>
-                <option value="ECOMMERCE">E-Commerce Development</option>
-                <option value="MAINTENANCE">System Maintenance</option>
-                <option value="OTHER">Other Tech Service</option>
+                <option value="WEBSITE">WEBSITE DEVELOPMENT</option>
+                <option value="WEB_APPLICATION">WEB APPLICATION</option>
+                <option value="MOBILE_APPLICATION">MOBILE APPLICATION</option>
+                <option value="API_DEVELOPMENT">API DEVELOPMENT</option>
+                <option value="WORDPRESS">WORDPRESS SITE</option>
+                <option value="ECOMMERCE">ECOMMERCE PLATFORM</option>
+                <option value="MAINTENANCE">SYSTEM MAINTENANCE</option>
+                <option value="OTHER">OTHER TECHNICAL SERVICE</option>
               </select>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2">
               <div className="col-span-1">
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Curr</label>
+                <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">CURR</label>
                 <select
                   name="currency"
                   value={formData.currency}
                   onChange={handleChange}
-                  className="w-full px-3 py-2.5 bg-slate-950/60 border border-slate-800 text-slate-350 rounded-xl outline-none focus:border-indigo-500 text-sm transition-all cursor-pointer"
+                  className="w-full px-2 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] font-mono focus:outline-none focus:border-[#ff3e00] cursor-pointer"
                 >
-                  <option value="INR">₹ INR</option>
-                  <option value="USD">$ USD</option>
-                  <option value="EUR">€ EUR</option>
+                  <option value="INR">INR (₹)</option>
+                  <option value="USD">USD ($)</option>
+                  <option value="EUR">EUR (€)</option>
                 </select>
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                  Total Budget Amount <span className="text-red-500">*</span>
+                <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                  Total Budget <span className="text-[#ff3e00]">*</span>
                 </label>
                 <input
                   type="number"
@@ -335,69 +351,69 @@ export default function NewClientPage() {
                   value={formData.totalAmount}
                   onChange={handleChange}
                   placeholder="50000"
-                  className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 text-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm transition-all"
+                  className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-white font-mono font-bold focus:outline-none focus:border-[#ff3e00]"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Project Start Date
+              <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                Target Start Date
               </label>
               <input
                 type="date"
                 name="startDate"
                 value={formData.startDate}
                 onChange={handleChange}
-                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 text-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm transition-all cursor-pointer"
+                className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] font-mono focus:outline-none focus:border-[#ff3e00] cursor-pointer"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Expected Completion Date
+              <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                Target Completion Date
               </label>
               <input
                 type="date"
                 name="expectedCompletionDate"
                 value={formData.expectedCompletionDate}
                 onChange={handleChange}
-                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 text-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm transition-all cursor-pointer"
+                className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] font-mono focus:outline-none focus:border-[#ff3e00] cursor-pointer"
               />
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Project Scope / Deliverables
+              <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                Project Scope & Deliverable Notes
               </label>
               <textarea
                 name="projectDescription"
-                rows={3}
+                rows={2}
                 value={formData.projectDescription}
                 onChange={handleChange}
-                placeholder="Briefly state key project goals, features, or stack details..."
-                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 text-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm transition-all"
+                placeholder="Summary of stack, core feature milestones, and deliverables..."
+                className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] placeholder-[#4a4a52] focus:outline-none focus:border-[#ff3e00] transition-colors"
               />
             </div>
           </div>
         </section>
 
         {/* Step 3: Record Advance Payment (Optional) */}
-        <section className="bg-[#0d0d12]/60 border border-slate-850 p-6 rounded-2xl relative overflow-hidden">
-          <div className="flex items-center space-x-3 mb-6">
-            <div className="p-2.5 bg-indigo-600/10 border border-indigo-500/20 text-indigo-400 rounded-xl">
-              <CreditCard className="w-5 h-5" />
+        <section className="bg-[#141416] border border-[#242428] p-6 space-y-5">
+          <div className="flex items-center justify-between border-b border-[#242428] pb-3">
+            <div className="flex items-center space-x-2.5">
+              <CreditCard className="w-4 h-4 text-[#ff3e00]" />
+              <h2 className="text-xs font-mono font-semibold text-white uppercase tracking-wider">
+                03 // ADVANCE SETTLEMENT (OPTIONAL)
+              </h2>
             </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-200">3. Log Advance Payment (Optional)</h2>
-              <p className="text-xs text-slate-500">Record any upfront payments to credit client balance</p>
-            </div>
+            <span className="text-[10px] font-mono text-[#00d664]">RETAINER / ADVANCE</span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Advance Payment Amount (Leave empty if none)
+              <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                Advance Amount (Leave blank if pending)
               </label>
               <input
                 type="number"
@@ -405,45 +421,45 @@ export default function NewClientPage() {
                 value={formData.paymentAmount}
                 onChange={handleChange}
                 placeholder="25000"
-                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 text-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm transition-all"
+                className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-white font-mono font-bold focus:outline-none focus:border-[#ff3e00]"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Payment Method
+              <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                Payment Channel
               </label>
               <select
                 name="paymentMethod"
                 value={formData.paymentMethod}
                 onChange={handleChange}
-                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 text-slate-350 rounded-xl outline-none focus:border-indigo-500 text-sm transition-all cursor-pointer"
+                className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] font-mono focus:outline-none focus:border-[#ff3e00] cursor-pointer"
               >
-                <option value="BANK_TRANSFER">Bank Transfer</option>
-                <option value="UPI">UPI (GPay / PhonePe / Paytm)</option>
-                <option value="CASH">Cash Payment</option>
-                <option value="RAZORPAY">Razorpay Gateway</option>
-                <option value="STRIPE">Stripe Link</option>
-                <option value="OTHER">Other Method</option>
+                <option value="BANK_TRANSFER">BANK TRANSFER (IMPS/NEFT/RTGS)</option>
+                <option value="UPI">UPI (GPAY / PHONEPE / QR)</option>
+                <option value="CASH">CASH TRANSACTION</option>
+                <option value="RAZORPAY">RAZORPAY GATEWAY</option>
+                <option value="STRIPE">STRIPE INVOICE</option>
+                <option value="OTHER">OTHER METHOD</option>
               </select>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Payment Received Date
+              <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                Receipt Date
               </label>
               <input
                 type="date"
                 name="paymentDate"
                 value={formData.paymentDate}
                 onChange={handleChange}
-                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 text-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm transition-all cursor-pointer"
+                className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] font-mono focus:outline-none focus:border-[#ff3e00] cursor-pointer"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Transaction Reference ID
+              <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                Transaction Reference / UTR
               </label>
               <input
                 type="text"
@@ -451,34 +467,34 @@ export default function NewClientPage() {
                 value={formData.transactionReference}
                 onChange={handleChange}
                 placeholder="TXN-98239012"
-                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 text-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm transition-all"
+                className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] font-mono focus:outline-none focus:border-[#ff3e00]"
               />
             </div>
           </div>
         </section>
 
         {/* Submit Actions */}
-        <div className="flex gap-4 items-center justify-end">
+        <div className="flex gap-3 items-center justify-end pt-2">
           <Link
             href="/dashboard/clients"
-            className="px-6 py-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 rounded-xl text-sm font-semibold transition-all"
+            className="px-5 py-2.5 bg-[#0a0a0a] hover:bg-[#18181b] border border-[#242428] text-[#8a8a93] hover:text-white font-mono text-xs font-semibold uppercase tracking-wider transition-colors"
           >
             Cancel
           </Link>
           <button
             type="submit"
             disabled={loading}
-            className="flex items-center justify-center px-8 py-3 bg-indigo-650 hover:bg-indigo-500 active:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-all disabled:opacity-55 disabled:cursor-not-allowed shadow-lg shadow-indigo-600/15"
+            className="flex items-center justify-center gap-2 px-6 py-2.5 bg-white text-black hover:bg-[#ff3e00] hover:text-white font-mono text-xs font-semibold uppercase tracking-wider transition-all disabled:opacity-40 cursor-pointer shadow-lg"
           >
             {loading ? (
               <>
-                <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                Processing Onboarding...
+                <Loader2 className="w-4 h-4 animate-spin" />
+                REGISTERING CLIENT DATA...
               </>
             ) : (
               <>
-                <Save className="w-4.5 h-4.5 mr-2" />
-                Complete Onboarding
+                <Save className="w-3.5 h-3.5" />
+                COMPLETE CLIENT ONBOARDING
               </>
             )}
           </button>

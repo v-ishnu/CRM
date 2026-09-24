@@ -13,7 +13,12 @@ import {
   FileText,
   Activity,
   MessageSquare,
+  Plus,
 } from 'lucide-react';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { StatCard, Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
 
 interface ActivityItem {
   _id: string;
@@ -57,19 +62,16 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="space-y-8 animate-pulse">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="h-8 w-64 bg-slate-800 rounded-lg"></div>
-          <div className="h-10 w-36 bg-slate-800 rounded-lg"></div>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="space-y-6 animate-pulse">
+        <div className="h-14 w-72 bg-[#141416] border border-[#242428] rounded-xs" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="h-32 bg-slate-800 rounded-2xl"></div>
+            <div key={i} className="h-32 bg-[#141416] border border-[#242428] rounded-xs" />
           ))}
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 h-96 bg-slate-800 rounded-2xl"></div>
-          <div className="h-96 bg-slate-800 rounded-2xl"></div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 h-96 bg-[#141416] border border-[#242428] rounded-xs" />
+          <div className="h-96 bg-[#141416] border border-[#242428] rounded-xs" />
         </div>
       </div>
     );
@@ -89,49 +91,37 @@ export default function DashboardPage() {
     {
       name: 'Total Clients',
       value: data.totalClients,
-      icon: Users,
-      color: 'from-blue-600/20 to-indigo-600/10',
-      textColor: 'text-blue-400',
+      icon: <Users className="w-4 h-4 text-[#ff3e00]" />,
       description: 'Registered client entities',
     },
     {
       name: 'Active Projects',
       value: data.activeProjects,
-      icon: FolderKanban,
-      color: 'from-teal-600/20 to-emerald-600/10',
-      textColor: 'text-teal-400',
+      icon: <FolderKanban className="w-4 h-4 text-[#00d664]" />,
       description: 'Projects currently in progress',
     },
     {
       name: 'Total Revenue',
       value: `₹${data.totalRevenue.toLocaleString('en-IN')}`,
-      icon: DollarSign,
-      color: 'from-emerald-600/20 to-teal-650/10',
-      textColor: 'text-emerald-400',
-      description: 'Sum of all project amounts',
+      icon: <DollarSign className="w-4 h-4 text-[#ff3e00]" />,
+      description: 'Sum of all project budgets',
     },
     {
       name: 'Outstanding Amount',
       value: `₹${data.outstandingAmount.toLocaleString('en-IN')}`,
-      icon: AlertCircle,
-      color: 'from-red-650/20 to-orange-600/10',
-      textColor: 'text-red-400',
+      icon: <AlertCircle className="w-4 h-4 text-amber-400" />,
       description: 'Unpaid project budget balances',
     },
     {
       name: 'Payments This Month',
       value: `₹${data.paymentsThisMonth.toLocaleString('en-IN')}`,
-      icon: TrendingUp,
-      color: 'from-indigo-600/20 to-purple-600/10',
-      textColor: 'text-indigo-400',
+      icon: <TrendingUp className="w-4 h-4 text-[#00d664]" />,
       description: 'Income received in current month',
     },
     {
       name: 'Pending Invoices',
       value: data.pendingInvoices,
-      icon: FileText,
-      color: 'from-amber-600/20 to-yellow-600/10',
-      textColor: 'text-amber-400',
+      icon: <FileText className="w-4 h-4 text-sky-400" />,
       description: 'Draft or unpaid issued invoices',
     },
   ];
@@ -157,151 +147,173 @@ export default function DashboardPage() {
     }
   };
 
-  // Safe percentage calculation for financial visual progress bar
   const totalPaid = Math.max(0, data.totalRevenue - data.outstandingAmount);
-  const collectionsRate = data.totalRevenue > 0 ? Math.round((totalPaid / data.totalRevenue) * 100) : 100;
+  const collectionsRate =
+    data.totalRevenue > 0 ? Math.round((totalPaid / data.totalRevenue) * 100) : 100;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-            System Dashboard
-          </h1>
-          <p className="text-slate-400 text-xs sm:text-sm mt-1">Real-time developer CRM tracking & financial summaries.</p>
-        </div>
-        <Link
-          href="/dashboard/clients/new"
-          className="inline-flex items-center justify-center px-4 sm:px-5 py-2.5 bg-indigo-605 hover:bg-indigo-500 active:bg-indigo-700 text-white text-xs sm:text-sm font-semibold rounded-xl transition-all shadow-lg shadow-indigo-650/15"
-        >
-          Onboard New Client
-          <ArrowRight className="w-4 h-4 ml-2" />
-        </Link>
+      <PageHeader
+        tag="METRICS"
+        title="Operations Dashboard"
+        description="Real-time developer CRM tracking, project velocity, and financial telemetry."
+        actions={
+          <Link href="/dashboard/clients/new">
+            <Button variant="primary" icon={<Plus className="w-3.5 h-3.5" />}>
+              Onboard Client
+            </Button>
+          </Link>
+        }
+      />
+
+      {/* KPI Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {cards.map((card) => (
+          <StatCard
+            key={card.name}
+            label={card.name}
+            value={card.value}
+            description={card.description}
+            icon={card.icon}
+          />
+        ))}
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-        {cards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <div
-              key={card.name}
-              className={`bg-[#0d0d12]/80 border border-slate-800/80 p-5 sm:p-6 rounded-2xl relative overflow-hidden flex flex-col justify-between group hover:border-slate-700/60 transition-all duration-300`}
-            >
-              {/* Backlit Glow */}
-              <div className={`absolute top-0 right-0 w-24 h-24 bg-gradient-to-br ${card.color} rounded-bl-full opacity-60 filter blur-xl group-hover:scale-110 transition-transform`}></div>
-              
-              <div className="flex justify-between items-start relative">
-                <div>
-                  <p className="text-xs font-semibold text-slate-450 uppercase tracking-wider">{card.name}</p>
-                  <h3 className="text-xl sm:text-2xl font-bold text-slate-100 mt-2 tracking-tight">{card.value}</h3>
-                </div>
-                <div className={`p-2.5 sm:p-3 bg-slate-900 border border-slate-800 rounded-xl ${card.textColor}`}>
-                  <Icon className="w-4 sm:w-5 h-4 sm:h-5" />
-                </div>
-              </div>
-              <p className="text-xs text-slate-500 mt-3 sm:mt-4 relative">{card.description}</p>
+      {/* Financial Telemetry & Activity Feed */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Collections Breakdown */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <div>
+              <span className="font-mono text-[10px] uppercase font-bold tracking-widest text-[#ff3e00]">
+                TELEMETRY // FINANCIALS
+              </span>
+              <CardTitle className="mt-1">Financial Collections Breakdown</CardTitle>
             </div>
-          );
-        })}
-      </div>
+            <Badge variant={collectionsRate >= 80 ? 'green' : 'amber'} dot>
+              {collectionsRate}% Collected
+            </Badge>
+          </CardHeader>
 
-      {/* Financial Ratios & Activity Feed */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
-        {/* Collection Ratios */}
-        <div className="lg:col-span-2 bg-[#0d0d12]/60 border border-slate-850 p-5 sm:p-6 rounded-2xl">
-          <h2 className="text-base sm:text-lg font-bold text-slate-100 mb-5 sm:mb-6 flex items-center">
-            <TrendingUp className="w-5 h-5 mr-2 text-indigo-400" />
-            Financial Breakdown
-          </h2>
-          
           <div className="space-y-6">
             <div>
-              <div className="flex justify-between text-xs sm:text-sm mb-2">
-                <span className="text-slate-400">Collections Rate</span>
-                <span className="font-semibold text-indigo-400">{collectionsRate}% Collected</span>
+              <div className="flex justify-between font-mono text-xs mb-2">
+                <span className="text-[#a1a1aa] uppercase tracking-wider">
+                  Collections Progress
+                </span>
+                <span className="font-bold text-white">
+                  ₹{totalPaid.toLocaleString('en-IN')} / ₹{data.totalRevenue.toLocaleString('en-IN')}
+                </span>
               </div>
-              <div className="w-full h-3 bg-slate-900 border border-slate-800/80 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-gradient-to-r from-indigo-500 to-teal-400 rounded-full transition-all duration-500"
+              <div className="w-full h-2.5 bg-[#0e0e11] border border-[#242428] rounded-xs overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-[#ff3e00] to-[#00d664] transition-all duration-500"
                   style={{ width: `${collectionsRate}%` }}
-                ></div>
+                />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 pt-4 border-t border-slate-900">
-              <div className="bg-slate-900/30 p-4 border border-slate-900 rounded-xl">
-                <p className="text-xs text-slate-500 uppercase font-semibold">Total Payments Collected</p>
-                <p className="text-lg font-bold text-emerald-450 mt-1">₹{totalPaid.toLocaleString('en-IN')}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-[#242428]">
+              <div className="bg-[#0e0e11] p-4 border border-[#242428] rounded-xs">
+                <p className="font-mono text-[10px] text-[#71717a] uppercase font-bold tracking-wider">
+                  Payments Realized
+                </p>
+                <p className="font-mono text-xl font-bold text-[#00d664] mt-1">
+                  ₹{totalPaid.toLocaleString('en-IN')}
+                </p>
               </div>
-              <div className="bg-slate-900/30 p-4 border border-slate-900 rounded-xl">
-                <p className="text-xs text-slate-500 uppercase font-semibold">Outstanding Balance</p>
-                <p className="text-lg font-bold text-red-405 mt-1">₹{data.outstandingAmount.toLocaleString('en-IN')}</p>
+              <div className="bg-[#0e0e11] p-4 border border-[#242428] rounded-xs">
+                <p className="font-mono text-[10px] text-[#71717a] uppercase font-bold tracking-wider">
+                  Outstanding Balance
+                </p>
+                <p className="font-mono text-xl font-bold text-[#ff3e00] mt-1">
+                  ₹{data.outstandingAmount.toLocaleString('en-IN')}
+                </p>
               </div>
             </div>
 
-            {/* Simple Graphic SVG Visual Chart representing invoices */}
-            <div className="h-44 w-full bg-slate-950/20 border border-slate-900 rounded-xl flex items-center justify-center relative p-4 overflow-hidden">
+            {/* Inflow Waveform Visual */}
+            <div className="h-36 w-full bg-[#0e0e11] border border-[#242428] rounded-xs flex items-center justify-center relative p-4 overflow-hidden">
               <svg className="w-full h-full overflow-visible" viewBox="0 0 500 100" preserveAspectRatio="none">
                 <defs>
                   <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#6366f1" stopOpacity="0.15" />
-                    <stop offset="100%" stopColor="#6366f1" stopOpacity="0.0" />
+                    <stop offset="0%" stopColor="#ff3e00" stopOpacity="0.18" />
+                    <stop offset="100%" stopColor="#ff3e00" stopOpacity="0.0" />
                   </linearGradient>
                 </defs>
-                <path 
-                  d="M0,80 Q75,30 150,60 T300,20 T450,50 T500,30 L500,100 L0,100 Z" 
-                  fill="url(#chartGrad)" 
+                <path
+                  d="M0,80 Q75,30 150,60 T300,20 T450,50 T500,30 L500,100 L0,100 Z"
+                  fill="url(#chartGrad)"
                 />
-                <path 
-                  d="M0,80 Q75,30 150,60 T300,20 T450,50 T500,30" 
-                  fill="none" 
-                  stroke="#6366f1" 
-                  strokeWidth="2.5" 
+                <path
+                  d="M0,80 Q75,30 150,60 T300,20 T450,50 T500,30"
+                  fill="none"
+                  stroke="#ff3e00"
+                  strokeWidth="2"
                 />
-                {/* Dots */}
-                <circle cx="150" cy="60" r="4" fill="#14b8a6" />
-                <circle cx="300" cy="20" r="4" fill="#6366f1" />
-                <circle cx="450" cy="50" r="4" fill="#a855f7" />
+                <circle cx="150" cy="60" r="3.5" fill="#00d664" />
+                <circle cx="300" cy="20" r="3.5" fill="#ff3e00" />
+                <circle cx="450" cy="50" r="3.5" fill="#38bdf8" />
               </svg>
-              <div className="absolute top-4 left-4 text-[10px] text-slate-500 bg-[#0d0d12] px-2 py-0.5 border border-slate-800 rounded font-semibold uppercase">
-                Revenue Inflow Projection
+              <div className="absolute top-3 left-3 font-mono text-[9px] text-[#a1a1aa] bg-[#141416] px-2 py-0.5 border border-[#242428] rounded-xs uppercase tracking-wider font-bold">
+                Revenue Velocity Telemetry
               </div>
             </div>
           </div>
-        </div>
+        </Card>
 
         {/* Activity Feed */}
-        <div className="bg-[#0d0d12]/60 border border-slate-850 p-6 rounded-2xl flex flex-col">
-          <h2 className="text-lg font-bold text-slate-100 mb-6 flex items-center shrink-0">
-            <Activity className="w-5 h-5 mr-2 text-indigo-400" />
-            Audit activity log
-          </h2>
+        <Card className="flex flex-col">
+          <CardHeader>
+            <div>
+              <span className="font-mono text-[10px] uppercase font-bold tracking-widest text-[#71717a]">
+                LOGS // AUDIT
+              </span>
+              <CardTitle className="mt-1">System Activity Feed</CardTitle>
+            </div>
+            <Link
+              href="/dashboard/audit-logs"
+              className="font-mono text-[10px] text-[#ff3e00] hover:underline uppercase tracking-wider font-bold"
+            >
+              View All
+            </Link>
+          </CardHeader>
 
-          <div className="flex-1 space-y-4 overflow-y-auto max-h-[360px] pr-2 scrollbar-thin">
+          <div className="flex-1 space-y-3 overflow-y-auto max-h-[380px] pr-1">
             {data.recentActivity.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500">
+              <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[#71717a]">
                 <Clock className="w-8 h-8 mb-2 stroke-1" />
-                <p className="text-sm">No activity logged yet.</p>
+                <p className="font-mono text-xs">No activity logged yet.</p>
               </div>
             ) : (
               data.recentActivity.map((activity) => {
                 const Icon = getActivityIcon(activity.entityType);
                 return (
-                  <div key={activity._id} className="flex gap-3 text-xs leading-relaxed group">
-                    <div className="p-2 bg-slate-900 border border-slate-805 rounded-lg text-slate-400 shrink-0 h-8 w-8 flex items-center justify-center">
-                      <Icon className="w-4 h-4" />
+                  <div
+                    key={activity._id}
+                    className="flex gap-3 text-xs leading-relaxed p-2.5 bg-[#0e0e11] border border-[#242428] rounded-xs hover:border-[#ff3e00]/40 transition-colors"
+                  >
+                    <div className="p-1.5 bg-[#141416] border border-[#27272a] rounded-xs text-[#ff3e00] shrink-0 h-7 w-7 flex items-center justify-center">
+                      <Icon className="w-3.5 h-3.5" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-semibold text-slate-350 truncate">{activity.actor}</span>
-                        <span className="text-[10px] text-slate-500 shrink-0">
-                          {new Date(activity.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        <span className="font-mono font-bold text-white text-[11px] truncate">
+                          {activity.actor}
+                        </span>
+                        <span className="font-mono text-[9px] text-[#71717a] shrink-0">
+                          {new Date(activity.timestamp).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
                         </span>
                       </div>
-                      <p className="text-slate-400 mt-0.5 capitalize">
-                        {formatActivityAction(activity.action)} <code className="text-indigo-400 text-[10px] bg-slate-900/60 px-1 py-0.5 border border-slate-850 rounded">{activity.entityType}</code>
+                      <p className="text-[#a1a1aa] text-[11px] mt-0.5">
+                        <span className="capitalize">{formatActivityAction(activity.action)}</span>{' '}
+                        <span className="font-mono text-[9px] uppercase px-1 py-0.2 bg-[#1a1a1e] border border-[#27272a] text-[#ff3e00] rounded-xs">
+                          {activity.entityType}
+                        </span>
                       </p>
                     </div>
                   </div>
@@ -309,7 +321,7 @@ export default function DashboardPage() {
               })
             )}
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   );

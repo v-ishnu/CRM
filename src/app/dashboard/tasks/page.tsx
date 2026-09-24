@@ -629,26 +629,31 @@ export default function TasksPage() {
   return (
     <div className="space-y-6">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#242428]">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">Task Management</h1>
-          <p className="text-sm text-slate-400 mt-1">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-mono text-[10px] uppercase tracking-widest font-bold text-[#ff3e00]">
+              WORKFLOW // TASKS
+            </span>
+          </div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">Task Management</h1>
+          <p className="text-xs sm:text-sm text-[#a1a1aa] mt-0.5">
             Least-privilege task credential access, status workflows, and developer compensation tracking.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <button
             onClick={() => handleOpenAddCredForTask()}
-            className="inline-flex items-center justify-center space-x-2 px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-850 border border-slate-750 text-slate-200 text-sm font-semibold transition-all cursor-pointer shrink-0"
+            className="inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-xs bg-[#18181b] hover:bg-[#202024] border border-[#27272a] hover:border-[#ff3e00]/60 text-white font-mono text-xs uppercase font-bold tracking-wider transition-colors cursor-pointer shrink-0"
           >
-            <Lock className="w-4 h-4 text-amber-400" />
-            <span>+ Add Credential Manually</span>
+            <Lock className="w-3.5 h-3.5 text-[#ff3e00]" />
+            <span>+ Add Credential</span>
           </button>
           <button
             onClick={handleOpenCreate}
-            className="inline-flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-lg shadow-indigo-600/20 transition-all cursor-pointer shrink-0"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xs bg-white text-black hover:bg-[#ff3e00] hover:text-white font-mono text-xs uppercase font-bold tracking-wider shadow-xs transition-colors cursor-pointer shrink-0"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
             <span>+ Create Task</span>
           </button>
         </div>
@@ -656,20 +661,20 @@ export default function TasksPage() {
 
       {/* Alert Banners */}
       {bannerSuccess && (
-        <div className="p-4 bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 rounded-xl text-sm flex items-center gap-2.5">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+        <div className="p-3.5 bg-[#00d664]/10 border border-[#00d664]/30 text-[#00d664] rounded-xs text-xs font-mono flex items-center gap-2.5">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{bannerSuccess}</span>
         </div>
       )}
       {bannerError && (
-        <div className="p-4 bg-red-950/60 border border-red-500/30 text-red-300 rounded-xl text-sm flex items-center gap-2.5">
-          <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
+        <div className="p-3.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-xs text-xs font-mono flex items-center gap-2.5">
+          <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{bannerError}</span>
         </div>
       )}
 
       {/* Status Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide border-b border-slate-800/80">
+      <div className="flex items-center gap-1 overflow-x-auto pb-px border-b border-[#242428] font-mono text-xs uppercase font-bold tracking-wider scrollbar-none">
         {[
           { key: 'ALL', label: 'All Tasks' },
           { key: 'TODO', label: 'To Do' },
@@ -681,36 +686,36 @@ export default function TasksPage() {
           <button
             key={tab.key}
             onClick={() => setStatusTab(tab.key)}
-            className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer shrink-0 ${
+            className={`px-4 py-2 transition-all flex items-center gap-2 border-b-2 whitespace-nowrap ${
               statusTab === tab.key
-                ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/40'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+                ? 'border-[#ff3e00] text-white bg-white/[0.03]'
+                : 'border-transparent text-[#71717a] hover:text-white'
             }`}
           >
-            {tab.label}
+            <span>{tab.label}</span>
           </button>
         ))}
       </div>
 
       {/* Filters Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-[#0d0d12] border border-slate-800/80 p-3 rounded-2xl">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-[#141416] border border-[#242428] p-3 rounded-xs">
         <div className="relative w-full">
-          <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
+          <Search className="w-4 h-4 absolute left-3 top-2.5 text-[#71717a] pointer-events-none" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search tasks..."
-            className="w-full bg-[#14141b] border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+            className="w-full bg-[#0d0d10] border border-[#27272a] focus:border-[#ff3e00] rounded-xs pl-9 pr-3 py-2 text-xs text-white placeholder-[#52525b] outline-none transition-all"
           />
         </div>
 
         <select
           value={projectFilter}
           onChange={(e) => setProjectFilter(e.target.value)}
-          className="bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-indigo-500"
+          className="bg-[#0d0d10] border border-[#27272a] focus:border-[#ff3e00] rounded-xs px-3 py-2 text-xs font-mono text-[#f5f5f2] outline-none cursor-pointer"
         >
-          <option value="">All Projects</option>
+          <option value="">ALL PROJECTS</option>
           {projects.map((p) => (
             <option key={p._id} value={p._id}>
               {p.name} ({p.projectCode})
@@ -721,9 +726,9 @@ export default function TasksPage() {
         <select
           value={memberFilter}
           onChange={(e) => setMemberFilter(e.target.value)}
-          className="bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-indigo-500"
+          className="bg-[#0d0d10] border border-[#27272a] focus:border-[#ff3e00] rounded-xs px-3 py-2 text-xs font-mono text-[#f5f5f2] outline-none cursor-pointer"
         >
-          <option value="">All Assignees</option>
+          <option value="">ALL ASSIGNEES</option>
           {teamMembers.map((m) => (
             <option key={m._id} value={m._id}>
               {m.name} ({m.role})
@@ -734,27 +739,31 @@ export default function TasksPage() {
         <select
           value={priorityFilter}
           onChange={(e) => setPriorityFilter(e.target.value)}
-          className="bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-indigo-500"
+          className="bg-[#0d0d10] border border-[#27272a] focus:border-[#ff3e00] rounded-xs px-3 py-2 text-xs font-mono text-[#f5f5f2] outline-none cursor-pointer"
         >
-          <option value="">All Priorities</option>
-          <option value="LOW">Low</option>
-          <option value="MEDIUM">Medium</option>
-          <option value="HIGH">High</option>
-          <option value="URGENT">Urgent</option>
+          <option value="">ALL PRIORITIES</option>
+          <option value="LOW">LOW</option>
+          <option value="MEDIUM">MEDIUM</option>
+          <option value="HIGH">HIGH</option>
+          <option value="URGENT">URGENT</option>
         </select>
       </div>
 
       {/* Task Cards List */}
       {loading ? (
-        <div className="flex items-center justify-center p-12 text-slate-400">Loading tasks...</div>
+        <div className="space-y-2">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="h-24 w-full bg-[#141416] border border-[#242428] animate-pulse"></div>
+          ))}
+        </div>
       ) : tasks.length === 0 ? (
-        <div className="text-center p-12 bg-[#0d0d12] border border-slate-800 rounded-2xl">
-          <CheckSquare className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-          <h3 className="text-base font-semibold text-slate-200">No tasks found</h3>
-          <p className="text-xs text-slate-400 mt-1">Create your first task or change your filter settings.</p>
+        <div className="text-center p-12 bg-[#141416] border border-[#242428]">
+          <CheckSquare className="w-10 h-10 text-[#4a4a52] stroke-1 mx-auto mb-3" />
+          <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-[#f5f5f2]">No tasks found</h3>
+          <p className="text-xs text-[#8a8a93] mt-1 font-mono">Create your first task or change your filter settings.</p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {tasks.map((task) => {
             const pBadge = priorityBadges[task.priority] || priorityBadges.MEDIUM;
             const requiredCount = task.requiredCredentialIds?.length || 0;
@@ -763,75 +772,65 @@ export default function TasksPage() {
             return (
               <div
                 key={task._id}
-                className="bg-[#0d0d12] border border-slate-800 hover:border-slate-700/80 rounded-2xl p-5 space-y-4 transition-all"
+                className="bg-[#141416] border border-[#242428] hover:border-[#38383e] p-5 space-y-4 transition-colors"
               >
                 {/* Top Task Header */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="space-y-1.5 flex-1 min-w-0">
                     <div className="flex items-center gap-2.5 flex-wrap">
-                      <span className="font-mono text-xs font-semibold text-indigo-400 bg-indigo-950/60 border border-indigo-800/50 px-2 py-0.5 rounded-md">
+                      <span className="font-mono text-xs font-bold text-white bg-[#0a0a0a] border border-[#242428] px-2 py-0.5 tracking-wide">
                         {task.taskCode}
                       </span>
-                      <h3 className="text-base font-semibold text-white truncate">{task.title}</h3>
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border ${pBadge.bg} ${pBadge.text}`}>
+                      <h3 className="text-sm font-semibold text-white truncate">{task.title}</h3>
+                      <span className="text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 border bg-[#0a0a0a] border-[#242428] text-[#8a8a93]">
                         {pBadge.label}
                       </span>
                       {task.submissionRequired && (
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md border bg-amber-950/40 border-amber-800/40 text-amber-300 flex items-center gap-1">
-                          <UploadCloud className="w-3 h-3 text-amber-400" />
-                          <span>Deliverable Required</span>
+                        <span className="text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 border bg-[#1c1408] border-[#f59e0b]/40 text-[#f59e0b] flex items-center gap-1">
+                          <UploadCloud className="w-3 h-3 text-[#f59e0b]" />
+                          <span>DELIVERABLE REQ</span>
                         </span>
                       )}
                       {task.agreedAmount ? (
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md border bg-emerald-950/50 border-emerald-800/40 text-emerald-400">
+                        <span className="text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 border bg-[#0e1f15] border-[#00d664]/30 text-[#00d664]">
                           ₹{task.agreedAmount.toLocaleString('en-IN')}
                         </span>
                       ) : null}
                     </div>
 
                     {task.description && (
-                      <p className="text-xs text-slate-400 line-clamp-1">{task.description}</p>
+                      <p className="text-xs text-[#8a8a93] line-clamp-1">{task.description}</p>
                     )}
 
-                    <div className="flex items-center gap-4 text-xs text-slate-400 pt-1 flex-wrap">
-                      <span className="flex items-center gap-1 text-slate-300">
-                        <FolderKanban className="w-3.5 h-3.5 text-slate-500" />
+                    <div className="flex items-center gap-4 text-xs font-mono text-[#8a8a93] pt-1 flex-wrap">
+                      <span className="flex items-center gap-1 text-[#f5f5f2]">
+                        <FolderKanban className="w-3.5 h-3.5 text-[#ff3e00]" />
                         <span>{task.projectId?.name || 'Project'}</span>
                       </span>
 
-                      <span className="flex items-center gap-1 text-slate-300">
-                        <User className="w-3.5 h-3.5 text-slate-500" />
+                      <span className="flex items-center gap-1 text-[#f5f5f2]">
+                        <User className="w-3.5 h-3.5 text-[#8a8a93]" />
                         <span>{task.assignedTo ? `${task.assignedTo.name} (${task.assignedTo.role})` : 'Unassigned'}</span>
                       </span>
 
                       {task.dueDate && (
-                        <span className="flex items-center gap-1 text-slate-400">
-                          <Clock className="w-3.5 h-3.5 text-slate-500" />
-                          <span>Due: {new Date(task.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                        <span className="flex items-center gap-1 text-[#8a8a93]">
+                          <Clock className="w-3.5 h-3.5 text-[#6b6b76]" />
+                          <span>DUE: {new Date(task.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
                         </span>
                       )}
                     </div>
                   </div>
 
                   {/* Status Dropdown & Delete */}
-                  <div className="flex items-center gap-3 shrink-0">
+                  <div className="flex items-center gap-2.5 shrink-0">
                     <select
                       value={task.status}
                       onChange={(e) => handleStatusChange(task._id, e.target.value)}
-                      className={`text-xs font-semibold px-3 py-1.5 rounded-xl border focus:outline-none cursor-pointer ${
-                        task.status === 'COMPLETED'
-                          ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/60'
-                          : task.status === 'IN_PROGRESS'
-                          ? 'bg-blue-950/60 text-blue-300 border-blue-800/60'
-                          : task.status === 'BLOCKED'
-                          ? 'bg-red-950/60 text-red-300 border-red-800/60'
-                          : task.status === 'REVIEW'
-                          ? 'bg-purple-950/60 text-purple-300 border-purple-800/60'
-                          : 'bg-[#14141b] text-slate-300 border-slate-800'
-                      }`}
+                      className="text-xs font-mono font-semibold px-2.5 py-1.5 bg-[#0a0a0a] border border-[#242428] text-white focus:outline-none focus:border-[#ff3e00] cursor-pointer"
                     >
                       {statusOptions.map((opt) => (
-                        <option key={opt.value} value={opt.value} className="bg-[#14141b] text-slate-200">
+                        <option key={opt.value} value={opt.value} className="bg-[#0a0a0a] text-white">
                           {opt.label}
                         </option>
                       ))}
@@ -839,7 +838,7 @@ export default function TasksPage() {
 
                     <button
                       onClick={() => handleDeleteTask(task._id)}
-                      className="p-1.5 text-slate-500 hover:text-red-400 transition-colors cursor-pointer"
+                      className="p-1.5 text-[#8a8a93] hover:text-[#ff3e00] transition-colors cursor-pointer"
                       title="Delete task"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -848,26 +847,26 @@ export default function TasksPage() {
                 </div>
 
                 {/* Bottom Task Toolbar: Required Credentials & Payments */}
-                <div className="pt-3 border-t border-slate-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="pt-3 border-t border-[#242428] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                   {/* Credentials Section */}
                   <div className="flex items-center gap-2 flex-wrap">
                     {requiredCount > 0 ? (
                       <div className="flex items-center gap-2">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border font-medium ${
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-none md:rounded-xs border font-mono text-xs ${
                           isRevoked
-                            ? 'bg-slate-900 border-slate-700 text-slate-400'
-                            : 'bg-amber-950/40 border-amber-800/40 text-amber-300'
+                            ? 'bg-[#18181b] border-[#242428] text-[#88888e]'
+                            : 'bg-[#ff3e00]/10 border-[#ff3e00]/30 text-[#ff3e00]'
                         }`}>
                           <Lock className="w-3.5 h-3.5" />
-                          <span>{requiredCount} Required Credential{requiredCount > 1 ? 's' : ''}</span>
-                          {isRevoked && <span className="text-[10px] bg-red-950/80 text-red-400 px-1.5 py-0.2 rounded border border-red-800/50 ml-1">REVOKED</span>}
+                          <span>{requiredCount} Credential{requiredCount > 1 ? 's' : ''}</span>
+                          {isRevoked && <span className="text-[10px] bg-[#EF4444]/20 text-[#EF4444] px-1.5 py-0.2 rounded-none md:rounded-xs border border-[#EF4444]/30 ml-1">REVOKED</span>}
                         </span>
 
                         {!isRevoked && (
                           <button
                             onClick={() => handleShareTaskCredentials(task)}
                             disabled={actionLoading === task._id}
-                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 font-semibold cursor-pointer transition-all disabled:opacity-50"
+                            className="crm-btn-primary inline-flex items-center gap-1.5 px-3 py-1 text-xs disabled:opacity-50"
                           >
                             <Send className="w-3.5 h-3.5" />
                             <span>{actionLoading === task._id ? 'Sharing...' : 'Share via Telegram'}</span>
@@ -878,7 +877,7 @@ export default function TasksPage() {
                           <button
                             onClick={() => handleRevokeTaskCredentials(task)}
                             disabled={actionLoading === task._id}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-950/30 hover:bg-red-950/50 border border-red-800/30 text-red-400 font-medium cursor-pointer transition-all"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-none md:rounded-xs bg-[#EF4444]/10 hover:bg-[#EF4444]/20 border border-[#EF4444]/30 text-[#EF4444] font-mono text-xs transition-all"
                             title="Revoke access to this task's credentials"
                           >
                             <Unlock className="w-3 h-3" />
@@ -887,21 +886,21 @@ export default function TasksPage() {
                         )}
                       </div>
                     ) : (
-                      <span className="text-slate-500 italic">No specific credentials required</span>
+                      <span className="text-[#88888e] font-mono text-xs italic">No specific credentials required</span>
                     )}
 
                     <button
                       onClick={() => handleOpenAddCredForTask(task)}
-                      className="inline-flex items-center gap-1 px-2 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded text-[11px] font-medium cursor-pointer transition-colors"
+                      className="crm-btn-secondary inline-flex items-center gap-1 px-2 py-1 text-[11px]"
                       title="Add or link credential to this task"
                     >
-                      <Plus className="w-3 h-3 text-indigo-400" />
+                      <Plus className="w-3 h-3 text-[#ff3e00]" />
                       <span>Add Cred</span>
                     </button>
 
                     <button
                       onClick={() => handleViewHistory(task)}
-                      className="inline-flex items-center gap-1 px-2 py-1 text-slate-400 hover:text-slate-200 cursor-pointer transition-colors"
+                      className="inline-flex items-center gap-1 px-2 py-1 text-[#88888e] hover:text-white font-mono text-xs transition-colors cursor-pointer"
                       title="View credential share history"
                     >
                       <History className="w-3.5 h-3.5" />
@@ -914,7 +913,7 @@ export default function TasksPage() {
                     {task.assignedTo && (
                       <button
                         onClick={() => handleOpenRecordPayment(task)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-950/30 hover:bg-emerald-950/50 border border-emerald-800/30 text-emerald-300 font-semibold cursor-pointer transition-all"
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-none md:rounded-xs bg-[#00D664]/10 hover:bg-[#00D664]/20 border border-[#00D664]/30 text-[#00D664] font-mono text-xs font-semibold cursor-pointer transition-all"
                       >
                         <Coins className="w-3.5 h-3.5" />
                         <span>+ Record Payment</span>
@@ -925,27 +924,27 @@ export default function TasksPage() {
 
                 {/* Task Deliverables / Submission Section */}
                 {(task.submission || task.status === 'COMPLETED' || task.submissionRequired) && (
-                  <div className="pt-3 border-t border-slate-800/60 space-y-3">
+                  <div className="pt-3 border-t border-[#242428] space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                        <UploadCloud className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Task Completion & Deliverables</span>
+                      <span className="text-xs font-mono uppercase tracking-wider text-white flex items-center gap-1.5">
+                        <UploadCloud className="w-3.5 h-3.5 text-[#00D664]" />
+                        <span>Deliverables</span>
                       </span>
 
                       <button
                         onClick={() => handleOpenCompleteModal(task)}
-                        className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-emerald-950/40 hover:bg-emerald-950/60 border border-emerald-800/40 text-emerald-300 flex items-center gap-1 cursor-pointer transition-all"
+                        className="crm-btn-secondary text-[11px] px-2.5 py-1 flex items-center gap-1 cursor-pointer"
                       >
-                        <Edit2 className="w-3 h-3" />
+                        <Edit2 className="w-3 h-3 text-[#ff3e00]" />
                         <span>{task.submission ? 'Resubmit Deliverables' : 'Submit Deliverables'}</span>
                       </button>
                     </div>
 
                     {task.submission ? (
-                      <div className="bg-[#14141b] border border-slate-800/80 rounded-xl p-3.5 space-y-2.5 text-xs">
-                        <div className="flex flex-wrap items-center justify-between gap-2 text-slate-400 text-[11px] pb-2 border-b border-slate-800/50">
+                      <div className="bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs p-3.5 space-y-2.5 text-xs font-mono">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-[#88888e] text-[11px] pb-2 border-b border-[#242428]">
                           <span>
-                            Submitted by <b className="text-slate-200">{task.submission.submittedBy}</b>
+                            Submitted by <b className="text-white">{task.submission.submittedBy}</b>
                           </span>
                           <span>
                             {new Date(task.submission.submittedAt).toLocaleDateString('en-IN', {
@@ -960,14 +959,14 @@ export default function TasksPage() {
 
                         {task.submission.submissionNotes && (
                           <div>
-                            <span className="text-slate-400 font-medium">Notes:</span>
-                            <p className="text-slate-300 mt-0.5 whitespace-pre-wrap">{task.submission.submissionNotes}</p>
+                            <span className="text-[10px] uppercase font-mono tracking-wider text-[#88888e]">Notes</span>
+                            <p className="text-[#e4e4e7] mt-0.5 whitespace-pre-wrap">{task.submission.submissionNotes}</p>
                           </div>
                         )}
 
                         {task.submission.submissionUrls && task.submission.submissionUrls.length > 0 && (
                           <div className="space-y-1">
-                            <span className="text-slate-400 font-medium">Submitted URLs:</span>
+                            <span className="text-[10px] uppercase font-mono tracking-wider text-[#88888e]">Submitted URLs</span>
                             <div className="space-y-1">
                               {task.submission.submissionUrls.map((url: string, uIdx: number) => (
                                 <a
@@ -975,7 +974,7 @@ export default function TasksPage() {
                                   href={url}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 font-mono text-[11px] hover:underline"
+                                  className="flex items-center gap-1.5 text-[#ff3e00] hover:underline font-mono text-[11px]"
                                 >
                                   <ExternalLink className="w-3 h-3 shrink-0" />
                                   <span className="truncate">{url}</span>
@@ -987,25 +986,25 @@ export default function TasksPage() {
 
                         {task.submission.submissionFiles && task.submission.submissionFiles.length > 0 && (
                           <div className="space-y-1.5">
-                            <span className="text-slate-400 font-medium">Submitted Files:</span>
+                            <span className="text-[10px] uppercase font-mono tracking-wider text-[#88888e]">Submitted Files</span>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                               {task.submission.submissionFiles.map((file: any, fIdx: number) => {
                                 const sizeMb = (file.fileSize / (1024 * 1024)).toFixed(2);
                                 return (
                                   <div
                                     key={fIdx}
-                                    className="flex items-center justify-between p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-[11px]"
+                                    className="flex items-center justify-between p-2 rounded-none md:rounded-xs bg-[#141416] border border-[#242428] text-[11px]"
                                   >
                                     <div className="flex items-center gap-2 truncate pr-2">
-                                      <FileText className="w-4 h-4 text-emerald-400 shrink-0" />
+                                      <FileText className="w-4 h-4 text-[#00D664] shrink-0" />
                                       <div className="truncate">
-                                        <p className="font-medium text-slate-200 truncate">{file.fileName}</p>
-                                        <p className="text-[10px] text-slate-500 font-mono">{sizeMb} MB</p>
+                                        <p className="font-mono text-white truncate">{file.fileName}</p>
+                                        <p className="text-[10px] text-[#88888e] font-mono">{sizeMb} MB</p>
                                       </div>
                                     </div>
                                     <button
                                       onClick={() => handleDownloadFile(task._id, fIdx)}
-                                      className="p-1 text-indigo-400 hover:text-white rounded hover:bg-zinc-800 cursor-pointer shrink-0"
+                                      className="p-1 text-[#88888e] hover:text-[#ff3e00] rounded-none md:rounded-xs hover:bg-[#18181b] cursor-pointer transition-colors shrink-0"
                                       title="Download with secure signed URL"
                                     >
                                       <Download className="w-3.5 h-3.5" />
@@ -1019,14 +1018,14 @@ export default function TasksPage() {
 
                         {/* History Accordion if resubmissions exist */}
                         {task.submissionHistory && task.submissionHistory.length > 0 && (
-                          <div className="pt-2 border-t border-slate-800/50">
+                          <div className="pt-2 border-t border-[#242428]">
                             <button
                               onClick={() =>
                                 setExpandedHistoryTaskId(expandedHistoryTaskId === task._id ? null : task._id)
                               }
-                              className="text-[11px] text-zinc-400 hover:text-zinc-200 flex items-center gap-1 cursor-pointer font-medium"
+                              className="text-[11px] text-[#88888e] hover:text-white flex items-center gap-1 cursor-pointer font-mono"
                             >
-                              <History className="w-3 h-3 text-indigo-400" />
+                              <History className="w-3 h-3 text-[#ff3e00]" />
                               <span>
                                 Previous Submissions ({task.submissionHistory.length})
                               </span>
@@ -1038,25 +1037,25 @@ export default function TasksPage() {
                             </button>
 
                             {expandedHistoryTaskId === task._id && (
-                              <div className="mt-2 space-y-2 pl-2 border-l border-zinc-800">
+                              <div className="mt-2 space-y-2 pl-2 border-l border-[#242428]">
                                 {task.submissionHistory.map((hist: any, hIdx: number) => (
-                                  <div key={hIdx} className="bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800/60 text-[11px] space-y-1">
-                                    <div className="flex justify-between text-zinc-500 text-[10px]">
+                                  <div key={hIdx} className="bg-[#141416] p-2.5 rounded-none md:rounded-xs border border-[#242428] text-[11px] space-y-1">
+                                    <div className="flex justify-between text-[#88888e] text-[10px] font-mono">
                                       <span>By {hist.submittedBy}</span>
                                       <span>{new Date(hist.submittedAt).toLocaleString('en-IN')}</span>
                                     </div>
-                                    {hist.submissionNotes && <p className="text-zinc-300">{hist.submissionNotes}</p>}
+                                    {hist.submissionNotes && <p className="text-[#e4e4e7]">{hist.submissionNotes}</p>}
                                     {hist.submissionUrls?.map((u: string, idx: number) => (
-                                      <a key={idx} href={u} target="_blank" rel="noopener noreferrer" className="block text-indigo-400 truncate text-[10px]">
+                                      <a key={idx} href={u} target="_blank" rel="noopener noreferrer" className="block text-[#ff3e00] hover:underline truncate text-[10px] font-mono">
                                         {u}
                                       </a>
                                     ))}
                                     {hist.submissionFiles?.map((f: any, fIdx: number) => (
-                                      <div key={fIdx} className="flex justify-between items-center text-[10px] text-zinc-400">
+                                      <div key={fIdx} className="flex justify-between items-center text-[10px] font-mono text-[#88888e]">
                                         <span className="truncate">{f.fileName}</span>
                                         <button
                                           onClick={() => handleDownloadFile(task._id, fIdx, hIdx)}
-                                          className="text-indigo-400 hover:underline cursor-pointer"
+                                          className="text-[#ff3e00] hover:underline cursor-pointer"
                                         >
                                           Download
                                         </button>
@@ -1070,7 +1069,7 @@ export default function TasksPage() {
                         )}
                       </div>
                     ) : (
-                      <div className="p-3 bg-zinc-900/30 border border-zinc-800/40 rounded-xl text-zinc-500 text-xs flex items-center justify-between">
+                      <div className="p-3 bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs text-[#88888e] font-mono text-xs flex items-center justify-between">
                         <span>No submission deliverables attached yet.</span>
                       </div>
                     )}
@@ -1084,35 +1083,41 @@ export default function TasksPage() {
 
       {/* Create Task Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-[#0d0d12] border border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-5 my-8">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white">Create New Task</h2>
-              <button onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-[#141416] border border-[#242428] rounded-none md:rounded-xs w-full max-w-lg p-6 space-y-5 my-8 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-[#242428]">
+              <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-white">
+                <span className="w-2 h-2 rounded-full bg-[#ff3e00]" />
+                <span>SYS::TASK // CREATE_NEW_WORK_ITEM</span>
+              </div>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="p-1 text-[#88888e] hover:text-white hover:bg-[#18181b] rounded-none md:rounded-xs transition-colors"
+              >
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateSubmit} className="space-y-4 text-sm">
+            <form onSubmit={handleCreateSubmit} className="space-y-4 text-xs font-mono">
               <div>
-                <label className="block text-slate-300 text-xs font-semibold mb-1">Task Title *</label>
+                <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Task Title *</label>
                 <input
                   type="text"
                   required
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                   placeholder="e.g. Update WordPress Content"
-                  className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 text-xs font-semibold mb-1">Project *</label>
+                <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Project *</label>
                 <select
                   required
                   value={formData.projectId}
                   onChange={(e) => handleProjectSelect(e.target.value)}
-                  className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                 >
                   <option value="">Select Project</option>
                   {projects.map((p) => (
@@ -1125,11 +1130,11 @@ export default function TasksPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 text-xs font-semibold mb-1">Assign To</label>
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Assign To</label>
                   <select
                     value={formData.assignedTo}
                     onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })}
-                    className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                   >
                     <option value="">Unassigned</option>
                     {teamMembers.map((m) => (
@@ -1141,11 +1146,11 @@ export default function TasksPage() {
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 text-xs font-semibold mb-1">Priority</label>
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Priority</label>
                   <select
                     value={formData.priority}
                     onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                    className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                   >
                     <option value="LOW">Low</option>
                     <option value="MEDIUM">Medium</option>
@@ -1157,60 +1162,60 @@ export default function TasksPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 text-xs font-semibold mb-1">Due Date</label>
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Due Date</label>
                   <input
                     type="date"
                     value={formData.dueDate}
                     onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                    className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 text-xs font-semibold mb-1">Agreed Payout (₹)</label>
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Agreed Payout (₹)</label>
                   <input
                     type="number"
                     min="0"
                     placeholder="e.g. 2500"
                     value={formData.agreedAmount}
                     onChange={(e) => setFormData({ ...formData, agreedAmount: e.target.value })}
-                    className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-slate-300 text-xs font-semibold mb-1">Description</label>
+                <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Description</label>
                 <textarea
                   rows={2}
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   placeholder="Task instructions and requirements..."
-                  className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                 />
               </div>
 
               {/* Task Required Access (Least Privilege Credentials Selection) */}
-              <div className="space-y-2 pt-2 border-t border-slate-800/80">
+              <div className="space-y-2 pt-2 border-t border-[#242428]">
                 <div className="flex items-center justify-between">
-                  <label className="block text-slate-200 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5 text-indigo-400" />
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-white flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-[#ff3e00]" />
                     <span>Required Access</span>
                   </label>
-                  <span className="text-[11px] text-slate-400">
+                  <span className="text-[10px] font-mono text-[#88888e]">
                     {formData.requiredCredentialIds.length} selected
                   </span>
                 </div>
 
-                <div className="p-3 bg-amber-950/30 border border-amber-500/20 rounded-xl text-amber-300/90 text-xs flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                  <span>⚠️ Only selected credentials will be available to the assigned team member. Unselected credentials remain hidden.</span>
+                <div className="p-3 bg-[#18181b] border border-[#242428] rounded-none md:rounded-xs text-[#88888e] text-xs flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-[#f59e0b] shrink-0 mt-0.5" />
+                  <span>Only selected credentials will be accessible to the assigned team member. Unselected credentials remain hidden.</span>
                 </div>
 
                 {loadingCredentials ? (
-                  <div className="p-4 text-center text-xs text-slate-500">Loading project credentials...</div>
+                  <div className="p-4 text-center text-xs text-[#88888e] font-mono">Loading project credentials...</div>
                 ) : projectCredentials.length === 0 ? (
-                  <div className="p-3 bg-[#14141b] border border-slate-800 rounded-xl text-slate-400 text-xs">
+                  <div className="p-3 bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs text-[#88888e] text-xs font-mono">
                     No active credentials stored for this project.
                   </div>
                 ) : (
@@ -1221,10 +1226,10 @@ export default function TasksPage() {
                         <div
                           key={c._id}
                           onClick={() => toggleCredentialSelection(c._id)}
-                          className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all text-xs ${
+                          className={`p-2.5 rounded-none md:rounded-xs border flex items-center justify-between cursor-pointer transition-all text-xs font-mono ${
                             selected
-                              ? 'bg-indigo-950/40 border-indigo-500/40 text-indigo-200'
-                              : 'bg-[#14141b] border-slate-800 text-slate-300 hover:border-slate-700'
+                              ? 'bg-[#ff3e00]/10 border-[#ff3e00]/40 text-white'
+                              : 'bg-[#0a0a0a] border-[#242428] text-[#88888e] hover:border-[#ff3e00]/30 hover:text-white'
                           }`}
                         >
                           <div className="flex items-center gap-2">
@@ -1232,11 +1237,11 @@ export default function TasksPage() {
                               type="checkbox"
                               checked={selected}
                               onChange={() => {}}
-                              className="rounded text-indigo-600 focus:ring-0 cursor-pointer"
+                              className="rounded-none text-[#ff3e00] focus:ring-0 cursor-pointer"
                             />
-                            <span className="font-medium">{c.service}</span>
+                            <span className="font-semibold text-white">{c.service}</span>
                           </div>
-                          <span className="text-[10px] uppercase font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded">
+                          <span className="text-[10px] uppercase font-mono text-[#88888e] bg-[#18181b] px-2 py-0.5 rounded-none md:rounded-xs border border-[#242428]">
                             {c.credentialType || 'Credential'}
                           </span>
                         </div>
@@ -1246,12 +1251,12 @@ export default function TasksPage() {
                 )}
 
                 {formData.requiredCredentialIds.length > 0 && formData.assignedTo && (
-                  <label className="flex items-center gap-2 pt-1 text-xs text-slate-300 cursor-pointer">
+                  <label className="flex items-center gap-2 pt-1 text-xs text-[#88888e] cursor-pointer font-mono">
                     <input
                       type="checkbox"
                       checked={formData.autoShareCredentials}
                       onChange={(e) => setFormData({ ...formData, autoShareCredentials: e.target.checked })}
-                      className="rounded text-indigo-600 focus:ring-0 cursor-pointer"
+                      className="rounded-none text-[#ff3e00] focus:ring-0 cursor-pointer"
                     />
                     <span>⚡ Share required credentials automatically via Telegram upon assignment</span>
                   </label>
@@ -1259,26 +1264,26 @@ export default function TasksPage() {
               </div>
 
               {/* Task Deliverable Requirements */}
-              <div className="space-y-3 pt-3 border-t border-slate-800/80">
-                <label className="flex items-center gap-2 text-xs font-semibold text-slate-200 cursor-pointer">
+              <div className="space-y-3 pt-3 border-t border-[#242428]">
+                <label className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-white cursor-pointer">
                   <input
                     type="checkbox"
                     checked={formData.submissionRequired}
                     onChange={(e) => setFormData({ ...formData, submissionRequired: e.target.checked })}
-                    className="rounded text-emerald-500 focus:ring-0 cursor-pointer"
+                    className="rounded-none text-[#00D664] focus:ring-0 cursor-pointer"
                   />
                   <span className="flex items-center gap-1.5">
-                    <UploadCloud className="w-4 h-4 text-emerald-400" />
+                    <UploadCloud className="w-4 h-4 text-[#00D664]" />
                     <span>Require Completion Deliverables (Files / URLs)</span>
                   </span>
                 </label>
 
                 {formData.submissionRequired && (
-                  <div className="p-3.5 bg-zinc-900/90 border border-zinc-800 rounded-xl space-y-3 text-xs">
+                  <div className="p-3.5 bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs space-y-3 text-xs font-mono">
                     <div>
-                      <label className="block text-zinc-400 mb-1.5 font-medium">Deliverable Types</label>
+                      <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1.5">Deliverable Types</label>
                       <div className="flex items-center gap-4">
-                        <label className="flex items-center gap-1.5 cursor-pointer text-zinc-300">
+                        <label className="flex items-center gap-1.5 cursor-pointer text-[#e4e4e7]">
                           <input
                             type="checkbox"
                             checked={formData.submissionTypes.includes('url')}
@@ -1291,12 +1296,12 @@ export default function TasksPage() {
                                   : prev.submissionTypes.filter((t) => t !== 'url'),
                               }));
                             }}
-                            className="rounded text-indigo-500 focus:ring-0"
+                            className="rounded-none text-[#ff3e00] focus:ring-0"
                           />
                           <span>URLs / Links (PRs, Figma, Staging)</span>
                         </label>
 
-                        <label className="flex items-center gap-1.5 cursor-pointer text-zinc-300">
+                        <label className="flex items-center gap-1.5 cursor-pointer text-[#e4e4e7]">
                           <input
                             type="checkbox"
                             checked={formData.submissionTypes.includes('file')}
@@ -1309,7 +1314,7 @@ export default function TasksPage() {
                                   : prev.submissionTypes.filter((t) => t !== 'file'),
                               }));
                             }}
-                            className="rounded text-indigo-500 focus:ring-0"
+                            className="rounded-none text-[#ff3e00] focus:ring-0"
                           />
                           <span>Files (ZIP, PDF, DOCX, Images)</span>
                         </label>
@@ -1318,7 +1323,7 @@ export default function TasksPage() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-zinc-400 mb-1 font-medium">Max File Size (MB)</label>
+                        <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Max File Size (MB)</label>
                         <input
                           type="number"
                           min="1"
@@ -1327,11 +1332,11 @@ export default function TasksPage() {
                           onChange={(e) =>
                             setFormData({ ...formData, maxFileSizeMb: Number(e.target.value) || 25 })
                           }
-                          className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-indigo-500"
+                          className="w-full bg-[#141416] border border-[#242428] rounded-none md:rounded-xs px-3 py-1.5 text-white focus:outline-none focus:border-[#ff3e00]"
                         />
                       </div>
                       <div>
-                        <label className="block text-zinc-400 mb-1 font-medium">Assignee Instructions (Optional)</label>
+                        <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Assignee Instructions (Optional)</label>
                         <input
                           type="text"
                           value={formData.submissionInstructions}
@@ -1339,7 +1344,7 @@ export default function TasksPage() {
                             setFormData({ ...formData, submissionInstructions: e.target.value })
                           }
                           placeholder="e.g. Provide build ZIP and release notes link"
-                          className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-indigo-500"
+                          className="w-full bg-[#141416] border border-[#242428] rounded-none md:rounded-xs px-3 py-1.5 text-white focus:outline-none focus:border-[#ff3e00]"
                         />
                       </div>
                     </div>
@@ -1347,17 +1352,17 @@ export default function TasksPage() {
                 )}
               </div>
 
-              <div className="flex justify-end space-x-3 pt-3 border-t border-slate-800">
+              <div className="flex justify-end space-x-3 pt-3 border-t border-[#242428]">
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium cursor-pointer"
+                  className="crm-btn-secondary px-4 py-2 text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/20 cursor-pointer"
+                  className="crm-btn-primary px-4 py-2 text-xs"
                 >
                   Create Task
                 </button>
@@ -1369,54 +1374,54 @@ export default function TasksPage() {
 
       {/* Complete Task Deliverables Modal */}
       {showCompleteModal && submittingTask && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-[#0d0d12] border border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-5 my-8">
-            <div className="flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-[#141416] border border-[#242428] rounded-none md:rounded-xs w-full max-w-lg p-6 space-y-5 my-8 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-[#242428]">
               <div>
-                <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                  <UploadCloud className="w-5 h-5 text-emerald-400" />
-                  Task Completion Deliverables
-                </h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {submittingTask.title} (<span className="font-mono text-indigo-400">{submittingTask.taskCode}</span>)
+                <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-white">
+                  <span className="w-2 h-2 rounded-full bg-[#00D664]" />
+                  <span>SYS::DELIVERABLE // SUBMIT_DELIVERABLES</span>
+                </div>
+                <p className="text-[10px] font-mono text-[#88888e] mt-1">
+                  {submittingTask.title} (<span className="text-[#ff3e00]">{submittingTask.taskCode}</span>)
                 </p>
               </div>
               <button
                 onClick={() => setShowCompleteModal(false)}
-                className="text-slate-400 hover:text-white cursor-pointer"
+                className="p-1 text-[#88888e] hover:text-white hover:bg-[#18181b] rounded-none md:rounded-xs transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             {submittingTask.submissionInstructions && (
-              <div className="p-3 bg-indigo-950/30 border border-indigo-500/20 rounded-xl text-xs text-indigo-200">
-                <span className="font-semibold text-indigo-300">Instructions: </span>
+              <div className="p-3 bg-[#18181b] border border-[#242428] rounded-none md:rounded-xs text-xs font-mono text-[#88888e]">
+                <span className="font-semibold text-white">Instructions: </span>
                 {submittingTask.submissionInstructions}
               </div>
             )}
 
             {submissionError && (
-              <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-300">
+              <div className="p-3 bg-[#EF4444]/10 border border-[#EF4444]/30 rounded-none md:rounded-xs text-xs font-mono text-[#EF4444]">
                 {submissionError}
               </div>
             )}
 
-            <form onSubmit={handleSubmitCompletion} className="space-y-4 text-sm">
+            <form onSubmit={handleSubmitCompletion} className="space-y-4 text-xs font-mono">
               {/* URLs Section */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                    <ExternalLink className="w-3.5 h-3.5 text-indigo-400" />
+                  <label className="text-[10px] uppercase font-mono tracking-wider text-[#88888e] flex items-center gap-1.5">
+                    <ExternalLink className="w-3.5 h-3.5 text-[#ff3e00]" />
                     <span>Submission URLs / Links</span>
                     {submittingTask.submissionRequired && submittingTask.submissionTypes?.includes('url') && (
-                      <span className="text-amber-400">*</span>
+                      <span className="text-[#ff3e00]">*</span>
                     )}
                   </label>
                   <button
                     type="button"
                     onClick={() => setSubmissionUrls([...submissionUrls, ''])}
-                    className="text-[11px] text-indigo-400 hover:text-indigo-300 cursor-pointer"
+                    className="text-[11px] text-[#ff3e00] hover:underline cursor-pointer"
                   >
                     + Add Link
                   </button>
@@ -1434,13 +1439,13 @@ export default function TasksPage() {
                           setSubmissionUrls(updated);
                         }}
                         placeholder="https://github.com/... or https://figma.com/..."
-                        className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                        className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-xs font-mono text-white focus:outline-none focus:border-[#ff3e00]"
                       />
                       {submissionUrls.length > 1 && (
                         <button
                           type="button"
                           onClick={() => setSubmissionUrls(submissionUrls.filter((_, i) => i !== idx))}
-                          className="text-slate-500 hover:text-red-400 p-1 cursor-pointer"
+                          className="p-1 text-[#88888e] hover:text-[#EF4444] rounded-none md:rounded-xs transition-colors cursor-pointer"
                         >
                           <X className="w-4 h-4" />
                         </button>
@@ -1451,21 +1456,21 @@ export default function TasksPage() {
               </div>
 
               {/* File Upload Section */}
-              <div className="space-y-2 pt-2 border-t border-slate-800/80">
+              <div className="space-y-2 pt-2 border-t border-[#242428]">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                    <FileText className="w-3.5 h-3.5 text-emerald-400" />
+                  <label className="text-[10px] uppercase font-mono tracking-wider text-[#88888e] flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-[#00D664]" />
                     <span>Deliverable Files</span>
                     {submittingTask.submissionRequired && submittingTask.submissionTypes?.includes('file') && (
-                      <span className="text-amber-400">*</span>
+                      <span className="text-[#ff3e00]">*</span>
                     )}
                   </label>
-                  <span className="text-[10px] text-slate-500">
+                  <span className="text-[10px] text-[#88888e] font-mono">
                     Max {submittingTask.maxFileSizeMb || 25}MB per file
                   </span>
                 </div>
 
-                <div className="border border-dashed border-zinc-700/80 rounded-xl p-4 text-center hover:border-emerald-500/50 transition-colors">
+                <div className="border border-dashed border-[#242428] hover:border-[#ff3e00]/50 rounded-none md:rounded-xs p-4 text-center bg-[#0a0a0a] transition-colors">
                   <input
                     type="file"
                     id="submission-file-input"
@@ -1475,13 +1480,13 @@ export default function TasksPage() {
                   />
                   <label
                     htmlFor="submission-file-input"
-                    className="cursor-pointer inline-flex flex-col items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200"
+                    className="cursor-pointer inline-flex flex-col items-center gap-1 text-xs text-[#88888e] hover:text-white"
                   >
-                    <UploadCloud className="w-6 h-6 text-emerald-400 mb-1" />
-                    <span className="font-semibold text-white">
+                    <UploadCloud className="w-6 h-6 text-[#00D664] mb-1" />
+                    <span className="font-mono text-white">
                       {uploadingFile ? 'Uploading file...' : 'Click to upload deliverable file'}
                     </span>
-                    <span className="text-[10px] text-zinc-500">
+                    <span className="text-[10px] text-[#88888e] font-mono">
                       ZIP, PDF, DOCX, XLSX, images, tar.gz
                     </span>
                   </label>
@@ -1495,17 +1500,17 @@ export default function TasksPage() {
                       return (
                         <div
                           key={idx}
-                          className="flex items-center justify-between p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs"
+                          className="flex items-center justify-between p-2 rounded-none md:rounded-xs bg-[#0a0a0a] border border-[#242428] text-xs font-mono"
                         >
                           <div className="flex items-center gap-2 truncate pr-2">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <CheckCircle2 className="w-3.5 h-3.5 text-[#00D664] shrink-0" />
                             <span className="font-medium text-white truncate">{file.fileName}</span>
-                            <span className="text-[10px] text-zinc-500 font-mono">({sizeMb} MB)</span>
+                            <span className="text-[10px] text-[#88888e] font-mono">({sizeMb} MB)</span>
                           </div>
                           <button
                             type="button"
                             onClick={() => setSubmissionFiles(submissionFiles.filter((_, i) => i !== idx))}
-                            className="text-zinc-500 hover:text-red-400 p-1 cursor-pointer"
+                            className="p-1 text-[#88888e] hover:text-[#EF4444] rounded-none md:rounded-xs transition-colors cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1517,8 +1522,8 @@ export default function TasksPage() {
               </div>
 
               {/* Notes */}
-              <div className="pt-2 border-t border-slate-800/80">
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+              <div className="pt-2 border-t border-[#242428]">
+                <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">
                   Completion Notes (Optional)
                 </label>
                 <textarea
@@ -1526,24 +1531,24 @@ export default function TasksPage() {
                   value={submissionNotes}
                   onChange={(e) => setSubmissionNotes(e.target.value)}
                   placeholder="Summary of changes, test instructions, or notes for the admin..."
-                  className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-xs font-mono text-white focus:outline-none focus:border-[#ff3e00]"
                 />
               </div>
 
-              <div className="flex justify-end space-x-3 pt-3 border-t border-slate-800">
+              <div className="flex justify-end space-x-3 pt-3 border-t border-[#242428]">
                 <button
                   type="button"
                   onClick={() => setShowCompleteModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium cursor-pointer"
+                  className="crm-btn-secondary px-4 py-2 text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submissionSubmitting || uploadingFile}
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-900/30 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  className="crm-btn-primary px-4 py-2 text-xs disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  <CheckCircle2 className="w-4 h-4" />
+                  <CheckCircle2 className="w-4 h-4 text-[#00D664]" />
                   <span>{submissionSubmitting ? 'Submitting...' : 'Complete Task'}</span>
                 </button>
               </div>
@@ -1554,21 +1559,27 @@ export default function TasksPage() {
 
       {/* Record Team Payment Modal */}
       {showPaymentModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[#0d0d12] border border-slate-800 rounded-2xl w-full max-w-md p-6 space-y-5">
-            <div className="flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4">
+          <div className="bg-[#141416] border border-[#242428] rounded-none md:rounded-xs w-full max-w-md p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-[#242428]">
               <div className="space-y-0.5">
-                <h2 className="text-lg font-bold text-white">Record Team Payment</h2>
-                <p className="text-xs text-slate-400">For {paymentFormData.teamMemberName}</p>
+                <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-white">
+                  <span className="w-2 h-2 rounded-full bg-[#00D664]" />
+                  <span>SYS::FINANCE // RECORD_PAYMENT</span>
+                </div>
+                <p className="text-[10px] font-mono text-[#88888e]">For {paymentFormData.teamMemberName}</p>
               </div>
-              <button onClick={() => setShowPaymentModal(false)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
+              <button
+                onClick={() => setShowPaymentModal(false)}
+                className="p-1 text-[#88888e] hover:text-white hover:bg-[#18181b] rounded-none md:rounded-xs transition-colors"
+              >
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleRecordPaymentSubmit} className="space-y-4 text-sm">
+            <form onSubmit={handleRecordPaymentSubmit} className="space-y-4 text-xs font-mono">
               <div>
-                <label className="block text-slate-300 text-xs font-semibold mb-1">Amount (₹) *</label>
+                <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Amount (₹) *</label>
                 <input
                   type="number"
                   required
@@ -1576,17 +1587,17 @@ export default function TasksPage() {
                   value={paymentFormData.amount}
                   onChange={(e) => setPaymentFormData({ ...paymentFormData, amount: e.target.value })}
                   placeholder="e.g. 2000"
-                  className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500 font-semibold"
+                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00] font-semibold"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 text-xs font-semibold mb-1">Payment Method</label>
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Payment Method</label>
                   <select
                     value={paymentFormData.paymentMethod}
                     onChange={(e) => setPaymentFormData({ ...paymentFormData, paymentMethod: e.target.value })}
-                    className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                   >
                     <option value="UPI">UPI</option>
                     <option value="BANK_TRANSFER">Bank Transfer</option>
@@ -1597,34 +1608,34 @@ export default function TasksPage() {
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 text-xs font-semibold mb-1">Payment Date</label>
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Payment Date</label>
                   <input
                     type="date"
                     required
                     value={paymentFormData.paymentDate}
                     onChange={(e) => setPaymentFormData({ ...paymentFormData, paymentDate: e.target.value })}
-                    className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-slate-300 text-xs font-semibold mb-1">Reference / Transaction ID</label>
+                <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Reference / Transaction ID</label>
                 <input
                   type="text"
                   placeholder="e.g. UPI-92837492"
                   value={paymentFormData.reference}
                   onChange={(e) => setPaymentFormData({ ...paymentFormData, reference: e.target.value })}
-                  className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 text-xs font-semibold mb-1">Status</label>
+                <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Status</label>
                 <select
                   value={paymentFormData.status}
                   onChange={(e) => setPaymentFormData({ ...paymentFormData, status: e.target.value })}
-                  className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                 >
                   <option value="PAID">PAID (Sends Telegram Receipt)</option>
                   <option value="PENDING">PENDING</option>
@@ -1632,26 +1643,26 @@ export default function TasksPage() {
               </div>
 
               <div>
-                <label className="block text-slate-300 text-xs font-semibold mb-1">Description</label>
+                <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Description</label>
                 <input
                   type="text"
                   value={paymentFormData.description}
                   onChange={(e) => setPaymentFormData({ ...paymentFormData, description: e.target.value })}
-                  className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                 />
               </div>
 
-              <div className="flex justify-end space-x-3 pt-3 border-t border-slate-800">
+              <div className="flex justify-end space-x-3 pt-3 border-t border-[#242428]">
                 <button
                   type="button"
                   onClick={() => setShowPaymentModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium cursor-pointer"
+                  className="crm-btn-secondary px-4 py-2 text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-600/20 cursor-pointer"
+                  className="crm-btn-primary px-4 py-2 text-xs"
                 >
                   Confirm Payment
                 </button>
@@ -1663,22 +1674,28 @@ export default function TasksPage() {
 
       {/* Credential Access History Modal */}
       {historyModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[#0d0d12] border border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-4">
-            <div className="flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4">
+          <div className="bg-[#141416] border border-[#242428] rounded-none md:rounded-xs w-full max-w-lg p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-[#242428]">
               <div>
-                <h2 className="text-lg font-bold text-white">Credential Access History</h2>
-                <p className="text-xs text-slate-400 mt-0.5">{activeTaskTitle}</p>
+                <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-white">
+                  <span className="w-2 h-2 rounded-full bg-[#ff3e00]" />
+                  <span>SYS::AUDIT // ACCESS_HISTORY</span>
+                </div>
+                <p className="text-[10px] font-mono text-[#88888e] mt-0.5">{activeTaskTitle}</p>
               </div>
-              <button onClick={() => setHistoryModalOpen(false)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
+              <button
+                onClick={() => setHistoryModalOpen(false)}
+                className="p-1 text-[#88888e] hover:text-white hover:bg-[#18181b] rounded-none md:rounded-xs transition-colors"
+              >
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             {loadingHistory ? (
-              <div className="p-8 text-center text-xs text-slate-400">Loading audit history...</div>
+              <div className="p-8 text-center text-xs text-[#88888e] font-mono">Loading audit history...</div>
             ) : activeTaskHistory.length === 0 ? (
-              <div className="p-8 text-center bg-[#14141b] border border-slate-800/80 rounded-xl text-slate-400 text-xs">
+              <div className="p-8 text-center bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs text-[#88888e] text-xs font-mono">
                 No credential sharing actions logged yet for this task.
               </div>
             ) : (
@@ -1686,27 +1703,27 @@ export default function TasksPage() {
                 {activeTaskHistory.map((item, idx) => (
                   <div
                     key={item._id || idx}
-                    className="p-3 bg-[#14141b] border border-slate-800 rounded-xl text-xs flex items-start justify-between gap-3"
+                    className="p-3 bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs text-xs font-mono flex items-start justify-between gap-3"
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-white">{item.serviceName}</span>
-                        <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded border ${
+                        <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded-none md:rounded-xs border ${
                           item.action === 'TASK_CREDENTIAL_REVOKED'
-                            ? 'bg-red-950/60 text-red-400 border-red-800/40'
-                            : 'bg-indigo-950/60 text-indigo-400 border-indigo-800/40'
+                            ? 'bg-[#EF4444]/10 text-[#EF4444] border-[#EF4444]/30'
+                            : 'bg-[#ff3e00]/10 text-[#ff3e00] border-[#ff3e00]/30'
                         }`}>
                           {item.action}
                         </span>
                       </div>
-                      <p className="text-slate-400">
+                      <p className="text-[#88888e]">
                         {item.action === 'TASK_CREDENTIAL_REVOKED'
                           ? `Access revoked by ${item.actor}`
                           : `Shared with ${item.teamMemberName || 'Team Member'} by ${item.sharedBy || item.actor}`}
                       </p>
                     </div>
 
-                    <span className="text-[10px] text-slate-500 shrink-0">
+                    <span className="text-[10px] text-[#88888e] font-mono shrink-0">
                       {new Date(item.timestamp).toLocaleString('en-IN', {
                         day: 'numeric',
                         month: 'short',
@@ -1719,10 +1736,10 @@ export default function TasksPage() {
               </div>
             )}
 
-            <div className="flex justify-end pt-3 border-t border-slate-800">
+            <div className="flex justify-end pt-3 border-t border-[#242428]">
               <button
                 onClick={() => setHistoryModalOpen(false)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium cursor-pointer"
+                className="crm-btn-secondary px-4 py-2 text-xs"
               >
                 Close
               </button>
@@ -1733,40 +1750,40 @@ export default function TasksPage() {
 
       {/* Manual Credential Modal */}
       {showManualCredModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
-          <div className="bg-[#0d0d12] border border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <Lock className="w-5 h-5 text-amber-400" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-xs p-4">
+          <div className="bg-[#141416] border border-[#242428] rounded-none md:rounded-xs w-full max-w-lg p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[#242428] pb-3">
+              <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-white">
+                <Lock className="w-4 h-4 text-[#ff3e00]" />
                 <div>
-                  <h2 className="text-base font-bold text-white">Add Credential Manually</h2>
-                  <p className="text-[11px] text-slate-400">Encrypted with AES-256-GCM authentication</p>
+                  <div className="font-semibold text-white">SYS::VAULT // ADD_CREDENTIAL</div>
+                  <p className="text-[10px] text-[#88888e]">Encrypted with AES-256-GCM authentication</p>
                 </div>
               </div>
               <button
                 onClick={() => setShowManualCredModal(false)}
-                className="text-slate-400 hover:text-white transition-colors"
+                className="p-1 text-[#88888e] hover:text-white hover:bg-[#18181b] rounded-none md:rounded-xs transition-colors"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             {manualCredError && (
-              <div className="p-3 bg-red-950/40 border border-red-800/50 rounded-xl text-xs text-red-300 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+              <div className="p-3 bg-[#EF4444]/10 border border-[#EF4444]/30 rounded-none md:rounded-xs text-xs font-mono text-[#EF4444] flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-[#EF4444]" />
                 <span>{manualCredError}</span>
               </div>
             )}
 
-            <form onSubmit={handleManualCredSubmit} className="space-y-4 text-xs">
+            <form onSubmit={handleManualCredSubmit} className="space-y-4 text-xs font-mono">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Project *</label>
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Project *</label>
                   <select
                     required
                     value={manualCredData.projectId}
                     onChange={(e) => setManualCredData({ ...manualCredData, projectId: e.target.value })}
-                    className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                   >
                     <option value="">Select Project</option>
                     {projects.map((p) => (
@@ -1778,11 +1795,11 @@ export default function TasksPage() {
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Link to Task (Optional)</label>
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Link to Task (Optional)</label>
                   <select
                     value={manualCredData.taskId}
                     onChange={(e) => setManualCredData({ ...manualCredData, taskId: e.target.value })}
-                    className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                   >
                     <option value="">None (Project-wide)</option>
                     {tasks
@@ -1798,23 +1815,23 @@ export default function TasksPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Service / Title *</label>
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Service / Title *</label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. Staging WP Admin"
                     value={manualCredData.service}
                     onChange={(e) => setManualCredData({ ...manualCredData, service: e.target.value })}
-                    className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Credential Type</label>
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Credential Type</label>
                   <select
                     value={manualCredData.credentialType}
                     onChange={(e) => setManualCredData({ ...manualCredData, credentialType: e.target.value })}
-                    className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                   >
                     <option value="WORDPRESS">WordPress Admin</option>
                     <option value="HOSTING">Hosting / cPanel</option>
@@ -1827,7 +1844,7 @@ export default function TasksPage() {
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">
+                <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">
                   {manualCredData.credentialType === 'SSH' ? 'Host / IP Address' : 'Login URL / Endpoint'}
                 </label>
                 <input
@@ -1835,83 +1852,83 @@ export default function TasksPage() {
                   placeholder={manualCredData.credentialType === 'SSH' ? '192.168.1.1 or server.example.com' : 'https://example.com/wp-admin'}
                   value={manualCredData.loginUrl}
                   onChange={(e) => setManualCredData({ ...manualCredData, loginUrl: e.target.value })}
-                  className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Username / Email / Key ID</label>
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Username / Email / Key ID</label>
                   <input
                     type="text"
                     placeholder="admin or root"
                     value={manualCredData.username}
                     onChange={(e) => setManualCredData({ ...manualCredData, username: e.target.value })}
-                    className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Password / Secret Key</label>
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Password / Secret Key</label>
                   <input
                     type="password"
                     placeholder="••••••••••••"
                     value={manualCredData.password}
                     onChange={(e) => setManualCredData({ ...manualCredData, password: e.target.value })}
-                    className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                   />
                 </div>
               </div>
 
               {manualCredData.credentialType === 'SSH' && (
-                <div className="space-y-3 p-3 bg-slate-900/60 border border-slate-800 rounded-xl">
+                <div className="space-y-3 p-3 bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs">
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">SSH Port</label>
+                    <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">SSH Port</label>
                     <input
                       type="number"
                       value={manualCredData.port}
                       onChange={(e) => setManualCredData({ ...manualCredData, port: e.target.value })}
                       placeholder="22"
-                      className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                      className="w-full bg-[#141416] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">SSH Private Key (Encrypted)</label>
+                    <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">SSH Private Key (Encrypted)</label>
                     <textarea
                       rows={3}
                       value={manualCredData.privateKey}
                       onChange={(e) => setManualCredData({ ...manualCredData, privateKey: e.target.value })}
                       placeholder="-----BEGIN OPENSSH PRIVATE KEY-----..."
-                      className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white font-mono text-[11px] focus:outline-none focus:border-indigo-500"
+                      className="w-full bg-[#141416] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white font-mono text-[11px] focus:outline-none focus:border-[#ff3e00]"
                     />
                   </div>
                 </div>
               )}
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Notes / Instructions</label>
+                <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Notes / Instructions</label>
                 <textarea
                   rows={2}
                   value={manualCredData.notes}
                   onChange={(e) => setManualCredData({ ...manualCredData, notes: e.target.value })}
                   placeholder="Additional access instructions or 2FA recovery keys..."
-                  className="w-full bg-[#14141b] border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
+              <div className="flex justify-end gap-3 pt-3 border-t border-[#242428]">
                 <button
                   type="button"
                   onClick={() => setShowManualCredModal(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-medium"
+                  className="crm-btn-secondary px-4 py-2 text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={manualCredLoading}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-semibold flex items-center gap-2 shadow-lg shadow-indigo-600/20 disabled:opacity-50"
+                  className="crm-btn-primary px-5 py-2 text-xs flex items-center gap-2 disabled:opacity-50"
                 >
                   {manualCredLoading ? 'Encrypting & Saving...' : 'Save Credential'}
                 </button>

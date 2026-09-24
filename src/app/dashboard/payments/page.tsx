@@ -1,8 +1,11 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Search, CreditCard, Plus, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { Search, CreditCard, Plus, CheckCircle2, XCircle, Loader2, X } from 'lucide-react';
 import Link from 'next/link';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 
 interface Payment {
   _id: string;
@@ -97,19 +100,16 @@ export default function PaymentsPage() {
     fetchPayments();
   };
 
-  // Load clients and projects when launching the form
   const handleOpenModal = async () => {
     setShowModal(true);
     setFormError(null);
     try {
-      // Fetch clients
       const clientsRes = await fetch('/api/clients?limit=100');
       const clientsJson = await clientsRes.json();
       if (clientsJson.success) {
         setClientsList(clientsJson.clients);
       }
 
-      // Fetch projects
       const projectsRes = await fetch('/api/projects');
       const projectsJson = await projectsRes.json();
       if (projectsJson.success) {
@@ -124,10 +124,9 @@ export default function PaymentsPage() {
     setFormData((prev) => ({
       ...prev,
       clientId,
-      projectId: '', // Reset project on client switch
+      projectId: '',
     }));
     
-    // Filter projects matching selected client
     const matches = projectsList.filter((p) => p.clientId?.toString() === clientId || (p.clientId as any)?._id === clientId);
     setFilteredProjects(matches);
   };
@@ -164,7 +163,6 @@ export default function PaymentsPage() {
       const json = await res.json();
       if (json.success) {
         setShowModal(false);
-        // Reset form
         setFormData({
           clientId: '',
           projectId: '',
@@ -174,7 +172,7 @@ export default function PaymentsPage() {
           paymentDate: new Date().toISOString().split('T')[0],
           notes: '',
         });
-        fetchPayments(); // Reload listings
+        fetchPayments();
       } else {
         setFormError(json.error?.message || 'Failed to record transaction');
       }
@@ -185,53 +183,55 @@ export default function PaymentsPage() {
     }
   };
 
-  const getStatusBadge = (status: Payment['status']) => {
-    const styles = {
-      PENDING: 'bg-yellow-950/40 text-yellow-405 border border-yellow-800/30',
-      COMPLETED: 'bg-emerald-950/40 text-emerald-400 border border-emerald-900/30',
-      FAILED: 'bg-red-950/40 text-red-400 border border-red-900/30',
-      REFUNDED: 'bg-slate-905 border border-slate-700 text-slate-400',
-    };
-    return (
-      <span className={`px-2 py-0.5 text-[10px] font-bold rounded uppercase tracking-wider ${styles[status]}`}>
-        {status}
-      </span>
-    );
+  const renderStatusBadge = (status: Payment['status']) => {
+    switch (status) {
+      case 'COMPLETED':
+        return <Badge variant="active" size="sm">COMPLETED</Badge>;
+      case 'PENDING':
+        return <Badge variant="warning" size="sm">PENDING</Badge>;
+      case 'FAILED':
+        return <Badge variant="danger" size="sm">FAILED</Badge>;
+      case 'REFUNDED':
+      default:
+        return <Badge variant="neutral" size="sm">{status}</Badge>;
+    }
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-100">Transaction History</h1>
-          <p className="text-slate-400 text-sm">Review deposits, UPIs, cash journals, and invoices linked payments.</p>
-        </div>
-        <button
-          onClick={handleOpenModal}
-          className="inline-flex items-center px-4 py-2 bg-indigo-650 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-indigo-600/10"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Record Payment
-        </button>
-      </div>
+      {/* Page Header */}
+      <PageHeader
+        tag="FINANCE // CLIENT TRANSACTIONS"
+        title="Transaction History"
+        description="Review incoming deposits, bank transfers, UPI transactions, and invoices linked payments."
+        action={
+          <Button
+            variant="primary"
+            size="md"
+            onClick={handleOpenModal}
+            icon={<Plus className="w-4 h-4" />}
+          >
+            RECORD PAYMENT
+          </Button>
+        }
+      />
 
-      {/* Filters */}
-      <div className="bg-[#0d0d12]/60 border border-slate-850 p-4 rounded-xl flex flex-col sm:flex-row gap-3 sm:gap-4 justify-between items-stretch sm:items-center">
+      {/* Filters Toolbar */}
+      <div className="bg-[#141416] border border-[#242428] p-4 flex flex-col sm:flex-row gap-3 justify-between items-stretch sm:items-center">
         <form onSubmit={handleSearch} className="relative w-full sm:max-w-md">
-          <Search className="absolute left-3.5 top-3 w-4.5 h-4.5 text-slate-550" />
+          <Search className="absolute left-3 top-2.5 w-4 h-4 text-[#8a8a93]" />
           <input
             type="text"
-            placeholder="Search by receipt number or reference..."
+            placeholder="Search by receipt # or reference..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-11 pr-20 py-2 bg-slate-950/60 border border-slate-800 text-slate-100 placeholder-slate-600 rounded-xl outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm transition-all"
+            className="w-full pl-9 pr-20 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] placeholder-[#4a4a52] focus:outline-none focus:border-[#ff3e00] focus:ring-1 focus:ring-[#ff3e00] transition-colors"
           />
           <button
             type="submit"
-            className="absolute right-2 top-1.5 px-3 py-1 bg-indigo-650 hover:bg-indigo-500 text-white text-[10px] font-bold uppercase rounded-lg tracking-wider"
+            className="absolute right-1.5 top-1 px-3 py-1 bg-white text-black hover:bg-[#ff3e00] hover:text-white text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors cursor-pointer"
           >
-            Search
+            Filter
           </button>
         </form>
 
@@ -239,85 +239,89 @@ export default function PaymentsPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2 bg-slate-950/65 border border-slate-800 text-slate-350 text-sm rounded-xl outline-none focus:border-indigo-500 transition-all cursor-pointer w-full sm:w-44"
+            className="px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-[#8a8a93] text-xs font-mono rounded-none outline-none focus:border-[#ff3e00] transition-colors cursor-pointer w-full sm:w-48"
           >
-            <option value="">All Payment States</option>
-            <option value="COMPLETED">Completed</option>
-            <option value="PENDING">Pending</option>
-            <option value="REFUNDED">Refunded</option>
-            <option value="FAILED">Failed</option>
+            <option value="">ALL STATES</option>
+            <option value="COMPLETED">COMPLETED</option>
+            <option value="PENDING">PENDING</option>
+            <option value="REFUNDED">REFUNDED</option>
+            <option value="FAILED">FAILED</option>
           </select>
         </div>
       </div>
 
       {/* Table */}
       {loading ? (
-        <div className="space-y-4">
+        <div className="space-y-2">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-16 w-full bg-slate-900 animate-pulse rounded-xl"></div>
+            <div key={i} className="h-16 w-full bg-[#141416] border border-[#242428] animate-pulse"></div>
           ))}
         </div>
       ) : payments.length === 0 ? (
-        <div className="bg-[#0d0d12]/40 border border-slate-850 p-8 sm:p-12 rounded-xl text-center flex flex-col items-center justify-center text-slate-500">
-          <CreditCard className="w-12 h-12 mb-3 stroke-1 text-slate-650" />
-          <h3 className="font-bold text-slate-300">No transactions recorded</h3>
-          <p className="text-sm text-slate-500 mt-1">Log payments on client profile pages or click &apos;Record Payment&apos;.</p>
+        <div className="bg-[#141416] border border-[#242428] p-12 text-center flex flex-col items-center justify-center text-[#8a8a93]">
+          <CreditCard className="w-10 h-10 mb-3 text-[#4a4a52] stroke-1" />
+          <h3 className="font-mono text-xs uppercase tracking-widest text-[#f5f5f2]">No transactions recorded</h3>
+          <p className="text-xs text-[#8a8a93] mt-1 font-mono">Log payments on client profile pages or click &apos;Record Payment&apos;.</p>
         </div>
       ) : (
-        <div className="bg-[#0d0d12]/40 border border-slate-850 rounded-xl overflow-hidden shadow-2xl">
+        <div className="bg-[#141416] border border-[#242428] overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[650px]">
+            <table className="w-full text-left border-collapse min-w-[700px]">
               <thead>
-                <tr className="border-b border-slate-850 bg-slate-900/35 text-slate-400 text-xs font-semibold uppercase tracking-wider">
-                  <th className="px-4 sm:px-6 py-4">Receipt #</th>
-                  <th className="px-4 sm:px-6 py-4">Client</th>
-                  <th className="px-4 sm:px-6 py-4">Project</th>
-                  <th className="px-4 sm:px-6 py-4">Method / Ref</th>
-                  <th className="px-4 sm:px-6 py-4">Date</th>
-                  <th className="px-4 sm:px-6 py-4 text-right">Amount</th>
-                  <th className="px-4 sm:px-6 py-4 text-right">Status</th>
+                <tr className="border-b border-[#242428] bg-[#0a0a0a] text-[10px] font-mono text-[#8a8a93] uppercase tracking-wider">
+                  <th className="px-5 py-3 font-semibold">Receipt #</th>
+                  <th className="px-5 py-3 font-semibold">Client</th>
+                  <th className="px-5 py-3 font-semibold">Project</th>
+                  <th className="px-5 py-3 font-semibold">Method / Ref</th>
+                  <th className="px-5 py-3 font-semibold">Date</th>
+                  <th className="px-5 py-3 font-semibold text-right">Amount</th>
+                  <th className="px-5 py-3 font-semibold text-right">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-850 text-sm">
+              <tbody className="divide-y divide-[#242428] text-xs">
                 {payments.map((p) => (
-                  <tr key={p._id} className="hover:bg-slate-900/20 transition-all">
-                    <td className="px-4 sm:px-6 py-4 font-bold text-slate-200">{p.paymentNumber}</td>
-                    <td className="px-4 sm:px-6 py-4">
+                  <tr key={p._id} className="hover:bg-[#18181b] transition-colors">
+                    <td className="px-5 py-3.5 font-mono font-bold text-white tracking-wide">
+                      {p.paymentNumber}
+                    </td>
+                    <td className="px-5 py-3.5">
                       {p.clientId ? (
                         <>
                           <Link
                             href={`/dashboard/clients/${p.clientId._id}`}
-                            className="font-medium text-indigo-400 hover:underline"
+                            className="font-medium text-[#f5f5f2] hover:text-[#ff3e00] transition-colors"
                           >
                             {p.clientId.name}
                           </Link>
-                          <div className="text-xs text-slate-500 mt-0.5">Code: {p.clientId.clientCode}</div>
+                          <div className="text-[10px] font-mono text-[#8a8a93] mt-0.5">
+                            CODE: {p.clientId.clientCode}
+                          </div>
                         </>
                       ) : (
-                        <span className="text-slate-500 italic">Unassigned Client</span>
+                        <span className="text-[#6b6b76] italic font-mono text-[11px]">Unassigned Client</span>
                       )}
                     </td>
-                    <td className="px-4 sm:px-6 py-4">
-                      <div className="text-slate-350">
-                        {p.projectId?.name || <span className="text-slate-500 italic">Unassigned Project</span>}
+                    <td className="px-5 py-3.5">
+                      <div className="text-[#f5f5f2] font-medium">
+                        {p.projectId?.name || <span className="text-[#6b6b76] italic font-mono text-[11px]">Unassigned Project</span>}
                       </div>
-                      <div className="text-xs text-slate-500 mt-0.5">
-                        {p.invoiceId ? `Invoice: ${p.invoiceId.invoiceNumber}` : 'Direct Deposit'}
+                      <div className="text-[10px] font-mono text-[#8a8a93] mt-0.5">
+                        {p.invoiceId ? `INV: ${p.invoiceId.invoiceNumber}` : 'DIRECT DEPOSIT'}
                       </div>
                     </td>
-                    <td className="px-4 sm:px-6 py-4">
-                      <div className="text-slate-350 font-semibold">{p.paymentMethod}</div>
+                    <td className="px-5 py-3.5">
+                      <div className="text-[#f5f5f2] font-mono font-semibold uppercase">{p.paymentMethod}</div>
                       {p.transactionReference && (
-                        <div className="text-xs text-slate-500 font-mono mt-0.5">{p.transactionReference}</div>
+                        <div className="text-[10px] text-[#8a8a93] font-mono mt-0.5">{p.transactionReference}</div>
                       )}
                     </td>
-                    <td className="px-4 sm:px-6 py-4 text-slate-400 whitespace-nowrap">
+                    <td className="px-5 py-3.5 font-mono text-[#8a8a93] whitespace-nowrap">
                       {p.paymentDate ? new Date(p.paymentDate).toLocaleDateString('en-IN') : '-'}
                     </td>
-                    <td className="px-4 sm:px-6 py-4 text-right font-bold text-slate-100 whitespace-nowrap">
+                    <td className="px-5 py-3.5 text-right font-mono font-bold text-white whitespace-nowrap">
                       {p.currency} {p.amount ? p.amount.toLocaleString('en-IN') : 0}
                     </td>
-                    <td className="px-4 sm:px-6 py-4 text-right">{getStatusBadge(p.status)}</td>
+                    <td className="px-5 py-3.5 text-right">{renderStatusBadge(p.status)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -328,27 +332,47 @@ export default function PaymentsPage() {
 
       {/* Record Payment Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg max-h-[90dvh] overflow-y-auto bg-[#0d0d12] border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-2xl relative">
-            <h2 className="text-lg font-bold text-slate-100 mb-2">Record Payment Transaction</h2>
-            <p className="text-xs text-slate-500 mb-5">Select a client, match project files, and post transaction logs.</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg max-h-[90dvh] overflow-y-auto bg-[#141416] border border-[#242428] shadow-2xl relative p-6">
+            {/* Terminal Header */}
+            <div className="flex items-center justify-between border-b border-[#242428] pb-4 mb-5">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#242428]" />
+                <span className="w-2.5 h-2.5 rounded-full bg-[#242428]" />
+                <span className="w-2.5 h-2.5 rounded-full bg-[#242428]" />
+                <span className="text-[10px] font-mono text-[#8a8a93] uppercase tracking-widest ml-1">
+                  FINANCE::RECORD_PAYMENT
+                </span>
+              </div>
+              <button 
+                onClick={() => setShowModal(false)}
+                className="text-[#8a8a93] hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <h2 className="text-base font-bold text-white mb-1">Record Payment Transaction</h2>
+            <p className="text-xs text-[#8a8a93] mb-5 font-mono">Match client project files and post verified ledger transactions.</p>
             
             {formError && (
-              <div className="mb-4 p-3 bg-red-950/40 border border-red-500/20 text-red-300 rounded-xl text-xs">
+              <div className="mb-4 p-3 bg-[#1c1110] border border-[#ff3e00]/40 text-[#ff8a7a] text-xs font-mono">
                 {formError}
               </div>
             )}
 
-            <form onSubmit={handleFormSubmit} className="space-y-4 text-sm">
+            <form onSubmit={handleFormSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Client</label>
+                <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                  Client Account *
+                </label>
                 <select
                   required
                   value={formData.clientId}
                   onChange={(e) => handleClientSelectionChange(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 text-slate-300 rounded-xl outline-none focus:border-indigo-500 cursor-pointer"
+                  className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] focus:outline-none focus:border-[#ff3e00] font-sans cursor-pointer"
                 >
-                  <option value="">Select client...</option>
+                  <option value="">Select client account...</option>
                   {clientsList.map((c) => (
                     <option key={c._id} value={c._id}>
                       {c.name} ({c.clientCode})
@@ -358,112 +382,124 @@ export default function PaymentsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Project File</label>
+                <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                  Project Ledger *
+                </label>
                 <select
                   required
                   disabled={!formData.clientId}
                   value={formData.projectId}
                   onChange={handleFormChange}
                   name="projectId"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 text-slate-300 rounded-xl outline-none focus:border-indigo-500 disabled:opacity-50 cursor-pointer"
+                  className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] focus:outline-none focus:border-[#ff3e00] font-sans disabled:opacity-40 cursor-pointer"
                 >
-                  <option value="">Select project...</option>
+                  <option value="">Select linked project...</option>
                   {filteredProjects.map((p) => (
                     <option key={p._id} value={p._id}>
-                      {p.name} (Budget: Rs. {p.totalAmount.toLocaleString('en-IN')})
+                      {p.name} (Budget: ₹{p.totalAmount.toLocaleString('en-IN')})
                     </option>
                   ))}
                 </select>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Amount (INR)</label>
+                  <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                    Amount (INR) *
+                  </label>
                   <input
                     type="number"
                     name="amount"
                     required
                     value={formData.amount}
                     onChange={handleFormChange}
-                    placeholder="20000"
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 text-slate-200 rounded-xl outline-none focus:border-indigo-500"
+                    placeholder="25000"
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] font-mono font-bold focus:outline-none focus:border-[#ff3e00]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Method</label>
+                  <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                    Payment Method
+                  </label>
                   <select
                     name="paymentMethod"
                     value={formData.paymentMethod}
                     onChange={handleFormChange}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 text-slate-300 rounded-xl outline-none focus:border-indigo-500 cursor-pointer"
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] focus:outline-none focus:border-[#ff3e00] font-mono cursor-pointer"
                   >
-                    <option value="BANK_TRANSFER">Bank Transfer</option>
+                    <option value="BANK_TRANSFER">BANK TRANSFER</option>
                     <option value="UPI">UPI</option>
-                    <option value="CASH">Cash</option>
-                    <option value="RAZORPAY">Razorpay</option>
-                    <option value="STRIPE">Stripe</option>
-                    <option value="OTHER">Other</option>
+                    <option value="CASH">CASH</option>
+                    <option value="RAZORPAY">RAZORPAY</option>
+                    <option value="STRIPE">STRIPE</option>
+                    <option value="OTHER">OTHER</option>
                   </select>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Date</label>
+                  <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                    Date
+                  </label>
                   <input
                     type="date"
                     name="paymentDate"
                     required
                     value={formData.paymentDate}
                     onChange={handleFormChange}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 text-slate-200 rounded-xl outline-none focus:border-indigo-500 cursor-pointer"
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] font-mono focus:outline-none focus:border-[#ff3e00] cursor-pointer"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Txn Reference ID</label>
+                  <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                    Txn Reference ID
+                  </label>
                   <input
                     type="text"
                     name="transactionReference"
                     value={formData.transactionReference}
                     onChange={handleFormChange}
-                    placeholder="Ref ID / UTR"
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 text-slate-205 rounded-xl outline-none focus:border-indigo-500"
+                    placeholder="UTR / Bank Ref ID"
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] font-mono focus:outline-none focus:border-[#ff3e00]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Notes</label>
+                <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                  Internal Journal Notes
+                </label>
                 <textarea
                   name="notes"
                   rows={2}
                   value={formData.notes}
                   onChange={handleFormChange}
-                  placeholder="Record note..."
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 text-slate-205 rounded-xl outline-none focus:border-indigo-500"
+                  placeholder="Additional settlement telemetry or notes..."
+                  className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] focus:outline-none focus:border-[#ff3e00]"
                 />
               </div>
 
-              <div className="flex gap-3 justify-end pt-4 border-t border-slate-900">
+              <div className="flex gap-2.5 justify-end pt-4 border-t border-[#242428]">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-805 text-slate-400 rounded-xl text-xs font-semibold transition-all"
+                  className="px-4 py-2 bg-[#0a0a0a] hover:bg-[#242428] border border-[#242428] text-[#8a8a93] hover:text-white text-xs font-mono uppercase tracking-wider transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex items-center px-5 py-2 bg-indigo-650 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl transition-all disabled:opacity-55"
+                  className="flex items-center gap-1.5 px-5 py-2 bg-white text-black hover:bg-[#ff3e00] hover:text-white text-xs font-mono font-semibold uppercase tracking-wider transition-all disabled:opacity-40 cursor-pointer"
                 >
                   {submitting ? (
                     <>
-                      <Loader2 className="w-4.5 h-4.5 animate-spin mr-1.5" />
-                      Posting...
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      POSTING...
                     </>
                   ) : (
-                    'Record Entry'
+                    'RECORD ENTRY'
                   )}
                 </button>
               </div>

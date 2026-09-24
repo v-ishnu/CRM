@@ -386,30 +386,30 @@ export default function HostingPage() {
   const getStatusBadge = (status: HostingItem['status'], days: number) => {
     if (status === 'EXPIRED' || days <= 0) {
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-950/60 border border-red-500/30 text-red-400">
-          <XCircle className="w-3.5 h-3.5" />
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-none md:rounded-xs text-[10px] font-mono uppercase font-bold tracking-wider bg-red-950/40 border border-red-500/30 text-red-400">
+          <XCircle className="w-3 h-3" />
           Expired ({days <= 0 ? `${Math.abs(days)}d ago` : '0d'})
         </span>
       );
     }
     if (status === 'EXPIRING_SOON' || days <= 30) {
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-950/60 border border-amber-500/30 text-amber-400">
-          <AlertTriangle className="w-3.5 h-3.5" />
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-none md:rounded-xs text-[10px] font-mono uppercase font-bold tracking-wider bg-amber-950/40 border border-amber-500/30 text-amber-400">
+          <AlertTriangle className="w-3 h-3" />
           Expiring Soon ({days}d)
         </span>
       );
     }
     if (status === 'ACTIVE') {
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-950/60 border border-emerald-500/30 text-emerald-400">
-          <CheckCircle2 className="w-3.5 h-3.5" />
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-none md:rounded-xs text-[10px] font-mono uppercase font-bold tracking-wider bg-[#00d664]/10 border border-[#00d664]/30 text-[#00d664]">
+          <CheckCircle2 className="w-3 h-3" />
           Active ({days}d)
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-900 border border-slate-700 text-slate-400">
+      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-none md:rounded-xs text-[10px] font-mono uppercase font-bold tracking-wider bg-[#18181b] border border-[#242428] text-[#88888e]">
         Cancelled
       </span>
     );
@@ -419,57 +419,62 @@ export default function HostingPage() {
     <div className="space-y-6">
       {/* Alert Banners */}
       {bannerSuccess && (
-        <div className="p-4 bg-emerald-950/30 border border-emerald-500/30 rounded-xl text-emerald-400 text-sm flex items-center justify-between">
+        <div className="p-3.5 bg-[#00d664]/10 border border-[#00d664]/30 rounded-none md:rounded-xs text-[#00d664] font-mono text-xs flex items-center justify-between">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
             <span>{bannerSuccess}</span>
           </div>
-          <button onClick={() => setBannerSuccess(null)} className="text-emerald-400 hover:text-emerald-200">
+          <button onClick={() => setBannerSuccess(null)} className="text-[#00d664] hover:text-white transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
       {bannerError && (
-        <div className="p-4 bg-red-950/30 border border-red-500/30 rounded-xl text-red-400 text-sm flex items-center justify-between">
+        <div className="p-3.5 bg-red-950/40 border border-red-500/30 rounded-none md:rounded-xs text-red-400 font-mono text-xs flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             <span>{bannerError}</span>
           </div>
-          <button onClick={() => setBannerError(null)} className="text-red-400 hover:text-red-200">
+          <button onClick={() => setBannerError(null)} className="text-red-400 hover:text-white transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#242428]">
         <div>
-          <h2 className="text-2xl font-bold text-slate-100 flex items-center gap-2.5">
-            <Server className="w-6 h-6 text-indigo-400" />
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-mono text-[10px] uppercase tracking-widest font-bold text-[#ff3e00]">
+              SYSTEMS // INFRASTRUCTURE
+            </span>
+          </div>
+          <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center gap-2.5">
+            <Server className="w-5 h-5 text-[#ff3e00]" />
             Hosting Management
           </h2>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-xs sm:text-sm text-[#a1a1aa] mt-0.5">
             Track hosting providers, server credentials, domains, multi-threshold expiration reminders, and renewals.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <button
             onClick={handleCheckExpiry}
             disabled={checkingExpiry}
-            className="px-3.5 py-2.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all disabled:opacity-50"
+            className="px-3.5 py-2 bg-[#18181b] hover:bg-[#202024] border border-[#27272a] hover:border-[#ff3e00]/60 text-white font-mono text-xs uppercase font-bold tracking-wider rounded-xs flex items-center gap-2 transition-colors disabled:opacity-50"
             title="Scan expiry dates and dispatch Telegram reminders to clients and admin"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${checkingExpiry ? 'animate-spin text-indigo-400' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${checkingExpiry ? 'animate-spin text-[#ff3e00]' : 'text-[#ff3e00]'}`} />
             <span>{checkingExpiry ? 'Scanning...' : 'Check Expiry Alerts'}</span>
           </button>
 
           <button
             onClick={() => setShowAddModal(true)}
-            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-indigo-600/20 transition-all"
+            className="px-4 py-2 bg-white text-black hover:bg-[#ff3e00] hover:text-white rounded-xs font-mono text-xs uppercase font-bold tracking-wider flex items-center gap-1.5 shadow-xs transition-colors"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
             <span>Add Hosting</span>
           </button>
         </div>
@@ -477,57 +482,37 @@ export default function HostingPage() {
 
       {/* Stat Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="p-4 bg-[#0d0d12]/80 border border-slate-850 rounded-xl flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
-            <Server className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-xl font-bold text-slate-100">{totalCount}</div>
-            <div className="text-xs text-slate-500">Total Accounts</div>
-          </div>
+        <div className="p-4 bg-[#141416] border border-[#242428] rounded-xs">
+          <div className="font-mono text-[10px] uppercase font-bold tracking-widest text-[#a1a1aa]">Total Accounts</div>
+          <div className="text-xl sm:text-2xl font-extrabold font-mono text-white mt-1.5">{totalCount}</div>
         </div>
 
-        <div className="p-4 bg-[#0d0d12]/80 border border-slate-850 rounded-xl flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-emerald-600/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-xl font-bold text-emerald-400">{activeCount}</div>
-            <div className="text-xs text-slate-500">Active</div>
-          </div>
+        <div className="p-4 bg-[#141416] border border-[#242428] rounded-xs">
+          <div className="font-mono text-[10px] uppercase font-bold tracking-widest text-[#00d664]">Active Accounts</div>
+          <div className="text-xl sm:text-2xl font-extrabold font-mono text-[#00d664] mt-1.5">{activeCount}</div>
         </div>
 
-        <div className="p-4 bg-[#0d0d12]/80 border border-slate-850 rounded-xl flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-amber-600/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-            <AlertTriangle className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-xl font-bold text-amber-400">{expiringSoonCount}</div>
-            <div className="text-xs text-slate-500">Expiring Soon (&le;30d)</div>
-          </div>
+        <div className="p-4 bg-[#141416] border border-[#242428] rounded-xs">
+          <div className="font-mono text-[10px] uppercase font-bold tracking-widest text-amber-400">Expiring Soon (≤30d)</div>
+          <div className="text-xl sm:text-2xl font-extrabold font-mono text-amber-400 mt-1.5">{expiringSoonCount}</div>
         </div>
 
-        <div className="p-4 bg-[#0d0d12]/80 border border-slate-850 rounded-xl flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-red-600/10 border border-red-500/20 flex items-center justify-center text-red-400">
-            <XCircle className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-xl font-bold text-red-400">{expiredCount}</div>
-            <div className="text-xs text-slate-500">Expired</div>
-          </div>
+        <div className="p-4 bg-[#141416] border border-[#242428] rounded-xs">
+          <div className="font-mono text-[10px] uppercase font-bold tracking-widest text-red-400">Expired</div>
+          <div className="text-xl sm:text-2xl font-extrabold font-mono text-red-400 mt-1.5">{expiredCount}</div>
         </div>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col md:flex-row gap-3">
+      <div className="bg-[#141416] border border-[#242428] p-3 rounded-xs flex flex-col md:flex-row gap-3">
         <form onSubmit={handleSearch} className="flex-1 relative">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+          <Search className="w-4 h-4 absolute left-3 top-2.5 text-[#71717a] pointer-events-none" />
           <input
             type="text"
             placeholder="Search domain, provider, server host, plan..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 bg-[#0d0d12] border border-slate-850 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+            className="w-full pl-9 pr-4 py-2 bg-[#0d0d10] border border-[#27272a] focus:border-[#ff3e00] rounded-xs text-xs text-white placeholder-[#52525b] outline-none transition-all"
           />
         </form>
 
@@ -535,21 +520,21 @@ export default function HostingPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2.5 bg-[#0d0d12] border border-slate-850 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-indigo-500"
+            className="px-3 py-2 bg-[#0d0d10] border border-[#27272a] focus:border-[#ff3e00] rounded-xs text-xs font-mono text-[#f5f5f2] outline-none cursor-pointer"
           >
-            <option value="">All Statuses</option>
-            <option value="ACTIVE">Active</option>
-            <option value="EXPIRING_SOON">Expiring Soon</option>
-            <option value="EXPIRED">Expired</option>
-            <option value="CANCELLED">Cancelled</option>
+            <option value="">ALL STATUSES</option>
+            <option value="ACTIVE">ACTIVE</option>
+            <option value="EXPIRING_SOON">EXPIRING SOON</option>
+            <option value="EXPIRED">EXPIRED</option>
+            <option value="CANCELLED">CANCELLED</option>
           </select>
 
           <select
             value={clientFilter}
             onChange={(e) => setClientFilter(e.target.value)}
-            className="px-3 py-2.5 bg-[#0d0d12] border border-slate-850 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-indigo-500"
+            className="px-3 py-2 bg-[#0d0d10] border border-[#27272a] focus:border-[#ff3e00] rounded-xs text-xs font-mono text-[#f5f5f2] outline-none cursor-pointer"
           >
-            <option value="">All Clients</option>
+            <option value="">ALL CLIENTS</option>
             {clients.map((c) => (
               <option key={c._id} value={c._id}>
                 {c.name} ({c.clientCode})
@@ -562,67 +547,67 @@ export default function HostingPage() {
       {/* Main Table */}
       {loading ? (
         <div className="py-20 flex flex-col items-center justify-center space-y-3">
-          <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
-          <p className="text-xs text-slate-500">Loading hosting accounts...</p>
+          <Loader2 className="w-8 h-8 animate-spin text-[#ff3e00]" />
+          <p className="font-mono text-xs uppercase tracking-wider text-[#88888e]">SYS::LOADING_HOSTING_ACCOUNTS...</p>
         </div>
       ) : hostings.length === 0 ? (
-        <div className="py-16 text-center bg-[#0d0d12]/40 border border-slate-850 rounded-2xl space-y-3">
-          <Server className="w-10 h-10 text-slate-650 mx-auto" />
-          <h3 className="text-slate-300 font-semibold text-sm">No hosting records found</h3>
-          <p className="text-xs text-slate-500 max-w-sm mx-auto">
+        <div className="py-16 text-center bg-[#141416] border border-[#242428] rounded-none md:rounded-xs space-y-3 p-8">
+          <Server className="w-10 h-10 text-[#88888e] mx-auto" />
+          <h3 className="font-mono text-sm uppercase tracking-wider font-bold text-white">SYS::NO_HOSTING_RECORDS</h3>
+          <p className="font-mono text-xs text-[#88888e] max-w-sm mx-auto">
             Add hosting details for your clients to monitor renewals, credentials, and automated Telegram expiry reminders.
           </p>
           <button
             onClick={() => setShowAddModal(true)}
-            className="px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-all"
+            className="crm-btn-primary px-4 py-2 text-xs inline-flex items-center gap-1.5"
           >
             <Plus className="w-3.5 h-3.5" />
-            Add First Hosting Account
+            <span>Add First Hosting Account</span>
           </button>
         </div>
       ) : (
-        <div className="bg-[#0d0d12]/50 border border-slate-850 rounded-2xl overflow-hidden shadow-2xl">
+        <div className="bg-[#141416] border border-[#242428] rounded-none md:rounded-xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[850px]">
               <thead>
-                <tr className="border-b border-slate-850 bg-slate-900/30 text-slate-400 text-xs font-semibold uppercase tracking-wider">
-                  <th className="px-5 py-4">Domain & Provider</th>
-                  <th className="px-5 py-4">Client / Project</th>
-                  <th className="px-5 py-4">Status & Days Remaining</th>
-                  <th className="px-5 py-4">Expiry Date</th>
-                  <th className="px-5 py-4">Auto Renew</th>
-                  <th className="px-5 py-4 text-right">Actions</th>
+                <tr className="border-b border-[#242428] bg-[#0d0d10] text-[#88888e] font-mono text-[10px] uppercase tracking-wider">
+                  <th className="px-5 py-3.5">Domain & Provider</th>
+                  <th className="px-5 py-3.5">Client / Project</th>
+                  <th className="px-5 py-3.5">Status & Days Remaining</th>
+                  <th className="px-5 py-3.5">Expiry Date</th>
+                  <th className="px-5 py-3.5">Auto Renew</th>
+                  <th className="px-5 py-3.5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-850/60 text-xs">
+              <tbody className="divide-y divide-[#242428] font-mono text-xs">
                 {hostings.map((h) => {
                   const client = h.clientId;
                   const project = h.projectId;
                   return (
-                    <tr key={h._id} className="hover:bg-slate-900/20 transition-all">
+                    <tr key={h._id} className="hover:bg-[#18181b]/50 transition-colors">
                       <td className="px-5 py-4">
-                        <div className="font-semibold text-slate-200 text-sm flex items-center gap-2">
+                        <div className="font-bold text-white font-mono text-xs flex items-center gap-2">
                           <span>{h.domain}</span>
                           {h.panelUrl && (
                             <a
                               href={h.panelUrl.startsWith('http') ? h.panelUrl : `https://${h.panelUrl}`}
                               target="_blank"
                               rel="noreferrer"
-                              className="text-slate-500 hover:text-indigo-400 transition-all"
+                              className="text-[#88888e] hover:text-[#ff3e00] transition-colors"
                               title="Open Hosting Panel"
                             >
                               <ExternalLink className="w-3.5 h-3.5" />
                             </a>
                           )}
                         </div>
-                        <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2">
-                          <span className="font-medium text-slate-400">{h.hostingProvider}</span>
+                        <div className="text-[11px] text-[#88888e] mt-0.5 flex items-center gap-2">
+                          <span className="text-[#a1a1aa]">{h.hostingProvider}</span>
                           <span>•</span>
                           <span>{h.hostingType}</span>
                           {h.planName && (
                             <>
                               <span>•</span>
-                              <span className="text-slate-400">{h.planName}</span>
+                              <span className="text-[#a1a1aa]">{h.planName}</span>
                             </>
                           )}
                         </div>
@@ -633,17 +618,17 @@ export default function HostingPage() {
                           <div>
                             <Link
                               href={`/dashboard/clients/${client._id}`}
-                              className="font-medium text-indigo-400 hover:underline"
+                              className="font-medium text-white hover:text-[#ff3e00] hover:underline"
                             >
                               {client.name}
                             </Link>
-                            <div className="text-[11px] text-slate-500 mt-0.5">
+                            <div className="text-[11px] text-[#88888e] mt-0.5">
                               {client.clientCode}
                               {project ? ` • ${project.name}` : ''}
                             </div>
                           </div>
                         ) : (
-                          <span className="text-slate-500 italic">Unassigned</span>
+                          <span className="text-[#88888e] italic">Unassigned</span>
                         )}
                       </td>
 
@@ -651,8 +636,8 @@ export default function HostingPage() {
                         {getStatusBadge(h.status, h.daysRemaining)}
                       </td>
 
-                      <td className="px-5 py-4 text-slate-300">
-                        <div className="font-medium">
+                      <td className="px-5 py-4 text-[#a1a1aa]">
+                        <div className="font-medium text-white">
                           {new Date(h.expiryDate).toLocaleDateString('en-IN', {
                             day: '2-digit',
                             month: 'short',
@@ -660,7 +645,7 @@ export default function HostingPage() {
                           })}
                         </div>
                         {h.renewalHistoryCount > 0 && (
-                          <div className="text-[10px] text-indigo-400 mt-0.5 flex items-center gap-1">
+                          <div className="text-[10px] text-[#ff3e00] mt-0.5 flex items-center gap-1">
                             <Clock className="w-3 h-3" />
                             Renewed {h.renewalHistoryCount}x
                           </div>
@@ -669,12 +654,12 @@ export default function HostingPage() {
 
                       <td className="px-5 py-4">
                         {h.autoRenewal ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400 font-medium">
+                          <span className="inline-flex items-center gap-1 text-[11px] text-[#00d664] font-medium">
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             Enabled
                           </span>
                         ) : (
-                          <span className="text-slate-500 text-[11px]">Manual</span>
+                          <span className="text-[#88888e] text-[11px]">Manual</span>
                         )}
                       </td>
 
@@ -682,7 +667,7 @@ export default function HostingPage() {
                         <div className="inline-flex items-center gap-1.5">
                           <button
                             onClick={() => handleRevealSecrets(h)}
-                            className="p-1.5 bg-slate-900 hover:bg-indigo-600/10 hover:text-indigo-400 border border-slate-800 hover:border-indigo-500/30 text-slate-400 rounded-lg transition-all"
+                            className="p-1.5 bg-[#18181b] hover:bg-[#242428] border border-[#242428] hover:border-[#ff3e00]/50 text-[#88888e] hover:text-[#ff3e00] rounded-none md:rounded-xs transition-colors"
                             title="Reveal Encrypted Credentials"
                           >
                             <Lock className="w-3.5 h-3.5" />
@@ -694,7 +679,7 @@ export default function HostingPage() {
                               setRenewDate(new Date(new Date(h.expiryDate).setFullYear(new Date(h.expiryDate).getFullYear() + 1)).toISOString().split('T')[0]);
                               setShowRenewModal(true);
                             }}
-                            className="p-1.5 bg-slate-900 hover:bg-emerald-600/10 hover:text-emerald-400 border border-slate-800 hover:border-emerald-500/30 text-slate-400 rounded-lg transition-all"
+                            className="p-1.5 bg-[#18181b] hover:bg-[#242428] border border-[#242428] hover:border-[#00d664]/50 text-[#88888e] hover:text-[#00d664] rounded-none md:rounded-xs transition-colors"
                             title="Renew Hosting"
                           >
                             <Calendar className="w-3.5 h-3.5" />
@@ -725,7 +710,7 @@ export default function HostingPage() {
                               });
                               setShowEditModal(true);
                             }}
-                            className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-lg transition-all"
+                            className="p-1.5 bg-[#18181b] hover:bg-[#242428] border border-[#242428] hover:border-white/50 text-[#88888e] hover:text-white rounded-none md:rounded-xs transition-colors"
                             title="Edit Details"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
@@ -733,7 +718,7 @@ export default function HostingPage() {
 
                           <button
                             onClick={() => handleDeleteHosting(h)}
-                            className="p-1.5 bg-slate-900 hover:bg-red-600/10 hover:text-red-400 border border-slate-800 hover:border-red-500/30 text-slate-400 rounded-lg transition-all"
+                            className="p-1.5 bg-[#18181b] hover:bg-[#242428] border border-[#242428] hover:border-red-500/50 text-[#88888e] hover:text-red-400 rounded-none md:rounded-xs transition-colors"
                             title="Delete Record"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -751,12 +736,12 @@ export default function HostingPage() {
 
       {/* Reveal Credentials Modal */}
       {showRevealModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
-          <div className="bg-[#0d0d12] border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2 text-indigo-400 font-bold text-sm">
-                <ShieldCheck className="w-4 h-4" />
-                <span>Encrypted Hosting Access</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
+          <div className="bg-[#141416] border border-[#242428] rounded-none md:rounded-xs max-w-md w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-[#242428]">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-[#ff3e00]" />
+                <span className="font-mono text-xs font-bold uppercase tracking-wider text-white">SYS::AUTHENTICATED_HOSTING_ACCESS</span>
               </div>
               <button
                 onClick={() => {
@@ -764,7 +749,7 @@ export default function HostingPage() {
                   setRevealedSecrets(null);
                   setSelectedHosting(null);
                 }}
-                className="text-slate-500 hover:text-slate-300"
+                className="text-[#88888e] hover:text-white transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -772,65 +757,65 @@ export default function HostingPage() {
 
             {revealing ? (
               <div className="py-8 text-center space-y-2">
-                <Loader2 className="w-6 h-6 animate-spin text-indigo-500 mx-auto" />
-                <p className="text-xs text-slate-400">Decrypting authenticated secret block...</p>
+                <Loader2 className="w-6 h-6 animate-spin text-[#ff3e00] mx-auto" />
+                <p className="font-mono text-xs uppercase tracking-wider text-[#88888e]">SYS::DECRYPTING_AUTHENTICATED_SECRET_BLOCK...</p>
               </div>
             ) : revealedSecrets ? (
               <div className="space-y-4">
-                <div className="p-3 bg-slate-950/60 border border-slate-850 rounded-xl space-y-1">
-                  <div className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Domain & Provider</div>
-                  <div className="text-sm font-semibold text-slate-200">
+                <div className="p-3 bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs space-y-1">
+                  <div className="font-mono text-[10px] text-[#88888e] font-semibold uppercase tracking-wider">Domain & Provider</div>
+                  <div className="font-mono text-xs font-bold text-white">
                     {revealedSecrets.domain} ({selectedHosting?.hostingProvider})
                   </div>
                 </div>
 
                 {revealedSecrets.username && (
                   <div className="space-y-1">
-                    <label className="text-[10px] text-slate-400 font-semibold uppercase">Username</label>
-                    <div className="flex items-center justify-between p-2.5 bg-slate-900 border border-slate-800 rounded-xl">
-                      <span className="font-mono text-xs text-slate-200 select-all">{revealedSecrets.username}</span>
+                    <label className="font-mono text-[10px] text-[#88888e] font-semibold uppercase tracking-wider">Username</label>
+                    <div className="flex items-center justify-between p-2.5 bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs">
+                      <span className="font-mono text-xs text-white select-all">{revealedSecrets.username}</span>
                       <button
                         onClick={() => copyToClipboard(revealedSecrets.username, 'username')}
-                        className="text-slate-400 hover:text-slate-200 p-1"
+                        className="text-[#88888e] hover:text-white p-1 transition-colors"
                         title="Copy Username"
                       >
-                        {copiedKey === 'username' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        {copiedKey === 'username' ? <Check className="w-3.5 h-3.5 text-[#00d664]" /> : <Copy className="w-3.5 h-3.5" />}
                       </button>
                     </div>
                   </div>
                 )}
 
                 <div className="space-y-1">
-                  <label className="text-[10px] text-slate-400 font-semibold uppercase">Decrypted Password</label>
-                  <div className="flex items-center justify-between p-2.5 bg-slate-900 border border-slate-800 rounded-xl">
-                    <span className="font-mono text-xs text-amber-300 select-all font-semibold">
+                  <label className="font-mono text-[10px] text-[#88888e] font-semibold uppercase tracking-wider">Decrypted Password</label>
+                  <div className="flex items-center justify-between p-2.5 bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs">
+                    <span className="font-mono text-xs text-amber-400 select-all font-semibold">
                       {revealedSecrets.password}
                     </span>
                     <button
                       onClick={() => copyToClipboard(revealedSecrets.password, 'password')}
-                      className="text-slate-400 hover:text-slate-200 p-1"
+                      className="text-[#88888e] hover:text-white p-1 transition-colors"
                       title="Copy Password"
                     >
-                      {copiedKey === 'password' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copiedKey === 'password' ? <Check className="w-3.5 h-3.5 text-[#00d664]" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
                   </div>
                 </div>
 
                 {revealedSecrets.sshKey && (
                   <div className="space-y-1">
-                    <label className="text-[10px] text-slate-400 font-semibold uppercase">SSH Key / Private Key</label>
-                    <div className="p-2.5 bg-slate-900 border border-slate-800 rounded-xl">
+                    <label className="font-mono text-[10px] text-[#88888e] font-semibold uppercase tracking-wider">SSH Key / Private Key</label>
+                    <div className="p-2.5 bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs">
                       <textarea
                         readOnly
                         value={revealedSecrets.sshKey}
                         rows={3}
-                        className="w-full font-mono text-[11px] text-slate-300 bg-transparent border-none outline-none resize-none"
+                        className="w-full font-mono text-[11px] text-[#a1a1aa] bg-transparent border-none outline-none resize-none"
                       />
                       <button
                         onClick={() => copyToClipboard(revealedSecrets.sshKey, 'sshKey')}
-                        className="text-xs text-indigo-400 hover:text-indigo-300 mt-1 inline-flex items-center gap-1 font-semibold"
+                        className="font-mono text-xs text-white hover:text-[#ff3e00] mt-1 inline-flex items-center gap-1 font-semibold transition-colors"
                       >
-                        {copiedKey === 'sshKey' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                        {copiedKey === 'sshKey' ? <Check className="w-3 h-3 text-[#00d664]" /> : <Copy className="w-3 h-3" />}
                         Copy SSH Key
                       </button>
                     </div>
@@ -839,21 +824,21 @@ export default function HostingPage() {
 
                 {revealedSecrets.apiToken && (
                   <div className="space-y-1">
-                    <label className="text-[10px] text-slate-400 font-semibold uppercase">API Token</label>
-                    <div className="flex items-center justify-between p-2.5 bg-slate-900 border border-slate-800 rounded-xl">
-                      <span className="font-mono text-xs text-slate-300 truncate mr-2 select-all">{revealedSecrets.apiToken}</span>
+                    <label className="font-mono text-[10px] text-[#88888e] font-semibold uppercase tracking-wider">API Token</label>
+                    <div className="flex items-center justify-between p-2.5 bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs">
+                      <span className="font-mono text-xs text-[#a1a1aa] truncate mr-2 select-all">{revealedSecrets.apiToken}</span>
                       <button
                         onClick={() => copyToClipboard(revealedSecrets.apiToken, 'apiToken')}
-                        className="text-slate-400 hover:text-slate-200 p-1"
+                        className="text-[#88888e] hover:text-white p-1 transition-colors"
                       >
-                        {copiedKey === 'apiToken' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        {copiedKey === 'apiToken' ? <Check className="w-3.5 h-3.5 text-[#00d664]" /> : <Copy className="w-3.5 h-3.5" />}
                       </button>
                     </div>
                   </div>
                 )}
 
-                <div className="p-3 bg-indigo-950/20 border border-indigo-500/20 rounded-xl text-[11px] text-indigo-300">
-                  ⚠️ This action has been recorded in the immutable audit log (<b className="font-mono">HOSTING_SECRET_VIEWED</b>). Do not store or forward secrets insecurely.
+                <div className="p-3 bg-[#18181b] border border-[#242428] rounded-none md:rounded-xs font-mono text-[11px] text-[#88888e]">
+                  ⚠️ This action has been recorded in the immutable audit log (<b className="font-mono text-white">HOSTING_SECRET_VIEWED</b>). Do not store or forward secrets insecurely.
                 </div>
               </div>
             ) : null}
@@ -865,7 +850,7 @@ export default function HostingPage() {
                   setRevealedSecrets(null);
                   setSelectedHosting(null);
                 }}
-                className="w-full py-2.5 bg-slate-850 hover:bg-slate-800 text-slate-200 font-semibold text-xs rounded-xl transition-all"
+                className="w-full py-2.5 bg-[#18181b] hover:bg-[#242428] border border-[#242428] text-white font-mono uppercase font-bold text-xs rounded-none md:rounded-xs transition-colors"
               >
                 Close & Mask
               </button>
@@ -876,14 +861,14 @@ export default function HostingPage() {
 
       {/* Add Hosting Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-[#0d0d12] border border-slate-800 rounded-2xl max-w-xl w-full p-6 space-y-5 shadow-2xl my-8">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2 font-bold text-slate-100 text-sm">
-                <Plus className="w-4 h-4 text-indigo-400" />
-                <span>Add Hosting Details</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-[#141416] border border-[#242428] rounded-none md:rounded-xs max-w-xl w-full p-6 space-y-5 shadow-2xl my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-[#242428]">
+              <div className="flex items-center gap-2 font-mono text-xs font-bold text-white uppercase tracking-wider">
+                <div className="w-2 h-2 rounded-full bg-[#ff3e00]" />
+                <span>SYS::ADD_HOSTING_DETAILS</span>
               </div>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-500 hover:text-slate-300">
+              <button onClick={() => setShowAddModal(false)} className="text-[#88888e] hover:text-white transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -891,12 +876,12 @@ export default function HostingPage() {
             <form onSubmit={handleAddHosting} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-300">Client *</label>
+                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Client *</label>
                   <select
                     required
                     value={formData.clientId}
                     onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
                   >
                     <option value="">Select Client</option>
                     {clients.map((c) => (
@@ -908,11 +893,11 @@ export default function HostingPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-300">Project (Optional)</label>
+                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Project (Optional)</label>
                   <select
                     value={formData.projectId}
                     onChange={(e) => setFormData({ ...formData, projectId: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
                   >
                     <option value="">None / General Client Hosting</option>
                     {projects
@@ -928,23 +913,23 @@ export default function HostingPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-300">Domain *</label>
+                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Domain *</label>
                   <input
                     type="text"
                     required
                     placeholder="example.com"
                     value={formData.domain}
                     onChange={(e) => setFormData({ ...formData, domain: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white placeholder-[#52525b] outline-none"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-300">Hosting Provider *</label>
+                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Hosting Provider *</label>
                   <select
                     value={formData.hostingProvider}
                     onChange={(e) => setFormData({ ...formData, hostingProvider: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
                   >
                     <option value="Hostinger">Hostinger</option>
                     <option value="Cloudways">Cloudways</option>
@@ -962,25 +947,25 @@ export default function HostingPage() {
 
               {formData.hostingProvider === 'Custom' && (
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-300">Custom Provider Name *</label>
+                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Custom Provider Name *</label>
                   <input
                     type="text"
                     required
                     placeholder="Enter hosting provider name"
                     value={formData.customProvider}
                     onChange={(e) => setFormData({ ...formData, customProvider: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white placeholder-[#52525b] outline-none"
                   />
                 </div>
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-300">Hosting Type</label>
+                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Hosting Type</label>
                   <select
                     value={formData.hostingType}
                     onChange={(e) => setFormData({ ...formData, hostingType: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
                   >
                     <option value="Shared">Shared</option>
                     <option value="Cloud">Cloud</option>
@@ -992,13 +977,13 @@ export default function HostingPage() {
                 </div>
 
                 <div className="space-y-1 sm:col-span-2">
-                  <label className="text-[11px] font-semibold text-slate-300">Panel URL</label>
+                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Panel URL</label>
                   <input
                     type="text"
                     placeholder="https://hpanel.hostinger.com"
                     value={formData.panelUrl}
                     onChange={(e) => setFormData({ ...formData, panelUrl: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white placeholder-[#52525b] outline-none"
                   />
                 </div>
               </div>
@@ -1006,69 +991,69 @@ export default function HostingPage() {
               {/* Server Host and Port */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1 sm:col-span-2">
-                  <label className="text-[11px] font-semibold text-slate-300">Server Host / IP</label>
+                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Server Host / IP</label>
                   <input
                     type="text"
                     placeholder="192.168.1.1 or srv.provider.com"
                     value={formData.serverHost}
                     onChange={(e) => setFormData({ ...formData, serverHost: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white placeholder-[#52525b] outline-none"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-300">Port</label>
+                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Port</label>
                   <input
                     type="text"
                     placeholder="22"
                     value={formData.port}
                     onChange={(e) => setFormData({ ...formData, port: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white placeholder-[#52525b] outline-none"
                   />
                 </div>
               </div>
 
               {/* Credentials Block (Sensitive - Encrypted) */}
-              <div className="p-4 bg-slate-950/60 border border-slate-850 rounded-xl space-y-3">
-                <div className="flex items-center gap-2 text-indigo-400 font-semibold text-xs">
-                  <Lock className="w-3.5 h-3.5" />
-                  <span>Secure Access Credentials (AES-256-GCM Encrypted at Rest)</span>
+              <div className="p-4 bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs space-y-3">
+                <div className="flex items-center gap-2 text-white font-mono font-semibold text-xs uppercase tracking-wider">
+                  <Lock className="w-3.5 h-3.5 text-[#ff3e00]" />
+                  <span>SECURE_CREDENTIALS // AES-256-GCM</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-300">Username *</label>
+                    <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Username *</label>
                     <input
                       type="text"
                       required
                       placeholder="admin or root"
                       value={formData.username}
                       onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                      className="w-full px-3 py-2 bg-[#141416] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white placeholder-[#52525b] outline-none"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-300">Password *</label>
+                    <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Password *</label>
                     <input
                       type="password"
                       required
                       placeholder="Strong password"
                       value={formData.password}
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                      className="w-full px-3 py-2 bg-[#141416] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white placeholder-[#52525b] outline-none"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-300">SSH / Private Key (Optional)</label>
+                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">SSH / Private Key (Optional)</label>
                   <textarea
                     placeholder="-----BEGIN RSA PRIVATE KEY-----"
                     rows={2}
                     value={formData.sshKey}
                     onChange={(e) => setFormData({ ...formData, sshKey: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 bg-[#141416] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs text-white font-mono placeholder-[#52525b] outline-none"
                   />
                 </div>
               </div>
@@ -1076,23 +1061,23 @@ export default function HostingPage() {
               {/* Dates & Expiration */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-300">Start Date</label>
+                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Start Date</label>
                   <input
                     type="date"
                     value={formData.startDate}
                     onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-300">Expiry Date *</label>
+                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Expiry Date *</label>
                   <input
                     type="date"
                     required
                     value={formData.expiryDate}
                     onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
                   />
                 </div>
               </div>
@@ -1103,36 +1088,36 @@ export default function HostingPage() {
                   id="autoRenewalCheckbox"
                   checked={formData.autoRenewal}
                   onChange={(e) => setFormData({ ...formData, autoRenewal: e.target.checked })}
-                  className="rounded border-slate-800 text-indigo-600 focus:ring-0"
+                  className="rounded-none border-[#242428] bg-[#0a0a0a] text-[#ff3e00] focus:ring-0"
                 />
-                <label htmlFor="autoRenewalCheckbox" className="text-xs text-slate-300 select-none cursor-pointer">
+                <label htmlFor="autoRenewalCheckbox" className="font-mono text-xs text-[#a1a1aa] select-none cursor-pointer">
                   Auto Renewal Enabled with Provider
                 </label>
               </div>
 
               <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-slate-300">Notes</label>
+                <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Notes</label>
                 <textarea
                   placeholder="Additional notes about DNS, nameservers, or hosting specs..."
                   rows={2}
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white placeholder-[#52525b] outline-none"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#242428]">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-850 text-slate-400 rounded-xl text-xs font-semibold"
+                  className="crm-btn-secondary px-4 py-2 text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-indigo-600/20 disabled:opacity-50"
+                  className="crm-btn-primary px-5 py-2 text-xs flex items-center gap-1.5 disabled:opacity-50"
                 >
                   {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>Save Hosting</span>
@@ -1143,27 +1128,227 @@ export default function HostingPage() {
         </div>
       )}
 
+      {/* Edit Hosting Modal */}
+      {showEditModal && selectedHosting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-[#141416] border border-[#242428] rounded-none md:rounded-xs max-w-xl w-full p-6 space-y-5 shadow-2xl my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-[#242428]">
+              <div className="flex items-center gap-2 font-mono text-xs font-bold text-white uppercase tracking-wider">
+                <div className="w-2 h-2 rounded-full bg-[#ff3e00]" />
+                <span>SYS::EDIT_HOSTING_RECORD // {selectedHosting.domain}</span>
+              </div>
+              <button onClick={() => setShowEditModal(false)} className="text-[#88888e] hover:text-white transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditHosting} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Domain *</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.domain}
+                    onChange={(e) => setFormData({ ...formData, domain: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Hosting Provider *</label>
+                  <select
+                    value={formData.hostingProvider}
+                    onChange={(e) => setFormData({ ...formData, hostingProvider: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
+                  >
+                    <option value="Hostinger">Hostinger</option>
+                    <option value="Cloudways">Cloudways</option>
+                    <option value="DigitalOcean">DigitalOcean</option>
+                    <option value="AWS">AWS</option>
+                    <option value="GoDaddy">GoDaddy</option>
+                    <option value="SiteGround">SiteGround</option>
+                    <option value="Namecheap">Namecheap</option>
+                    <option value="VPS">VPS</option>
+                    <option value="Shared">Shared Hosting</option>
+                    <option value="Custom">Custom Provider...</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Hosting Type</label>
+                  <select
+                    value={formData.hostingType}
+                    onChange={(e) => setFormData({ ...formData, hostingType: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
+                  >
+                    <option value="Shared">Shared</option>
+                    <option value="Cloud">Cloud</option>
+                    <option value="VPS">VPS</option>
+                    <option value="Dedicated">Dedicated</option>
+                    <option value="cPanel">cPanel</option>
+                    <option value="Custom">Custom</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Panel URL</label>
+                  <input
+                    type="text"
+                    value={formData.panelUrl}
+                    onChange={(e) => setFormData({ ...formData, panelUrl: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white placeholder-[#52525b] outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Server Host and Port */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Server Host / IP</label>
+                  <input
+                    type="text"
+                    placeholder="192.168.1.1 or srv.provider.com"
+                    value={formData.serverHost}
+                    onChange={(e) => setFormData({ ...formData, serverHost: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white placeholder-[#52525b] outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Port</label>
+                  <input
+                    type="text"
+                    placeholder="22"
+                    value={formData.port}
+                    onChange={(e) => setFormData({ ...formData, port: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white placeholder-[#52525b] outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Credentials Update (Leave blank to keep existing) */}
+              <div className="p-4 bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs space-y-3">
+                <div className="flex items-center gap-2 text-white font-mono font-semibold text-xs uppercase tracking-wider">
+                  <Lock className="w-3.5 h-3.5 text-[#ff3e00]" />
+                  <span>UPDATE_CREDENTIALS (LEAVE EMPTY TO KEEP EXISTING)</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Username</label>
+                    <input
+                      type="text"
+                      placeholder="Username"
+                      value={formData.username}
+                      onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#141416] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">New Password</label>
+                    <input
+                      type="password"
+                      placeholder="Leave blank to keep current"
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#141416] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white placeholder-[#52525b] outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">SSH Key</label>
+                  <textarea
+                    placeholder="Leave blank to keep current SSH key"
+                    rows={2}
+                    value={formData.sshKey}
+                    onChange={(e) => setFormData({ ...formData, sshKey: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#141416] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs text-white font-mono placeholder-[#52525b] outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Expiry Date */}
+              <div className="space-y-1">
+                <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Expiry Date</label>
+                <input
+                  type="date"
+                  value={formData.expiryDate}
+                  onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="editAutoRenewalCheckbox"
+                  checked={formData.autoRenewal}
+                  onChange={(e) => setFormData({ ...formData, autoRenewal: e.target.checked })}
+                  className="rounded-none border-[#242428] bg-[#0a0a0a] text-[#ff3e00] focus:ring-0"
+                />
+                <label htmlFor="editAutoRenewalCheckbox" className="font-mono text-xs text-[#a1a1aa] select-none cursor-pointer">
+                  Auto Renewal Enabled with Provider
+                </label>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Notes</label>
+                <textarea
+                  rows={2}
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white placeholder-[#52525b] outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#242428]">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="crm-btn-secondary px-4 py-2 text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="crm-btn-primary px-5 py-2 text-xs flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Update Hosting</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Renew Hosting Modal */}
       {showRenewModal && selectedHosting && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
-          <div className="bg-[#0d0d12] border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2 font-bold text-slate-100 text-sm">
-                <Calendar className="w-4 h-4 text-emerald-400" />
-                <span>Renew Hosting Service</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
+          <div className="bg-[#141416] border border-[#242428] rounded-none md:rounded-xs max-w-md w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-[#242428]">
+              <div className="flex items-center gap-2 font-mono text-xs font-bold text-white uppercase tracking-wider">
+                <div className="w-2 h-2 rounded-full bg-[#00d664]" />
+                <span>SYS::RENEW_HOSTING_SERVICE</span>
               </div>
-              <button onClick={() => setShowRenewModal(false)} className="text-slate-500 hover:text-slate-300">
+              <button onClick={() => setShowRenewModal(false)} className="text-[#88888e] hover:text-white transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleRenewHosting} className="space-y-4">
-              <div className="p-3 bg-slate-950/60 border border-slate-850 rounded-xl space-y-1">
-                <div className="text-[10px] text-slate-500 font-semibold uppercase">Domain</div>
-                <div className="text-sm font-bold text-slate-200">{selectedHosting.domain}</div>
-                <div className="text-xs text-slate-400 mt-1">
+              <div className="p-3 bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs space-y-1">
+                <div className="font-mono text-[10px] text-[#88888e] font-semibold uppercase tracking-wider">Domain</div>
+                <div className="font-mono text-xs font-bold text-white">{selectedHosting.domain}</div>
+                <div className="font-mono text-[11px] text-[#88888e] mt-1">
                   Current Expiry:{' '}
-                  <b className="text-slate-300">
+                  <b className="text-white">
                     {new Date(selectedHosting.expiryDate).toLocaleDateString('en-IN', {
                       day: '2-digit',
                       month: 'long',
@@ -1174,43 +1359,43 @@ export default function HostingPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-slate-300">New Expiry Date *</label>
+                <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">New Expiry Date *</label>
                 <input
                   type="date"
                   required
                   value={renewDate}
                   onChange={(e) => setRenewDate(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-slate-300">Renewal Notes (Optional)</label>
+                <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Renewal Notes (Optional)</label>
                 <input
                   type="text"
                   placeholder="e.g. Renewed for 1 year via Hostinger invoice #9921"
                   value={renewNotes}
                   onChange={(e) => setRenewNotes(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white placeholder-[#52525b] outline-none"
                 />
               </div>
 
-              <div className="p-3 bg-emerald-950/20 border border-emerald-500/20 rounded-xl text-[11px] text-emerald-300">
+              <div className="p-3 bg-[#18181b] border border-[#00d664]/30 rounded-none md:rounded-xs font-mono text-[11px] text-[#88888e]">
                 ℹ️ Renewing will reset all multi-threshold notification locks, reactivate status, and log an immutable renewal audit event.
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#242428]">
                 <button
                   type="button"
                   onClick={() => setShowRenewModal(false)}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-850 text-slate-400 rounded-xl text-xs font-semibold"
+                  className="crm-btn-secondary px-4 py-2 text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-emerald-600/20 disabled:opacity-50"
+                  className="crm-btn-primary px-5 py-2 text-xs flex items-center gap-1.5 disabled:opacity-50"
                 >
                   {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>Confirm Renewal</span>

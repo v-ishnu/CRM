@@ -2,7 +2,11 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Search, UserPlus, Send, CheckCircle2, XCircle, ArrowRight, Eye } from 'lucide-react';
+import { Search, UserPlus, Send, CheckCircle2, XCircle, Eye } from 'lucide-react';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Button } from '@/components/ui/Button';
+import { Badge, BadgeVariant } from '@/components/ui/Badge';
+import { Card } from '@/components/ui/Card';
 
 interface Client {
   _id: string;
@@ -59,51 +63,51 @@ export default function ClientsPage() {
   };
 
   const getStatusBadge = (clientStatus: Client['status']) => {
-    const styles = {
-      LEAD: 'bg-blue-950/45 text-blue-400 border border-blue-800/40',
-      ONBOARDING: 'bg-purple-950/45 text-purple-400 border border-purple-800/40',
-      ACTIVE: 'bg-emerald-950/45 text-emerald-400 border border-emerald-800/40',
-      COMPLETED: 'bg-slate-900/60 text-slate-400 border border-slate-700/40',
-      CANCELLED: 'bg-red-950/45 text-red-400 border border-red-800/40',
+    const map: Record<Client['status'], { variant: BadgeVariant; label: string }> = {
+      LEAD: { variant: 'blue', label: 'LEAD' },
+      ONBOARDING: { variant: 'purple', label: 'ONBOARDING' },
+      ACTIVE: { variant: 'green', label: 'ACTIVE' },
+      COMPLETED: { variant: 'neutral', label: 'COMPLETED' },
+      CANCELLED: { variant: 'danger', label: 'CANCELLED' },
     };
+    const s = map[clientStatus] || { variant: 'neutral', label: clientStatus };
     return (
-      <span className={`px-2.5 py-1 text-xs font-semibold rounded-full uppercase tracking-wider ${styles[clientStatus]}`}>
-        {clientStatus}
-      </span>
+      <Badge variant={s.variant} dot>
+        {s.label}
+      </Badge>
     );
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-100">Clients Database</h1>
-          <p className="text-slate-400 text-sm">Manage contacts, profiles, and Telegram integration status.</p>
-        </div>
-        <Link
-          href="/dashboard/clients/new"
-          className="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-indigo-600/10"
-        >
-          <UserPlus className="w-4 h-4 mr-2" />
-          Add Client
-        </Link>
-      </div>
+      {/* Page Header */}
+      <PageHeader
+        tag="DIRECTORY"
+        title="Clients Directory"
+        description="Client registry, Telegram bot linking status, and commercial engagement records."
+        actions={
+          <Link href="/dashboard/clients/new">
+            <Button variant="primary" icon={<UserPlus className="w-3.5 h-3.5" />}>
+              Add Client
+            </Button>
+          </Link>
+        }
+      />
 
-      {/* Search & Filters */}
-      <div className="bg-[#0d0d12]/60 border border-slate-850 p-4 rounded-xl flex flex-col sm:flex-row gap-3 sm:gap-4 justify-between items-stretch sm:items-center">
-        <form onSubmit={handleSearchSubmit} className="relative w-full sm:max-w-md">
-          <Search className="absolute left-3.5 top-3 w-4.5 h-4.5 text-slate-550" />
+      {/* Search & Filter Toolbar */}
+      <div className="bg-[#141416] border border-[#242428] p-3 sm:p-4 rounded-xs flex flex-col sm:flex-row gap-3 justify-between items-stretch sm:items-center">
+        <form onSubmit={handleSearchSubmit} className="relative w-full sm:max-w-md flex items-center">
+          <Search className="absolute left-3 w-4 h-4 text-[#71717a] pointer-events-none" />
           <input
             type="text"
             placeholder="Search by name, email, company, code..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-11 pr-20 py-2 bg-slate-950/60 border border-slate-800 text-slate-100 placeholder-slate-600 rounded-xl outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm transition-all"
+            className="w-full pl-9 pr-24 py-2 bg-[#0d0d10] border border-[#27272a] focus:border-[#ff3e00] focus:ring-1 focus:ring-[#ff3e00] text-xs text-white placeholder-[#52525b] rounded-xs outline-none transition-all"
           />
           <button
             type="submit"
-            className="absolute right-2 top-1.5 px-3 py-1 bg-indigo-650 hover:bg-indigo-500 text-white text-[10px] font-bold uppercase rounded-lg tracking-wider"
+            className="absolute right-1.5 px-2.5 py-1 bg-[#242428] hover:bg-[#ff3e00] hover:text-white text-[#a1a1aa] font-mono text-[10px] font-bold uppercase rounded-xs transition-colors"
           >
             Search
           </button>
@@ -116,81 +120,95 @@ export default function ClientsPage() {
               setStatus(e.target.value);
               setPage(1);
             }}
-            className="px-4 py-2 bg-slate-950/65 border border-slate-800 text-slate-350 text-sm rounded-xl outline-none focus:border-indigo-500 transition-all cursor-pointer w-full sm:w-44"
+            className="px-3 py-2 bg-[#0d0d10] border border-[#27272a] focus:border-[#ff3e00] text-xs font-mono text-[#f5f5f2] rounded-xs outline-none transition-all cursor-pointer w-full sm:w-44"
           >
-            <option value="">All Statuses</option>
-            <option value="LEAD">Lead</option>
-            <option value="ONBOARDING">Onboarding</option>
-            <option value="ACTIVE">Active</option>
-            <option value="COMPLETED">Completed</option>
-            <option value="CANCELLED">Cancelled</option>
+            <option value="">ALL STATUSES</option>
+            <option value="LEAD">LEAD</option>
+            <option value="ONBOARDING">ONBOARDING</option>
+            <option value="ACTIVE">ACTIVE</option>
+            <option value="COMPLETED">COMPLETED</option>
+            <option value="CANCELLED">CANCELLED</option>
           </select>
         </div>
       </div>
 
-      {/* Clients Grid */}
+      {/* Clients Table */}
       {loading ? (
-        <div className="space-y-4">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-16 w-full bg-slate-900 animate-pulse rounded-xl"></div>
+        <div className="space-y-3">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-14 w-full bg-[#141416] border border-[#242428] animate-pulse rounded-xs" />
           ))}
         </div>
       ) : clients.length === 0 ? (
-        <div className="bg-[#0d0d12]/40 border border-slate-850 p-8 sm:p-12 rounded-xl text-center flex flex-col items-center justify-center text-slate-500">
-          <XCircle className="w-12 h-12 mb-3 stroke-1 text-slate-650" />
-          <h3 className="font-bold text-slate-300">No clients found</h3>
-          <p className="text-sm text-slate-500 mt-1">Try modifying your search or filters, or add a new client.</p>
-        </div>
+        <Card className="p-10 text-center flex flex-col items-center justify-center text-[#71717a]">
+          <XCircle className="w-10 h-10 mb-2 stroke-1 text-[#52525b]" />
+          <h3 className="font-bold text-white text-sm">No clients found</h3>
+          <p className="font-mono text-xs text-[#71717a] mt-1">
+            Try adjusting your query or filter criteria.
+          </p>
+        </Card>
       ) : (
-        <div className="bg-[#0d0d12]/40 border border-slate-850 rounded-xl overflow-hidden shadow-2xl">
+        <div className="bg-[#141416] border border-[#242428] rounded-xs overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[600px]">
+            <table className="w-full text-left border-collapse min-w-[650px]">
               <thead>
-                <tr className="border-b border-slate-850 bg-slate-900/35 text-slate-400 text-xs font-semibold uppercase tracking-wider">
-                  <th className="px-4 sm:px-6 py-4">Client</th>
-                  <th className="px-4 sm:px-6 py-4">Company</th>
-                  <th className="px-4 sm:px-6 py-4">Telegram linking</th>
-                  <th className="px-4 sm:px-6 py-4">Status</th>
-                  <th className="px-4 sm:px-6 py-4">Onboarded</th>
-                  <th className="px-4 sm:px-6 py-4 text-right">Actions</th>
+                <tr className="border-b border-[#242428] bg-[#0e0e11] font-mono text-[10px] text-[#a1a1aa] uppercase font-bold tracking-wider">
+                  <th className="px-5 py-3">Client Entity</th>
+                  <th className="px-5 py-3">Company</th>
+                  <th className="px-5 py-3">Telegram Integration</th>
+                  <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3">Onboarded</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-850 text-sm">
+              <tbody className="divide-y divide-[#1f1f24] text-xs">
                 {clients.map((client) => (
-                  <tr key={client._id} className="hover:bg-slate-900/20 transition-all group">
-                    <td className="px-4 sm:px-6 py-4">
-                      <div className="font-semibold text-slate-200">{client.name}</div>
-                      <div className="text-xs text-slate-500 mt-0.5">{client.email}</div>
+                  <tr
+                    key={client._id}
+                    className="hover:bg-white/[0.02] transition-colors group"
+                  >
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[9px] uppercase px-1 py-0.2 bg-[#0e0e11] border border-[#27272a] text-[#ff3e00] font-bold rounded-xs shrink-0">
+                          {client.clientCode}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="font-bold text-white truncate">{client.name}</p>
+                          <p className="font-mono text-[11px] text-[#71717a] truncate mt-0.5">
+                            {client.email}
+                          </p>
+                        </div>
+                      </div>
                     </td>
-                    <td className="px-4 sm:px-6 py-4 text-slate-350">{client.company || '—'}</td>
-                    <td className="px-4 sm:px-6 py-4">
+                    <td className="px-5 py-3.5 text-[#a1a1aa]">
+                      {client.company || '—'}
+                    </td>
+                    <td className="px-5 py-3.5">
                       {client.telegramConnected ? (
-                        <div className="flex items-center text-emerald-450 text-xs font-semibold gap-1.5">
-                          <CheckCircle2 className="w-4.5 h-4.5 text-emerald-500 shrink-0" />
-                          <span className="truncate">@{client.telegramUsername || 'Linked'}</span>
+                        <div className="flex items-center text-[#00d664] font-mono text-xs gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 shrink-0" />
+                          <span className="truncate">@{client.telegramUsername || 'LINKED'}</span>
                         </div>
                       ) : (
-                        <div className="flex items-center text-slate-500 text-xs gap-1.5">
-                          <Send className="w-4 h-4 shrink-0" />
-                          <span>Not Connected</span>
+                        <div className="flex items-center text-[#71717a] font-mono text-xs gap-1.5">
+                          <Send className="w-3.5 h-3.5 shrink-0" />
+                          <span>NOT LINKED</span>
                         </div>
                       )}
                     </td>
-                    <td className="px-4 sm:px-6 py-4">{getStatusBadge(client.status)}</td>
-                    <td className="px-4 sm:px-6 py-4 text-slate-450 whitespace-nowrap">
+                    <td className="px-5 py-3.5">{getStatusBadge(client.status)}</td>
+                    <td className="px-5 py-3.5 font-mono text-[11px] text-[#71717a] whitespace-nowrap">
                       {new Date(client.onboardingDate).toLocaleDateString('en-IN', {
                         day: '2-digit',
                         month: 'short',
                         year: 'numeric',
                       })}
                     </td>
-                    <td className="px-4 sm:px-6 py-4 text-right">
-                      <Link
-                        href={`/dashboard/clients/${client._id}`}
-                        className="inline-flex items-center px-3 py-1.5 bg-slate-900 hover:bg-indigo-600/10 hover:text-indigo-400 border border-slate-800 hover:border-indigo-500/20 text-slate-355 text-xs font-medium rounded-lg transition-all"
-                      >
-                        <Eye className="w-3.5 h-3.5 mr-1.5" />
-                        View
+                    <td className="px-5 py-3.5 text-right">
+                      <Link href={`/dashboard/clients/${client._id}`}>
+                        <Button variant="outline" size="sm" icon={<Eye className="w-3 h-3" />}>
+                          Inspect
+                        </Button>
                       </Link>
                     </td>
                   </tr>
@@ -199,25 +217,29 @@ export default function ClientsPage() {
             </table>
           </div>
 
-          {/* Pagination Footer */}
+          {/* Pagination Controls */}
           {totalPages > 1 && (
-            <div className="px-4 sm:px-6 py-4 border-t border-slate-850 flex flex-col sm:flex-row gap-3 items-center justify-between text-xs text-slate-500 bg-slate-900/10">
-              <span>Showing Page {page} of {totalPages}</span>
-              <div className="flex gap-2">
-                <button
+            <div className="px-5 py-3 border-t border-[#242428] bg-[#0e0e11] flex flex-col sm:flex-row gap-3 items-center justify-between font-mono text-xs text-[#71717a]">
+              <span>
+                Page {page} of {totalPages}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
                   disabled={page === 1}
                   onClick={() => setPage(page - 1)}
-                  className="px-3 py-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Previous
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
                   disabled={page === totalPages}
                   onClick={() => setPage(page + 1)}
-                  className="px-3 py-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Next
-                </button>
+                </Button>
               </div>
             </div>
           )}
