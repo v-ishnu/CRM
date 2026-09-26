@@ -11,6 +11,7 @@ export interface CreateTaskDTO {
   title: string;
   description?: string;
   projectId: string | mongoose.Types.ObjectId;
+  clientId?: string | mongoose.Types.ObjectId;
   assignedTo?: string | mongoose.Types.ObjectId;
   priority?: TaskPriority;
   dueDate?: string | Date;
@@ -27,6 +28,8 @@ export interface CreateTaskDTO {
 export interface UpdateTaskDTO {
   title?: string;
   description?: string;
+  projectId?: string | mongoose.Types.ObjectId;
+  clientId?: string | mongoose.Types.ObjectId;
   assignedTo?: string | mongoose.Types.ObjectId;
   priority?: TaskPriority;
   status?: TaskStatus;
@@ -85,6 +88,15 @@ export class TaskService {
     const project = await Project.findById(data.projectId);
     if (!project) {
       throw new Error('Project not found');
+    }
+
+    // Validate Client -> Project relationship
+    if (data.clientId) {
+      const projectClientId = project.clientId?.toString();
+      const requestedClientId = data.clientId.toString();
+      if (projectClientId && projectClientId !== requestedClientId) {
+        throw new Error('Invalid relationship: Selected project does not belong to the selected client');
+      }
     }
 
     let assignedMember: any = null;
@@ -186,6 +198,22 @@ export class TaskService {
 
     const oldStatus = task.status;
     const oldAssignee = task.assignedTo?.toString();
+
+    const effectiveProjectId = data.projectId !== undefined ? data.projectId : task.projectId;
+    if (data.projectId !== undefined || data.clientId !== undefined) {
+      if (effectiveProjectId) {
+        const project = await Project.findById(effectiveProjectId);
+        if (!project) throw new Error('Project not found');
+        const checkClientId = data.clientId || (data.projectId !== undefined ? undefined : task.clientId);
+        if (checkClientId && project.clientId && project.clientId.toString() !== checkClientId.toString()) {
+          throw new Error('Invalid relationship: Selected project does not belong to the selected client');
+        }
+        if (data.projectId !== undefined) {
+          task.projectId = project._id as any;
+          task.clientId = project.clientId as any;
+        }
+      }
+    }
 
     if (data.title && data.title.trim()) {
       task.title = data.title.trim();

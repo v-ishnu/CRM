@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   UserPlus,
   Search,
@@ -701,13 +702,24 @@ export default function TeamMembersPage() {
 
                   {/* Action Buttons */}
                   <div className="flex items-center justify-between pt-2 border-t border-[#242428] text-xs font-mono">
-                    <button
-                      onClick={() => handleOpenEdit(member)}
-                      className="text-[#88888e] hover:text-white inline-flex items-center gap-1 cursor-pointer transition-colors"
-                    >
-                      <Edit2 className="w-3.5 h-3.5 text-[#ff3e00]" />
-                      <span>Edit</span>
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <Link
+                        href={`/dashboard/team/${member._id}`}
+                        className="text-[#ff3e00] hover:text-white inline-flex items-center gap-1 cursor-pointer transition-colors font-semibold"
+                        title="Open Team Member Workspace"
+                      >
+                        <span>Workspace</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </Link>
+
+                      <button
+                        onClick={() => handleOpenEdit(member)}
+                        className="text-[#88888e] hover:text-white inline-flex items-center gap-1 cursor-pointer transition-colors"
+                      >
+                        <Edit2 className="w-3.5 h-3.5 text-[#a1a1aa]" />
+                        <span>Edit</span>
+                      </button>
+                    </div>
 
                     <div className="flex items-center gap-3">
                       {!member.isPrimaryAdmin && (

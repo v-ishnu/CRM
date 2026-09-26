@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Trash2,
   Edit2,
+  Eye,
   User,
   FolderKanban,
   X,
@@ -30,6 +31,7 @@ import {
 export default function TasksPage() {
   const [tasks, setTasks] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
+  const [clients, setClients] = useState<any[]>([]);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -48,6 +50,7 @@ export default function TasksPage() {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
+    clientId: '',
     projectId: '',
     assignedTo: '',
     priority: 'MEDIUM',
@@ -61,16 +64,36 @@ export default function TasksPage() {
     submissionInstructions: '',
   });
 
-  // Task Completion Submission Modal State
-  const [showCompleteModal, setShowCompleteModal] = useState(false);
-  const [submittingTask, setSubmittingTask] = useState<any>(null);
-  const [submissionNotes, setSubmissionNotes] = useState('');
-  const [submissionUrls, setSubmissionUrls] = useState<string[]>(['']);
-  const [submissionFiles, setSubmissionFiles] = useState<any[]>([]);
-  const [uploadingFile, setUploadingFile] = useState(false);
-  const [submissionSubmitting, setSubmissionSubmitting] = useState(false);
-  const [submissionError, setSubmissionError] = useState('');
+  // View Submission Modal State (Admin Review Only)
+  const [showSubmissionModal, setShowSubmissionModal] = useState(false);
+  const [viewingSubmissionTask, setViewingSubmissionTask] = useState<any>(null);
   const [expandedHistoryTaskId, setExpandedHistoryTaskId] = useState<string | null>(null);
+
+  // Edit Task Modal State
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingTask, setEditingTask] = useState<any>(null);
+  const [editFormData, setEditFormData] = useState({
+    title: '',
+    description: '',
+    clientId: '',
+    projectId: '',
+    assignedTo: '',
+    priority: 'MEDIUM',
+    dueDate: '',
+    agreedAmount: '',
+    requiredCredentialIds: [] as string[],
+    autoShareCredentials: false,
+    submissionRequired: false,
+    submissionTypes: ['url', 'file'] as ('url' | 'file')[],
+    maxFileSizeMb: 25,
+    submissionInstructions: '',
+  });
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editError, setEditError] = useState('');
+
+  // Inspect Task Modal State
+  const [showInspectModal, setShowInspectModal] = useState(false);
+  const [inspectingTask, setInspectingTask] = useState<any>(null);
 
   // Share / Revoke / History modals
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
@@ -184,21 +207,24 @@ export default function TasksPage() {
       if (memberFilter) query.set('assignedTo', memberFilter);
       if (priorityFilter) query.set('priority', priorityFilter);
 
-      const [tasksRes, projectsRes, membersRes] = await Promise.all([
+      const [tasksRes, projectsRes, membersRes, clientsRes] = await Promise.all([
         fetch(`/api/tasks?${query.toString()}`),
         fetch('/api/projects'),
         fetch('/api/team-members?status=ACTIVE'),
+        fetch('/api/clients?limit=100'),
       ]);
 
-      const [tasksData, projectsData, membersData] = await Promise.all([
+      const [tasksData, projectsData, membersData, clientsData] = await Promise.all([
         tasksRes.json(),
         projectsRes.json(),
         membersRes.json(),
+        clientsRes.json(),
       ]);
 
       if (tasksData.success) setTasks(tasksData.data || []);
       if (projectsData.success) setProjects(projectsData.data || []);
       if (membersData.success) setTeamMembers(membersData.data || []);
+      if (clientsData.success) setClients(clientsData.data || []);
     } catch (err) {
       console.error('Failed to fetch tasks data:', err);
     } finally {
@@ -210,14 +236,8 @@ export default function TasksPage() {
     fetchData();
   }, [statusTab, search, projectFilter, memberFilter, priorityFilter]);
 
-  // When project changes in Create Modal, load project's credentials
-  const handleProjectSelect = async (projId: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      projectId: projId,
-      requiredCredentialIds: [],
-    }));
-
+  // Load project's credentials
+  const loadProjectCredentials = async (projId: string) => {
     if (!projId) {
       setProjectCredentials([]);
       return;
@@ -240,11 +260,27 @@ export default function TasksPage() {
     }
   };
 
+  // When project changes in Create Modal, load project's credentials
+  const handleProjectSelect = async (projId: string) => {
+    const selectedProj = projects.find((p) => p._id === projId);
+    setFormData((prev) => ({
+      ...prev,
+      projectId: projId,
+      clientId: selectedProj?.clientId?._id || selectedProj?.clientId || prev.clientId,
+      requiredCredentialIds: [],
+    }));
+
+    await loadProjectCredentials(projId);
+  };
+
   const handleOpenCreate = () => {
-    const defaultProjId = projects[0]?._id || '';
+    const defaultProj = projects[0];
+    const defaultProjId = defaultProj?._id || '';
+    const defaultClientId = defaultProj?.clientId?._id || defaultProj?.clientId || '';
     setFormData({
       title: '',
       description: '',
+      clientId: defaultClientId,
       projectId: defaultProjId,
       assignedTo: '',
       priority: 'MEDIUM',
@@ -258,7 +294,7 @@ export default function TasksPage() {
       submissionInstructions: '',
     });
     if (defaultProjId) {
-      handleProjectSelect(defaultProjId);
+      loadProjectCredentials(defaultProjId);
     }
     setShowCreateModal(true);
   };
@@ -305,112 +341,89 @@ export default function TasksPage() {
     }
   };
 
-  const handleOpenCompleteModal = (task: any) => {
-    setSubmittingTask(task);
-    setSubmissionNotes(task.submission?.submissionNotes || '');
-    setSubmissionUrls(
-      task.submission?.submissionUrls && task.submission?.submissionUrls.length > 0
-        ? [...task.submission.submissionUrls]
-        : ['']
-    );
-    setSubmissionFiles([]);
-    setSubmissionError('');
-    setShowCompleteModal(true);
+  const handleOpenSubmissionModal = (task: any) => {
+    setViewingSubmissionTask(task);
+    setShowSubmissionModal(true);
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!submittingTask || !e.target.files || e.target.files.length === 0) return;
-    const file = e.target.files[0];
-
-    const maxMb = submittingTask.maxFileSizeMb || 25;
-    if (file.size > maxMb * 1024 * 1024) {
-      setSubmissionError(`File ${file.name} exceeds max allowed size of ${maxMb}MB.`);
-      return;
-    }
-
-    try {
-      setUploadingFile(true);
-      setSubmissionError('');
-      const formDataUpload = new FormData();
-      formDataUpload.append('file', file);
-
-      const res = await fetch(`/api/tasks/${submittingTask._id}/submissions/upload`, {
-        method: 'POST',
-        body: formDataUpload,
-      });
-
-      const data = await res.json();
-      if (data.success && data.data) {
-        setSubmissionFiles((prev) => [...prev, data.data]);
-      } else {
-        setSubmissionError(data.error?.message || 'File upload failed');
-      }
-    } catch (err: any) {
-      setSubmissionError('Network error uploading file');
-    } finally {
-      setUploadingFile(false);
-      e.target.value = '';
-    }
+  const handleOpenInspectModal = (task: any) => {
+    setInspectingTask(task);
+    setShowInspectModal(true);
   };
 
-  const handleSubmitCompletion = async (e: React.FormEvent) => {
+  const handleOpenEditModal = async (task: any) => {
+    setEditingTask(task);
+    setEditError('');
+
+    const pId = task.projectId?._id || task.projectId || '';
+    const cId = task.clientId?._id || task.clientId || (task.projectId?.clientId?._id || task.projectId?.clientId) || '';
+
+    setEditFormData({
+      title: task.title || '',
+      description: task.description || '',
+      clientId: cId,
+      projectId: pId,
+      assignedTo: task.assignedTo?._id || task.assignedTo || '',
+      priority: task.priority || 'MEDIUM',
+      dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
+      agreedAmount: task.agreedAmount ? String(task.agreedAmount) : '',
+      requiredCredentialIds: (task.requiredCredentialIds || []).map((c: any) => (typeof c === 'object' ? c._id : c)),
+      autoShareCredentials: !!task.autoShareCredentials,
+      submissionRequired: !!task.submissionRequired,
+      submissionTypes: task.submissionTypes || ['url', 'file'],
+      maxFileSizeMb: task.maxFileSizeMb || 25,
+      submissionInstructions: task.submissionInstructions || '',
+    });
+
+    if (pId) {
+      loadProjectCredentials(pId);
+    } else {
+      setProjectCredentials([]);
+    }
+    setShowEditModal(true);
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!submittingTask) return;
-
-    const cleanUrls = submissionUrls.map((u) => u.trim()).filter(Boolean);
-
-    // Validation if required
-    if (submittingTask.submissionRequired) {
-      const types = submittingTask.submissionTypes && submittingTask.submissionTypes.length > 0
-        ? submittingTask.submissionTypes
-        : ['url', 'file'];
-      const requiresUrl = types.includes('url') && !types.includes('file');
-      const requiresFile = types.includes('file') && !types.includes('url');
-
-      if (requiresUrl && cleanUrls.length === 0) {
-        setSubmissionError('Please provide at least one valid submission URL');
-        return;
-      }
-      if (requiresFile && submissionFiles.length === 0) {
-        setSubmissionError('Please upload at least one submission deliverable file');
-        return;
-      }
-      if (!requiresUrl && !requiresFile && cleanUrls.length === 0 && submissionFiles.length === 0) {
-        setSubmissionError('Please provide at least one deliverable (URL or uploaded file)');
-        return;
-      }
-    }
-
+    if (!editingTask) return;
     try {
-      setSubmissionSubmitting(true);
-      setSubmissionError('');
+      setEditSubmitting(true);
+      setEditError('');
+      const payload: any = {
+        title: editFormData.title,
+        description: editFormData.description,
+        clientId: editFormData.clientId || undefined,
+        projectId: editFormData.projectId,
+        assignedTo: editFormData.assignedTo || null,
+        priority: editFormData.priority,
+        dueDate: editFormData.dueDate || null,
+        agreedAmount: editFormData.agreedAmount ? Number(editFormData.agreedAmount) : undefined,
+        requiredCredentialIds: editFormData.requiredCredentialIds,
+        autoShareCredentials: editFormData.autoShareCredentials,
+        submissionRequired: editFormData.submissionRequired,
+        submissionTypes: editFormData.submissionTypes,
+        maxFileSizeMb: Number(editFormData.maxFileSizeMb) || 25,
+        submissionInstructions: editFormData.submissionInstructions,
+      };
 
-      const existingFiles = submittingTask.submission?.submissionFiles || [];
-      const allFiles = [...existingFiles, ...submissionFiles];
-
-      const res = await fetch(`/api/tasks/${submittingTask._id}/complete`, {
-        method: 'POST',
+      const res = await fetch(`/api/tasks/${editingTask._id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          submissionNotes,
-          submissionUrls: cleanUrls,
-          submissionFiles: allFiles,
-        }),
+        body: JSON.stringify(payload),
       });
-
       const data = await res.json();
       if (data.success) {
-        setShowCompleteModal(false);
-        setBannerSuccess(`Task "${submittingTask.title}" marked completed with deliverables!`);
+        setShowEditModal(false);
+        setBannerSuccess(`Task "${editFormData.title}" updated successfully!`);
         setTimeout(() => setBannerSuccess(null), 4000);
         fetchData();
       } else {
-        setSubmissionError(data.error?.message || 'Failed to complete task');
+        setEditError(data.error?.message || 'Failed to update task');
       }
-    } catch (err) {
-      setSubmissionError('Failed to communicate with server');
+    } catch (err: any) {
+      setEditError('Failed to communicate with server');
     } finally {
-      setSubmissionSubmitting(false);
+      setEditSubmitting(false);
     }
   };
 
@@ -432,12 +445,6 @@ export default function TasksPage() {
   };
 
   const handleStatusChange = async (taskId: string, newStatus: string) => {
-    const task = tasks.find((t) => t._id === taskId);
-    if (newStatus === 'COMPLETED' && task) {
-      handleOpenCompleteModal(task);
-      return;
-    }
-
     try {
       const res = await fetch(`/api/tasks/${taskId}`, {
         method: 'PATCH',
@@ -446,9 +453,11 @@ export default function TasksPage() {
       });
       const data = await res.json();
       if (data.success) {
+        setBannerSuccess(`Task status updated to ${newStatus}`);
+        setTimeout(() => setBannerSuccess(null), 3000);
         fetchData();
       } else {
-        alert(data.error?.message || 'Failed to update task status');
+        alert(data.error?.message || 'Failed to update status');
       }
     } catch (err) {
       console.error('Error updating status:', err);
@@ -785,12 +794,17 @@ export default function TasksPage() {
                       <span className="text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 border bg-[#0a0a0a] border-[#242428] text-[#8a8a93]">
                         {pBadge.label}
                       </span>
-                      {task.submissionRequired && (
+                      {task.submission ? (
+                        <span className="text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 border bg-[#0e1f15] border-[#00d664]/40 text-[#00d664] flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-[#00d664]" />
+                          <span>SUBMISSION RECEIVED</span>
+                        </span>
+                      ) : task.submissionRequired ? (
                         <span className="text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 border bg-[#1c1408] border-[#f59e0b]/40 text-[#f59e0b] flex items-center gap-1">
                           <UploadCloud className="w-3 h-3 text-[#f59e0b]" />
-                          <span>DELIVERABLE REQ</span>
+                          <span>DELIVERABLE REQ (PENDING)</span>
                         </span>
-                      )}
+                      ) : null}
                       {task.agreedAmount ? (
                         <span className="text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 border bg-[#0e1f15] border-[#00d664]/30 text-[#00d664]">
                           ₹{task.agreedAmount.toLocaleString('en-IN')}
@@ -803,6 +817,13 @@ export default function TasksPage() {
                     )}
 
                     <div className="flex items-center gap-4 text-xs font-mono text-[#8a8a93] pt-1 flex-wrap">
+                      {task.clientId && (
+                        <span className="flex items-center gap-1 text-[#f5f5f2]">
+                          <User className="w-3.5 h-3.5 text-[#8a8a93]" />
+                          <span>{task.clientId?.name || 'Client'}</span>
+                        </span>
+                      )}
+
                       <span className="flex items-center gap-1 text-[#f5f5f2]">
                         <FolderKanban className="w-3.5 h-3.5 text-[#ff3e00]" />
                         <span>{task.projectId?.name || 'Project'}</span>
@@ -822,8 +843,37 @@ export default function TasksPage() {
                     </div>
                   </div>
 
-                  {/* Status Dropdown & Delete */}
-                  <div className="flex items-center gap-2.5 shrink-0">
+                  {/* Actions & Status Dropdown */}
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    <button
+                      onClick={() => handleOpenInspectModal(task)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono bg-[#0a0a0a] border border-[#242428] text-[#88888e] hover:text-white hover:border-[#38383e] transition-colors cursor-pointer"
+                      title="Inspect task details"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-[#ff3e00]" />
+                      <span>View</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleOpenEditModal(task)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono bg-[#0a0a0a] border border-[#242428] text-[#88888e] hover:text-white hover:border-[#38383e] transition-colors cursor-pointer"
+                      title="Edit task"
+                    >
+                      <Edit2 className="w-3.5 h-3.5 text-[#ff3e00]" />
+                      <span>Edit</span>
+                    </button>
+
+                    {task.submission && (
+                      <button
+                        onClick={() => handleOpenSubmissionModal(task)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono bg-[#0e1f15] border border-[#00d664]/40 text-[#00d664] hover:bg-[#00d664]/20 transition-colors cursor-pointer"
+                        title="View submission deliverables"
+                      >
+                        <UploadCloud className="w-3.5 h-3.5" />
+                        <span>Submission</span>
+                      </button>
+                    )}
+
                     <select
                       value={task.status}
                       onChange={(e) => handleStatusChange(task._id, e.target.value)}
@@ -838,7 +888,7 @@ export default function TasksPage() {
 
                     <button
                       onClick={() => handleDeleteTask(task._id)}
-                      className="p-1.5 text-[#8a8a93] hover:text-[#ff3e00] transition-colors cursor-pointer"
+                      className="p-1.5 text-[#88888e] hover:text-[#EF4444] transition-colors cursor-pointer"
                       title="Delete task"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -923,21 +973,23 @@ export default function TasksPage() {
                 </div>
 
                 {/* Task Deliverables / Submission Section */}
-                {(task.submission || task.status === 'COMPLETED' || task.submissionRequired) && (
+                {(task.submission || task.submissionRequired) && (
                   <div className="pt-3 border-t border-[#242428] space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-mono uppercase tracking-wider text-white flex items-center gap-1.5">
                         <UploadCloud className="w-3.5 h-3.5 text-[#00D664]" />
-                        <span>Deliverables</span>
+                        <span>Deliverables {task.submission ? '(Submitted by Team Member)' : '(Pending Submission)'}</span>
                       </span>
 
-                      <button
-                        onClick={() => handleOpenCompleteModal(task)}
-                        className="crm-btn-secondary text-[11px] px-2.5 py-1 flex items-center gap-1 cursor-pointer"
-                      >
-                        <Edit2 className="w-3 h-3 text-[#ff3e00]" />
-                        <span>{task.submission ? 'Resubmit Deliverables' : 'Submit Deliverables'}</span>
-                      </button>
+                      {task.submission && (
+                        <button
+                          onClick={() => handleOpenSubmissionModal(task)}
+                          className="crm-btn-secondary text-[11px] px-2.5 py-1 flex items-center gap-1 cursor-pointer"
+                        >
+                          <Eye className="w-3 h-3 text-[#ff3e00]" />
+                          <span>View Full Submission</span>
+                        </button>
+                      )}
                     </div>
 
                     {task.submission ? (
@@ -1111,21 +1163,48 @@ export default function TasksPage() {
                 />
               </div>
 
-              <div>
-                <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Project *</label>
-                <select
-                  required
-                  value={formData.projectId}
-                  onChange={(e) => handleProjectSelect(e.target.value)}
-                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
-                >
-                  <option value="">Select Project</option>
-                  {projects.map((p) => (
-                    <option key={p._id} value={p._id}>
-                      {p.name} ({p.projectCode})
-                    </option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Client (Filter)</label>
+                  <select
+                    value={formData.clientId}
+                    onChange={(e) => {
+                      const newCId = e.target.value;
+                      setFormData((prev) => ({
+                        ...prev,
+                        clientId: newCId,
+                        projectId: '',
+                      }));
+                    }}
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                  >
+                    <option value="">All Clients</option>
+                    {clients.map((c) => (
+                      <option key={c._id} value={c._id}>
+                        {c.name} ({c.clientCode})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Project *</label>
+                  <select
+                    required
+                    value={formData.projectId}
+                    onChange={(e) => handleProjectSelect(e.target.value)}
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                  >
+                    <option value="">Select Project</option>
+                    {projects
+                      .filter((p) => !formData.clientId || (p.clientId?._id || p.clientId) === formData.clientId)
+                      .map((p) => (
+                        <option key={p._id} value={p._id}>
+                          {p.name} ({p.projectCode})
+                        </option>
+                      ))}
+                  </select>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1372,187 +1451,556 @@ export default function TasksPage() {
         </div>
       )}
 
-      {/* Complete Task Deliverables Modal */}
-      {showCompleteModal && submittingTask && (
+      {/* View Task Submission Review Modal (Admin Review) */}
+      {showSubmissionModal && viewingSubmissionTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 overflow-y-auto">
           <div className="bg-[#141416] border border-[#242428] rounded-none md:rounded-xs w-full max-w-lg p-6 space-y-5 my-8 shadow-2xl">
             <div className="flex items-center justify-between pb-3 border-b border-[#242428]">
               <div>
                 <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-white">
                   <span className="w-2 h-2 rounded-full bg-[#00D664]" />
-                  <span>SYS::DELIVERABLE // SUBMIT_DELIVERABLES</span>
+                  <span>SYS::DELIVERABLE // SUBMISSION_REVIEW</span>
                 </div>
                 <p className="text-[10px] font-mono text-[#88888e] mt-1">
-                  {submittingTask.title} (<span className="text-[#ff3e00]">{submittingTask.taskCode}</span>)
+                  {viewingSubmissionTask.title} (<span className="text-[#ff3e00]">{viewingSubmissionTask.taskCode}</span>)
                 </p>
               </div>
               <button
-                onClick={() => setShowCompleteModal(false)}
+                onClick={() => setShowSubmissionModal(false)}
                 className="p-1 text-[#88888e] hover:text-white hover:bg-[#18181b] rounded-none md:rounded-xs transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {submittingTask.submissionInstructions && (
-              <div className="p-3 bg-[#18181b] border border-[#242428] rounded-none md:rounded-xs text-xs font-mono text-[#88888e]">
-                <span className="font-semibold text-white">Instructions: </span>
-                {submittingTask.submissionInstructions}
-              </div>
-            )}
+            {viewingSubmissionTask.submission ? (
+              <div className="space-y-4 text-xs font-mono">
+                <div className="bg-[#0a0a0a] border border-[#242428] p-3.5 space-y-2 text-[#88888e]">
+                  <div className="flex justify-between items-center text-[11px] pb-2 border-b border-[#242428]">
+                    <span>Submitted by: <b className="text-white">{viewingSubmissionTask.submission.submittedBy}</b></span>
+                    <span>{new Date(viewingSubmissionTask.submission.submittedAt).toLocaleString('en-IN')}</span>
+                  </div>
 
-            {submissionError && (
-              <div className="p-3 bg-[#EF4444]/10 border border-[#EF4444]/30 rounded-none md:rounded-xs text-xs font-mono text-[#EF4444]">
-                {submissionError}
-              </div>
-            )}
+                  {viewingSubmissionTask.submission.submissionNotes && (
+                    <div className="pt-1">
+                      <span className="text-[10px] uppercase tracking-wider text-[#88888e] block mb-1">Completion Notes:</span>
+                      <p className="text-[#e4e4e7] whitespace-pre-wrap bg-[#141416] p-2.5 border border-[#242428] rounded-none md:rounded-xs">
+                        {viewingSubmissionTask.submission.submissionNotes}
+                      </p>
+                    </div>
+                  )}
 
-            <form onSubmit={handleSubmitCompletion} className="space-y-4 text-xs font-mono">
-              {/* URLs Section */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-[10px] uppercase font-mono tracking-wider text-[#88888e] flex items-center gap-1.5">
-                    <ExternalLink className="w-3.5 h-3.5 text-[#ff3e00]" />
-                    <span>Submission URLs / Links</span>
-                    {submittingTask.submissionRequired && submittingTask.submissionTypes?.includes('url') && (
-                      <span className="text-[#ff3e00]">*</span>
-                    )}
-                  </label>
+                  {viewingSubmissionTask.submission.submissionUrls && viewingSubmissionTask.submission.submissionUrls.length > 0 && (
+                    <div className="pt-2">
+                      <span className="text-[10px] uppercase tracking-wider text-[#88888e] block mb-1.5">Submitted Links & URLs:</span>
+                      <div className="space-y-1.5">
+                        {viewingSubmissionTask.submission.submissionUrls.map((url: string, uIdx: number) => (
+                          <div key={uIdx} className="flex items-center justify-between p-2 bg-[#141416] border border-[#242428]">
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[#ff3e00] hover:underline flex items-center gap-1.5 truncate text-[11px]"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                              <span className="truncate">{url}</span>
+                            </a>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(url);
+                                setBannerSuccess('URL copied to clipboard!');
+                                setTimeout(() => setBannerSuccess(null), 2500);
+                              }}
+                              className="text-[10px] text-[#88888e] hover:text-white px-2 py-0.5 border border-[#242428] bg-[#0a0a0a] cursor-pointer"
+                            >
+                              Copy
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {viewingSubmissionTask.submission.submissionFiles && viewingSubmissionTask.submission.submissionFiles.length > 0 && (
+                    <div className="pt-2">
+                      <span className="text-[10px] uppercase tracking-wider text-[#88888e] block mb-1.5">Submitted Files:</span>
+                      <div className="space-y-1.5">
+                        {viewingSubmissionTask.submission.submissionFiles.map((file: any, fIdx: number) => {
+                          const sizeMb = (file.fileSize / (1024 * 1024)).toFixed(2);
+                          return (
+                            <div key={fIdx} className="flex items-center justify-between p-2 bg-[#141416] border border-[#242428]">
+                              <div className="flex items-center gap-2 truncate pr-2">
+                                <FileText className="w-4 h-4 text-[#00D664] shrink-0" />
+                                <div className="truncate">
+                                  <p className="font-mono text-white truncate">{file.fileName}</p>
+                                  <p className="text-[10px] text-[#88888e] font-mono">{sizeMb} MB</p>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => handleDownloadFile(viewingSubmissionTask._id, fIdx)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] bg-[#ff3e00]/10 border border-[#ff3e00]/30 text-[#ff3e00] hover:bg-[#ff3e00]/20 cursor-pointer"
+                              >
+                                <Download className="w-3 h-3" />
+                                <span>Download</span>
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {viewingSubmissionTask.submissionHistory && viewingSubmissionTask.submissionHistory.length > 0 && (
+                    <div className="pt-2 border-t border-[#242428]">
+                      <span className="text-[10px] uppercase tracking-wider text-[#88888e] block mb-1.5">
+                        Previous Submission Revisions ({viewingSubmissionTask.submissionHistory.length})
+                      </span>
+                      <div className="space-y-2">
+                        {viewingSubmissionTask.submissionHistory.map((hist: any, hIdx: number) => (
+                          <div key={hIdx} className="p-2.5 bg-[#141416] border border-[#242428] space-y-1 text-[11px]">
+                            <div className="flex justify-between text-[#88888e] text-[10px]">
+                              <span>Version {hIdx + 1} • {hist.submittedBy}</span>
+                              <span>{new Date(hist.submittedAt).toLocaleString('en-IN')}</span>
+                            </div>
+                            {hist.submissionNotes && <p className="text-[#e4e4e7]">{hist.submissionNotes}</p>}
+                            {hist.submissionUrls?.map((u: string, idx: number) => (
+                              <a key={idx} href={u} target="_blank" rel="noopener noreferrer" className="block text-[#ff3e00] hover:underline truncate text-[10px]">
+                                {u}
+                              </a>
+                            ))}
+                            {hist.submissionFiles?.map((f: any, fIdx: number) => (
+                              <div key={fIdx} className="flex justify-between items-center text-[10px] text-[#88888e]">
+                                <span className="truncate">{f.fileName}</span>
+                                <button
+                                  onClick={() => handleDownloadFile(viewingSubmissionTask._id, fIdx, hIdx)}
+                                  className="text-[#ff3e00] hover:underline cursor-pointer"
+                                >
+                                  Download
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end pt-3 border-t border-[#242428]">
                   <button
                     type="button"
-                    onClick={() => setSubmissionUrls([...submissionUrls, ''])}
-                    className="text-[11px] text-[#ff3e00] hover:underline cursor-pointer"
+                    onClick={() => setShowSubmissionModal(false)}
+                    className="crm-btn-secondary px-4 py-2 text-xs"
                   >
-                    + Add Link
+                    Close
                   </button>
                 </div>
+              </div>
+            ) : (
+              <div className="p-8 text-center text-[#88888e] font-mono text-xs">
+                No deliverables have been submitted for this task yet.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
-                <div className="space-y-2">
-                  {submissionUrls.map((url, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <input
-                        type="url"
-                        value={url}
-                        onChange={(e) => {
-                          const updated = [...submissionUrls];
-                          updated[idx] = e.target.value;
-                          setSubmissionUrls(updated);
-                        }}
-                        placeholder="https://github.com/... or https://figma.com/..."
-                        className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-xs font-mono text-white focus:outline-none focus:border-[#ff3e00]"
-                      />
-                      {submissionUrls.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => setSubmissionUrls(submissionUrls.filter((_, i) => i !== idx))}
-                          className="p-1 text-[#88888e] hover:text-[#EF4444] rounded-none md:rounded-xs transition-colors cursor-pointer"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
+      {/* Edit Task Modal */}
+      {showEditModal && editingTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-[#141416] border border-[#242428] rounded-none md:rounded-xs w-full max-w-lg p-6 space-y-5 my-8 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-[#242428]">
+              <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-white">
+                <span className="w-2 h-2 rounded-full bg-[#ff3e00]" />
+                <span>SYS::TASK // EDIT_TASK ({editingTask.taskCode})</span>
+              </div>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="p-1 text-[#88888e] hover:text-white hover:bg-[#18181b] rounded-none md:rounded-xs transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {editError && (
+              <div className="p-3 bg-[#EF4444]/10 border border-[#EF4444]/30 rounded-none md:rounded-xs text-xs font-mono text-[#EF4444]">
+                {editError}
+              </div>
+            )}
+
+            <form onSubmit={handleEditSubmit} className="space-y-4 text-xs font-mono">
+              <div>
+                <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Task Title *</label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.title}
+                  onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
+                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                />
               </div>
 
-              {/* File Upload Section */}
-              <div className="space-y-2 pt-2 border-t border-[#242428]">
-                <div className="flex items-center justify-between">
-                  <label className="text-[10px] uppercase font-mono tracking-wider text-[#88888e] flex items-center gap-1.5">
-                    <FileText className="w-3.5 h-3.5 text-[#00D664]" />
-                    <span>Deliverable Files</span>
-                    {submittingTask.submissionRequired && submittingTask.submissionTypes?.includes('file') && (
-                      <span className="text-[#ff3e00]">*</span>
-                    )}
-                  </label>
-                  <span className="text-[10px] text-[#88888e] font-mono">
-                    Max {submittingTask.maxFileSizeMb || 25}MB per file
-                  </span>
-                </div>
-
-                <div className="border border-dashed border-[#242428] hover:border-[#ff3e00]/50 rounded-none md:rounded-xs p-4 text-center bg-[#0a0a0a] transition-colors">
-                  <input
-                    type="file"
-                    id="submission-file-input"
-                    disabled={uploadingFile}
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                  <label
-                    htmlFor="submission-file-input"
-                    className="cursor-pointer inline-flex flex-col items-center gap-1 text-xs text-[#88888e] hover:text-white"
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Client (Filter)</label>
+                  <select
+                    value={editFormData.clientId}
+                    onChange={(e) => {
+                      const newCId = e.target.value;
+                      setEditFormData((prev) => ({
+                        ...prev,
+                        clientId: newCId,
+                        projectId: '',
+                      }));
+                    }}
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                   >
-                    <UploadCloud className="w-6 h-6 text-[#00D664] mb-1" />
-                    <span className="font-mono text-white">
-                      {uploadingFile ? 'Uploading file...' : 'Click to upload deliverable file'}
-                    </span>
-                    <span className="text-[10px] text-[#88888e] font-mono">
-                      ZIP, PDF, DOCX, XLSX, images, tar.gz
-                    </span>
-                  </label>
+                    <option value="">All Clients</option>
+                    {clients.map((c) => (
+                      <option key={c._id} value={c._id}>
+                        {c.name} ({c.clientCode})
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
-                {/* Uploaded Files Table */}
-                {submissionFiles.length > 0 && (
-                  <div className="space-y-1.5 pt-1">
-                    {submissionFiles.map((file, idx) => {
-                      const sizeMb = (file.fileSize / (1024 * 1024)).toFixed(2);
-                      return (
-                        <div
-                          key={idx}
-                          className="flex items-center justify-between p-2 rounded-none md:rounded-xs bg-[#0a0a0a] border border-[#242428] text-xs font-mono"
-                        >
-                          <div className="flex items-center gap-2 truncate pr-2">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-[#00D664] shrink-0" />
-                            <span className="font-medium text-white truncate">{file.fileName}</span>
-                            <span className="text-[10px] text-[#88888e] font-mono">({sizeMb} MB)</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setSubmissionFiles(submissionFiles.filter((_, i) => i !== idx))}
-                            className="p-1 text-[#88888e] hover:text-[#EF4444] rounded-none md:rounded-xs transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                <div>
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Project *</label>
+                  <select
+                    required
+                    value={editFormData.projectId}
+                    onChange={(e) => {
+                      const pId = e.target.value;
+                      const selectedProj = projects.find((p) => p._id === pId);
+                      setEditFormData((prev) => ({
+                        ...prev,
+                        projectId: pId,
+                        clientId: selectedProj?.clientId?._id || selectedProj?.clientId || prev.clientId,
+                      }));
+                      if (pId) loadProjectCredentials(pId);
+                    }}
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                  >
+                    <option value="">Select Project</option>
+                    {projects
+                      .filter((p) => !editFormData.clientId || (p.clientId?._id || p.clientId) === editFormData.clientId)
+                      .map((p) => (
+                        <option key={p._id} value={p._id}>
+                          {p.name} ({p.projectCode})
+                        </option>
+                      ))}
+                  </select>
+                </div>
               </div>
 
-              {/* Notes */}
-              <div className="pt-2 border-t border-[#242428]">
-                <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">
-                  Completion Notes (Optional)
-                </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Assign To</label>
+                  <select
+                    value={editFormData.assignedTo}
+                    onChange={(e) => setEditFormData({ ...editFormData, assignedTo: e.target.value })}
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                  >
+                    <option value="">Unassigned</option>
+                    {teamMembers.map((m) => (
+                      <option key={m._id} value={m._id}>
+                        {m.name} ({m.role})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Priority</label>
+                  <select
+                    value={editFormData.priority}
+                    onChange={(e) => setEditFormData({ ...editFormData, priority: e.target.value as any })}
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                  >
+                    <option value="LOW">Low</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="HIGH">High</option>
+                    <option value="URGENT">Urgent</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Due Date</label>
+                  <input
+                    type="date"
+                    value={editFormData.dueDate}
+                    onChange={(e) => setEditFormData({ ...editFormData, dueDate: e.target.value })}
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Agreed Payout (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 2500"
+                    value={editFormData.agreedAmount}
+                    onChange={(e) => setEditFormData({ ...editFormData, agreedAmount: e.target.value })}
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Description</label>
                 <textarea
                   rows={3}
-                  value={submissionNotes}
-                  onChange={(e) => setSubmissionNotes(e.target.value)}
-                  placeholder="Summary of changes, test instructions, or notes for the admin..."
-                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-xs font-mono text-white focus:outline-none focus:border-[#ff3e00]"
+                  value={editFormData.description}
+                  onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                  placeholder="Task instructions and scope of work..."
+                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                 />
+              </div>
+
+              {/* Deliverable Settings */}
+              <div className="pt-3 border-t border-[#242428] space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-semibold text-white block">Deliverables Required</span>
+                    <span className="text-[10px] text-[#88888e]">
+                      Require URLs or files from the assigned team member before completion
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={editFormData.submissionRequired}
+                    onChange={(e) => setEditFormData({ ...editFormData, submissionRequired: e.target.checked })}
+                    className="accent-[#ff3e00] w-4 h-4 cursor-pointer"
+                  />
+                </div>
+
+                {editFormData.submissionRequired && (
+                  <div className="space-y-3 p-3 bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs">
+                    <div>
+                      <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">
+                        Allowed Submission Types
+                      </label>
+                      <div className="flex gap-4">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={editFormData.submissionTypes.includes('url')}
+                            onChange={(e) => {
+                              const next = e.target.checked
+                                ? [...editFormData.submissionTypes, 'url']
+                                : editFormData.submissionTypes.filter((t) => t !== 'url');
+                              setEditFormData({ ...editFormData, submissionTypes: next as any });
+                            }}
+                            className="accent-[#ff3e00]"
+                          />
+                          <span>URLs / Links</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={editFormData.submissionTypes.includes('file')}
+                            onChange={(e) => {
+                              const next = e.target.checked
+                                ? [...editFormData.submissionTypes, 'file']
+                                : editFormData.submissionTypes.filter((t) => t !== 'file');
+                              setEditFormData({ ...editFormData, submissionTypes: next as any });
+                            }}
+                            className="accent-[#ff3e00]"
+                          />
+                          <span>File Uploads</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">
+                        Max File Size (MB)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={editFormData.maxFileSizeMb}
+                        onChange={(e) => setEditFormData({ ...editFormData, maxFileSizeMb: Number(e.target.value) || 25 })}
+                        className="w-32 bg-[#141416] border border-[#242428] rounded-none md:rounded-xs px-3 py-1.5 text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">
+                        Submission Instructions
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={editFormData.submissionInstructions}
+                        onChange={(e) => setEditFormData({ ...editFormData, submissionInstructions: e.target.value })}
+                        placeholder="e.g. Provide GitHub PR link and attach exported ZIP of builds"
+                        className="w-full bg-[#141416] border border-[#242428] rounded-none md:rounded-xs px-3 py-1.5 text-white"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end space-x-3 pt-3 border-t border-[#242428]">
                 <button
                   type="button"
-                  onClick={() => setShowCompleteModal(false)}
+                  onClick={() => setShowEditModal(false)}
                   className="crm-btn-secondary px-4 py-2 text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={submissionSubmitting || uploadingFile}
-                  className="crm-btn-primary px-4 py-2 text-xs disabled:opacity-50 flex items-center gap-1.5"
+                  disabled={editSubmitting}
+                  className="crm-btn-primary px-4 py-2 text-xs disabled:opacity-50"
                 >
-                  <CheckCircle2 className="w-4 h-4 text-[#00D664]" />
-                  <span>{submissionSubmitting ? 'Submitting...' : 'Complete Task'}</span>
+                  {editSubmitting ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Inspect Task Modal */}
+      {showInspectModal && inspectingTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-[#141416] border border-[#242428] rounded-none md:rounded-xs w-full max-w-xl p-6 space-y-5 my-8 shadow-2xl font-mono text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-[#242428]">
+              <div>
+                <div className="flex items-center gap-2 uppercase tracking-wider text-white">
+                  <span className="w-2 h-2 rounded-full bg-[#ff3e00]" />
+                  <span>SYS::TASK // INSPECT_DETAILS</span>
+                </div>
+                <p className="text-[10px] text-[#88888e] mt-0.5">
+                  Code: <span className="text-[#ff3e00] font-bold">{inspectingTask.taskCode}</span>
+                </p>
+              </div>
+              <button
+                onClick={() => setShowInspectModal(false)}
+                className="p-1 text-[#88888e] hover:text-white hover:bg-[#18181b] rounded-none md:rounded-xs transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-white">{inspectingTask.title}</h3>
+                {inspectingTask.description ? (
+                  <p className="text-[#88888e] mt-1 whitespace-pre-wrap">{inspectingTask.description}</p>
+                ) : (
+                  <p className="text-[#88888e] mt-1 italic">No description provided</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 p-3.5 bg-[#0a0a0a] border border-[#242428]">
+                <div>
+                  <span className="text-[10px] uppercase text-[#88888e] block">Status</span>
+                  <span className="text-white font-bold">{inspectingTask.status}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase text-[#88888e] block">Priority</span>
+                  <span className="text-white font-bold">{inspectingTask.priority}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase text-[#88888e] block">Agreed Payout</span>
+                  <span className="text-[#00D664] font-bold">
+                    {inspectingTask.agreedAmount ? `₹${inspectingTask.agreedAmount.toLocaleString('en-IN')}` : 'None'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase text-[#88888e] block">Project</span>
+                  <span className="text-white truncate block">{inspectingTask.projectId?.name || 'N/A'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase text-[#88888e] block">Client</span>
+                  <span className="text-white truncate block">{inspectingTask.clientId?.name || 'N/A'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase text-[#88888e] block">Assigned Member</span>
+                  <span className="text-white truncate block">
+                    {inspectingTask.assignedTo ? `${inspectingTask.assignedTo.name} (${inspectingTask.assignedTo.role})` : 'Unassigned'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase text-[#88888e] block">Due Date</span>
+                  <span className="text-white">
+                    {inspectingTask.dueDate ? new Date(inspectingTask.dueDate).toLocaleDateString('en-IN') : 'None'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase text-[#88888e] block">Created Date</span>
+                  <span className="text-white">
+                    {new Date(inspectingTask.createdAt).toLocaleDateString('en-IN')}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase text-[#88888e] block">Completed Date</span>
+                  <span className="text-white">
+                    {inspectingTask.completedAt ? new Date(inspectingTask.completedAt).toLocaleDateString('en-IN') : 'Not Completed'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Submission Information */}
+              <div className="p-3.5 bg-[#0a0a0a] border border-[#242428] space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs uppercase tracking-wider text-white font-semibold flex items-center gap-1.5">
+                    <UploadCloud className="w-3.5 h-3.5 text-[#00D664]" />
+                    <span>Submission Status</span>
+                  </span>
+                  {inspectingTask.submission && (
+                    <button
+                      onClick={() => {
+                        setShowInspectModal(false);
+                        handleOpenSubmissionModal(inspectingTask);
+                      }}
+                      className="text-[11px] text-[#ff3e00] hover:underline cursor-pointer"
+                    >
+                      View Full Deliverables →
+                    </button>
+                  )}
+                </div>
+                {inspectingTask.submission ? (
+                  <div className="text-[11px] text-[#88888e] space-y-1">
+                    <p>Submitted by: <b className="text-white">{inspectingTask.submission.submittedBy}</b></p>
+                    <p>Submitted at: {new Date(inspectingTask.submission.submittedAt).toLocaleString('en-IN')}</p>
+                    <p>URLs: {inspectingTask.submission.submissionUrls?.length || 0} • Files: {inspectingTask.submission.submissionFiles?.length || 0}</p>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-[#88888e] italic">
+                    {inspectingTask.submissionRequired ? 'Deliverables required — waiting for team member submission.' : 'Deliverables optional for this task.'}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center pt-3 border-t border-[#242428]">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowInspectModal(false);
+                  handleOpenEditModal(inspectingTask);
+                }}
+                className="crm-btn-secondary px-3.5 py-1.5 text-xs flex items-center gap-1.5"
+              >
+                <Edit2 className="w-3.5 h-3.5 text-[#ff3e00]" />
+                <span>Edit Task</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowInspectModal(false)}
+                className="crm-btn-secondary px-4 py-1.5 text-xs"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

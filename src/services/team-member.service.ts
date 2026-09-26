@@ -3,6 +3,8 @@ import mongoose from 'mongoose';
 import TeamMember, { ITeamMember, TeamPermission, TeamRole, IBankDetails } from '@/models/TeamMember';
 import Project from '@/models/Project';
 import Task from '@/models/Task';
+import TeamPayment from '@/models/TeamPayment';
+import AuditLog from '@/models/AuditLog';
 import { encrypt, decrypt } from '@/lib/security/encryption';
 import { AuditService } from './audit.service';
 import { dbConnect } from '@/lib/db/connect';
@@ -401,15 +403,51 @@ export class TeamMemberService {
       throw new Error('Team member not found');
     }
 
-    const [projects, tasks] = await Promise.all([
+    const [projects, tasks, payments, auditLogs] = await Promise.all([
       Project.find({ teamMemberIds: member._id }).select('projectCode name serviceType status totalAmount').lean(),
-      Task.find({ assignedTo: member._id }).populate('projectId', 'name projectCode').sort({ dueDate: 1 }).lean(),
+      Task.find({ assignedTo: member._id })
+        .populate('projectId', 'name projectCode serviceType')
+        .populate('clientId', 'name clientCode company')
+        .sort({ dueDate: 1, createdAt: -1 })
+        .lean(),
+      TeamPayment.find({ teamMemberId: member._id })
+        .populate('projectId', 'name projectCode')
+        .populate('taskId', 'title taskCode')
+        .sort({ paymentDate: -1, createdAt: -1 })
+        .lean(),
+      AuditLog.find({
+        $or: [
+          { entityId: member._id },
+          { 'metadata.assignedTo': member._id },
+          { 'metadata.teamMemberId': member._id },
+          { actor: member.email },
+        ],
+      })
+        .sort({ timestamp: -1 })
+        .limit(50)
+        .lean(),
     ]);
+
+    const totalPaid = payments
+      .filter((p: any) => p.status === 'PAID')
+      .reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+    const pendingPaymentsCount = payments.filter((p: any) => p.status === 'PENDING').length;
 
     return this.sanitizeBankDetails({
       ...member,
       assignedProjects: projects,
       assignedTasks: tasks,
+      payments,
+      auditLogs,
+      stats: {
+        totalTasks: tasks.length,
+        todoTasks: tasks.filter((t: any) => t.status === 'TODO').length,
+        inProgressTasks: tasks.filter((t: any) => t.status === 'IN_PROGRESS').length,
+        reviewTasks: tasks.filter((t: any) => t.status === 'REVIEW').length,
+        completedTasks: tasks.filter((t: any) => t.status === 'COMPLETED').length,
+        totalPaid,
+        pendingPaymentsCount,
+      },
     });
   }
 
@@ -419,7 +457,7 @@ export class TeamMemberService {
   static sanitizeBankDetails(member: any): any {
     if (!member || !member.bankDetails) return member;
     const sanitized = { ...member };
-    const { accountNumberEncrypted: _a, ifscEncrypted: _i, upiIdEncrypted: _u, ...safeBank } = member.bankDetails;
+    const { accountNumber: _rawAcc, accountNumberEncrypted: _a, ifscEncrypted: _i, upiIdEncrypted: _u, ...safeBank } = member.bankDetails;
     sanitized.bankDetails = safeBank;
     return sanitized;
   }
