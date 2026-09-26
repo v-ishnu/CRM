@@ -38,7 +38,7 @@ export class HostingService {
    */
   static async createHosting(
     data: {
-      clientId: string;
+      clientId?: string;
       projectId?: string;
       hostingProvider: string;
       hostingType?: string;
@@ -60,17 +60,27 @@ export class HostingService {
   ): Promise<IHosting> {
     await dbConnect();
 
-    const client = await Client.findById(data.clientId);
-    if (!client) {
-      throw new Error('Client not found');
-    }
+    let resolvedClientId = data.clientId;
 
     if (data.projectId) {
       const project = await Project.findById(data.projectId);
-      if (!project) throw new Error('Project not found');
-      if (project.clientId.toString() !== data.clientId.toString()) {
+      if (!project) {
+        throw new Error('Project not found');
+      }
+      const projectClientId = project.clientId.toString();
+      if (resolvedClientId && resolvedClientId.toString() !== projectClientId) {
         throw new Error('Project does not belong to specified client');
       }
+      resolvedClientId = projectClientId;
+    }
+
+    if (!resolvedClientId) {
+      throw new Error('Client is required (must select a valid Project or Client)');
+    }
+
+    const client = await Client.findById(resolvedClientId);
+    if (!client) {
+      throw new Error('Client not found');
     }
 
     if (!data.domain || data.domain.trim() === '') {
@@ -135,6 +145,7 @@ export class HostingService {
   static async updateHosting(
     hostingId: string,
     data: Partial<{
+      clientId?: string;
       projectId?: string;
       hostingProvider?: string;
       hostingType?: string;
@@ -205,8 +216,25 @@ export class HostingService {
       updatedFields.push('autoRenewal');
     }
     if (data.projectId !== undefined) {
-      hosting.projectId = data.projectId ? new mongoose.Types.ObjectId(data.projectId) : undefined;
-      updatedFields.push('projectId');
+      if (data.projectId) {
+        const project = await Project.findById(data.projectId);
+        if (!project) {
+          throw new Error('Project not found');
+        }
+        hosting.projectId = new mongoose.Types.ObjectId(data.projectId);
+        hosting.clientId = project.clientId;
+        updatedFields.push('projectId', 'clientId');
+      } else {
+        hosting.projectId = undefined;
+        updatedFields.push('projectId');
+      }
+    } else if (data.clientId !== undefined) {
+      const client = await Client.findById(data.clientId);
+      if (!client) {
+        throw new Error('Client not found');
+      }
+      hosting.clientId = client._id;
+      updatedFields.push('clientId');
     }
 
     // Re-encrypt changed secrets

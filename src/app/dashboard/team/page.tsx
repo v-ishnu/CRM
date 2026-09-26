@@ -22,6 +22,7 @@ import {
   Ban,
   ChevronDown,
   ChevronUp,
+  ExternalLink,
 } from 'lucide-react';
 
 export default function TeamMembersPage() {
@@ -45,6 +46,8 @@ export default function TeamMembersPage() {
   const [selectedMember, setSelectedMember] = useState<any>(null);
   const [generatedLink, setGeneratedLink] = useState('');
   const [copied, setCopied] = useState(false);
+  const [generatingLinkId, setGeneratingLinkId] = useState<string | null>(null);
+  const [tokenExpiresAt, setTokenExpiresAt] = useState<string | null>(null);
 
   // Invite Modal State
   const [inviteRole, setInviteRole] = useState('DEVELOPER');
@@ -283,19 +286,31 @@ export default function TeamMembersPage() {
 
   const handleGenerateLink = async (member: any) => {
     setSelectedMember(member);
+    setGeneratingLinkId(member._id);
     try {
-      const res = await fetch(`/api/team-members/${member._id}/telegram-token`, {
+      const res = await fetch(`/api/team-members/${member._id}/connect`, {
         method: 'POST',
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
         setGeneratedLink(data.data.link);
+        setTokenExpiresAt(data.data.expiresAt || null);
         setShowTokenModal(true);
       } else {
-        alert(data.error?.message || 'Failed to generate token');
+        const errorMsg =
+          data.error?.message ||
+          (res.status === 403
+            ? 'Admin access required to generate connection links.'
+            : res.status === 404
+            ? 'Team member not found.'
+            : 'Failed to generate connection token.');
+        alert(errorMsg);
       }
     } catch (err) {
       console.error('Error generating token:', err);
+      alert('Network error while communicating with the server.');
+    } finally {
+      setGeneratingLinkId(null);
     }
   };
 
@@ -595,17 +610,28 @@ export default function TeamMembersPage() {
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-[#8a8a93] font-mono text-[11px]">TELEGRAM BOT:</span>
                         {member.telegramConnected ? (
-                          <span className="inline-flex items-center gap-1.5 text-[#00d664] font-mono text-[11px] font-medium">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>CONNECTED</span>
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center gap-1.5 text-[#00d664] font-mono text-[11px] font-medium">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>CONNECTED</span>
+                            </span>
+                            <button
+                              onClick={() => handleGenerateLink(member)}
+                              disabled={generatingLinkId === member._id}
+                              className="text-[10px] text-[#8a8a93] hover:text-[#ff3e00] font-mono underline ml-1 cursor-pointer disabled:opacity-50"
+                              title="Generate new connection link"
+                            >
+                              {generatingLinkId === member._id ? 'GENERATING...' : 'NEW LINK'}
+                            </button>
+                          </div>
                         ) : (
                           <button
                             onClick={() => handleGenerateLink(member)}
-                            className="inline-flex items-center gap-1 text-[#ff3e00] hover:underline font-mono text-[11px] cursor-pointer"
+                            disabled={generatingLinkId === member._id}
+                            className="inline-flex items-center gap-1 text-[#ff3e00] hover:underline font-mono text-[11px] cursor-pointer disabled:opacity-50"
                           >
                             <Send className="w-3 h-3" />
-                            <span>GENERATE LINK</span>
+                            <span>{generatingLinkId === member._id ? 'GENERATING...' : 'GENERATE LINK'}</span>
                           </button>
                         )}
                       </div>
@@ -1523,11 +1549,24 @@ export default function TeamMembersPage() {
                 {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copied ? 'Copied' : 'Copy'}</span>
               </button>
+              <a
+                href={generatedLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="crm-btn-secondary px-3 py-1.5 text-xs flex items-center gap-1 shrink-0"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Open</span>
+              </a>
             </div>
 
             <div className="p-3 bg-[#18181b] border border-[#242428] rounded-none md:rounded-xs flex items-start gap-2 text-[11px] font-mono text-[#f59e0b]">
               <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>This token expires in 24 hours and becomes invalid immediately after successful connection.</span>
+              <span>
+                {tokenExpiresAt
+                  ? `This token expires on ${new Date(tokenExpiresAt).toLocaleString()} (24 hours validity) and becomes invalid immediately after successful connection.`
+                  : 'This token expires in 24 hours and becomes invalid immediately after successful connection.'}
+              </span>
             </div>
 
             <div className="flex justify-end pt-2">

@@ -233,8 +233,15 @@ export class TeamMemberService {
   /**
    * Generate a secure single-use Telegram connection token
    */
-  static async generateTelegramConnectionToken(id: string, actor: string = 'system'): Promise<{ token: string; link: string }> {
+  static async generateTelegramConnectionToken(
+    id: string,
+    actor: string = 'system'
+  ): Promise<{ token: string; link: string; expiresAt: Date }> {
     await dbConnect();
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw new Error('Team member not found');
+    }
 
     const teamMember = await TeamMember.findById(id);
     if (!teamMember) {
@@ -254,10 +261,22 @@ export class TeamMemberService {
     teamMember.telegramTokenExpiresAt = expiresAt;
     await teamMember.save();
 
-    const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'Dr_DebuggersBot';
+    const rawBotUsername = process.env.TELEGRAM_BOT_USERNAME || 'Dr_DebuggersBot';
+    const botUsername = rawBotUsername.replace(/^@/, '').trim();
     const link = `https://t.me/${botUsername}?start=${token}`;
 
-    return { token, link };
+    await AuditService.log({
+      actor,
+      action: 'TEAM_MEMBER_TELEGRAM_CONNECTION_LINK_CREATED',
+      entityType: 'TeamMember',
+      entityId: teamMember._id,
+      metadata: {
+        teamMemberId: teamMember._id.toString(),
+        expiresAt,
+      },
+    });
+
+    return { token, link, expiresAt };
   }
 
   /**
@@ -269,8 +288,12 @@ export class TeamMemberService {
   ): Promise<ITeamMember> {
     await dbConnect();
 
+    if (!token || !token.trim()) {
+      throw new Error('Invalid or expired team connection token');
+    }
+
     const member = await TeamMember.findOne({
-      telegramConnectionToken: token,
+      telegramConnectionToken: token.trim(),
       telegramTokenExpiresAt: { $gt: new Date() },
     });
 
@@ -282,12 +305,28 @@ export class TeamMemberService {
       throw new Error('This team member account has been deactivated');
     }
 
-    // Clear the one-time token immediately to guarantee single-use!
-    member.telegramUserId = String(telegramData.telegramUserId);
-    if (telegramData.telegramUsername) {
-      member.telegramUsername = telegramData.telegramUsername;
+    const normalizedUserId = String(telegramData.telegramUserId);
+    const normalizedChatId = String(telegramData.telegramChatId);
+
+    // Duplicate Telegram Account Protection:
+    // Prevent another team member from acquiring the same Telegram User ID
+    const existingWithSameTelegram = await TeamMember.findOne({
+      telegramUserId: normalizedUserId,
+      _id: { $ne: member._id },
+      telegramConnected: true,
+      status: { $ne: 'DEACTIVATED' },
+    });
+
+    if (existingWithSameTelegram) {
+      throw new Error('This Telegram account is already connected to another team member.');
     }
-    member.telegramChatId = String(telegramData.telegramChatId);
+
+    // Clear the one-time token immediately to guarantee single-use!
+    member.telegramUserId = normalizedUserId;
+    if (telegramData.telegramUsername) {
+      member.telegramUsername = telegramData.telegramUsername.replace(/^@/, '').trim();
+    }
+    member.telegramChatId = normalizedChatId;
     member.telegramConnected = true;
     member.telegramConnectionToken = undefined;
     member.telegramTokenExpiresAt = undefined;
@@ -302,6 +341,7 @@ export class TeamMemberService {
       metadata: {
         telegramUserId: member.telegramUserId,
         telegramUsername: member.telegramUsername,
+        telegramChatId: member.telegramChatId,
       },
     });
 

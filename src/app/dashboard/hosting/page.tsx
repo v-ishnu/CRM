@@ -33,6 +33,7 @@ interface HostingItem {
     name: string;
     clientCode: string;
     email: string;
+    company?: string;
     telegramConnected: boolean;
   };
   projectId?: {
@@ -74,12 +75,18 @@ export default function HostingPage() {
   const [showRenewModal, setShowRenewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showRevealModal, setShowRevealModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   // Selected item state
   const [selectedHosting, setSelectedHosting] = useState<HostingItem | null>(null);
+  const [viewingHosting, setViewingHosting] = useState<HostingItem | null>(null);
   const [revealedSecrets, setRevealedSecrets] = useState<any | null>(null);
   const [revealing, setRevealing] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  // Project selector search and direct client toggle
+  const [projectSearch, setProjectSearch] = useState('');
+  const [isDirectClientMode, setIsDirectClientMode] = useState(false);
 
   // Form states
   const [formData, setFormData] = useState({
@@ -109,6 +116,26 @@ export default function HostingPage() {
   const [checkingExpiry, setCheckingExpiry] = useState(false);
   const [bannerSuccess, setBannerSuccess] = useState<string | null>(null);
   const [bannerError, setBannerError] = useState<string | null>(null);
+
+  // Filter projects by search term (searches project name, code, client name, code, company)
+  const filteredProjects = projects.filter((p) => {
+    if (!projectSearch.trim()) return true;
+    const term = projectSearch.toLowerCase();
+    const projName = (p.name || '').toLowerCase();
+    const projCode = (p.projectCode || '').toLowerCase();
+    const clientName = (p.clientId?.name || '').toLowerCase();
+    const clientCode = (p.clientId?.clientCode || '').toLowerCase();
+    const company = (p.clientId?.company || '').toLowerCase();
+    return (
+      projName.includes(term) ||
+      projCode.includes(term) ||
+      clientName.includes(term) ||
+      clientCode.includes(term) ||
+      company.includes(term)
+    );
+  });
+
+  const selectedProjectObj = projects.find((p) => p._id === formData.projectId);
 
   const fetchHostings = async () => {
     try {
@@ -175,6 +202,7 @@ export default function HostingPage() {
         ...formData,
         hostingProvider: provider,
         projectId: formData.projectId || undefined,
+        clientId: formData.clientId || undefined,
         port: formData.port || undefined,
         startDate: formData.startDate ? new Date(formData.startDate) : undefined,
         expiryDate: new Date(formData.expiryDate),
@@ -189,6 +217,8 @@ export default function HostingPage() {
       if (json.success) {
         setBannerSuccess(`Hosting account for ${formData.domain} added successfully.`);
         setShowAddModal(false);
+        setProjectSearch('');
+        setIsDirectClientMode(false);
         setFormData({
           clientId: '',
           projectId: '',
@@ -571,9 +601,10 @@ export default function HostingPage() {
             <table className="w-full text-left border-collapse min-w-[850px]">
               <thead>
                 <tr className="border-b border-[#242428] bg-[#0d0d10] text-[#88888e] font-mono text-[10px] uppercase tracking-wider">
-                  <th className="px-5 py-3.5">Domain & Provider</th>
-                  <th className="px-5 py-3.5">Client / Project</th>
-                  <th className="px-5 py-3.5">Status & Days Remaining</th>
+                  <th className="px-5 py-3.5">Hosting & Provider</th>
+                  <th className="px-5 py-3.5">Client</th>
+                  <th className="px-5 py-3.5">Project</th>
+                  <th className="px-5 py-3.5">Status</th>
                   <th className="px-5 py-3.5">Expiry Date</th>
                   <th className="px-5 py-3.5">Auto Renew</th>
                   <th className="px-5 py-3.5 text-right">Actions</th>
@@ -587,7 +618,16 @@ export default function HostingPage() {
                     <tr key={h._id} className="hover:bg-[#18181b]/50 transition-colors">
                       <td className="px-5 py-4">
                         <div className="font-bold text-white font-mono text-xs flex items-center gap-2">
-                          <span>{h.domain}</span>
+                          <button
+                            onClick={() => {
+                              setViewingHosting(h);
+                              setShowDetailModal(true);
+                            }}
+                            className="hover:text-[#ff3e00] hover:underline text-left cursor-pointer"
+                            title="View Full Hosting Details"
+                          >
+                            {h.domain}
+                          </button>
                           {h.panelUrl && (
                             <a
                               href={h.panelUrl.startsWith('http') ? h.panelUrl : `https://${h.panelUrl}`}
@@ -601,7 +641,7 @@ export default function HostingPage() {
                           )}
                         </div>
                         <div className="text-[11px] text-[#88888e] mt-0.5 flex items-center gap-2">
-                          <span className="text-[#a1a1aa]">{h.hostingProvider}</span>
+                          <span className="text-[#a1a1aa] font-semibold">{h.hostingProvider}</span>
                           <span>•</span>
                           <span>{h.hostingType}</span>
                           {h.planName && (
@@ -618,17 +658,35 @@ export default function HostingPage() {
                           <div>
                             <Link
                               href={`/dashboard/clients/${client._id}`}
-                              className="font-medium text-white hover:text-[#ff3e00] hover:underline"
+                              className="font-medium text-white hover:text-[#ff3e00] hover:underline block"
                             >
                               {client.name}
                             </Link>
                             <div className="text-[11px] text-[#88888e] mt-0.5">
-                              {client.clientCode}
-                              {project ? ` • ${project.name}` : ''}
+                              <code>{client.clientCode}</code>
+                              {client.company ? ` • ${client.company}` : ''}
                             </div>
                           </div>
                         ) : (
                           <span className="text-[#88888e] italic">Unassigned</span>
+                        )}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        {project ? (
+                          <div>
+                            <Link
+                              href={`/dashboard/projects/${project._id}`}
+                              className="font-medium text-[#a1a1aa] hover:text-white hover:underline block"
+                            >
+                              {project.name}
+                            </Link>
+                            <div className="text-[11px] text-[#ff3e00] mt-0.5 font-mono">
+                              {project.projectCode}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-[#88888e] text-[11px] italic">General Hosting</span>
                         )}
                       </td>
 
@@ -665,6 +723,17 @@ export default function HostingPage() {
 
                       <td className="px-5 py-4 text-right">
                         <div className="inline-flex items-center gap-1.5">
+                          <button
+                            onClick={() => {
+                              setViewingHosting(h);
+                              setShowDetailModal(true);
+                            }}
+                            className="p-1.5 bg-[#18181b] hover:bg-[#242428] border border-[#242428] hover:border-white/50 text-[#88888e] hover:text-white rounded-none md:rounded-xs transition-colors"
+                            title="View Full Hosting Details"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+
                           <button
                             onClick={() => handleRevealSecrets(h)}
                             className="p-1.5 bg-[#18181b] hover:bg-[#242428] border border-[#242428] hover:border-[#ff3e00]/50 text-[#88888e] hover:text-[#ff3e00] rounded-none md:rounded-xs transition-colors"
@@ -859,6 +928,221 @@ export default function HostingPage() {
         </div>
       )}
 
+      {/* Hosting Detail Modal */}
+      {showDetailModal && viewingHosting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-[#141416] border border-[#242428] rounded-none md:rounded-xs max-w-xl w-full p-6 space-y-5 shadow-2xl my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-[#242428]">
+              <div className="flex items-center gap-2 font-mono text-xs font-bold text-white uppercase tracking-wider">
+                <div className="w-2 h-2 rounded-full bg-[#ff3e00]" />
+                <span>SYS::HOSTING_RECORD // {viewingHosting.domain}</span>
+              </div>
+              <button
+                onClick={() => {
+                  setShowDetailModal(false);
+                  setViewingHosting(null);
+                }}
+                className="text-[#88888e] hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 font-mono text-xs">
+              {/* Header Status Banner */}
+              <div className="flex items-center justify-between p-3 bg-[#0d0d10] border border-[#242428]">
+                <div>
+                  <div className="text-white font-bold text-sm flex items-center gap-2">
+                    <span>{viewingHosting.domain}</span>
+                    {viewingHosting.panelUrl && (
+                      <a
+                        href={viewingHosting.panelUrl.startsWith('http') ? viewingHosting.panelUrl : `https://${viewingHosting.panelUrl}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[#ff3e00] hover:underline flex items-center gap-1 text-[11px]"
+                      >
+                        <ExternalLink className="w-3 h-3" /> Panel
+                      </a>
+                    )}
+                  </div>
+                  <div className="text-[#88888e] text-[11px] mt-0.5">
+                    {viewingHosting.hostingProvider} • {viewingHosting.hostingType}
+                    {viewingHosting.planName ? ` • ${viewingHosting.planName}` : ''}
+                  </div>
+                </div>
+                <div>{getStatusBadge(viewingHosting.status, viewingHosting.daysRemaining)}</div>
+              </div>
+
+              {/* Client & Project Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-3 bg-[#18181b]/50 border border-[#242428] space-y-1">
+                  <span className="text-[10px] text-[#88888e] uppercase font-bold tracking-wider block">CLIENT INFORMATION</span>
+                  {viewingHosting.clientId ? (
+                    <div>
+                      <Link
+                        href={`/dashboard/clients/${viewingHosting.clientId._id}`}
+                        className="text-white font-bold hover:text-[#ff3e00] hover:underline block"
+                      >
+                        {viewingHosting.clientId.name}
+                      </Link>
+                      <div className="text-[11px] text-[#88888e]">
+                        Code: <b className="text-white">{viewingHosting.clientId.clientCode}</b>
+                      </div>
+                      {viewingHosting.clientId.company && (
+                        <div className="text-[11px] text-[#a1a1aa]">{viewingHosting.clientId.company}</div>
+                      )}
+                      <div className="text-[11px] text-[#88888e] mt-1 flex items-center gap-1.5">
+                        <span className={`w-1.5 h-1.5 rounded-full ${viewingHosting.clientId.telegramConnected ? 'bg-[#00d664]' : 'bg-[#71717a]'}`} />
+                        <span>Telegram: {viewingHosting.clientId.telegramConnected ? 'Connected' : 'Not Connected'}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-[#88888e] italic">Unassigned</span>
+                  )}
+                </div>
+
+                <div className="p-3 bg-[#18181b]/50 border border-[#242428] space-y-1">
+                  <span className="text-[10px] text-[#88888e] uppercase font-bold tracking-wider block">PROJECT ASSOCIATION</span>
+                  {viewingHosting.projectId ? (
+                    <div>
+                      <Link
+                        href={`/dashboard/projects/${viewingHosting.projectId._id}`}
+                        className="text-white font-bold hover:text-[#ff3e00] hover:underline block"
+                      >
+                        {viewingHosting.projectId.name}
+                      </Link>
+                      <div className="text-[11px] text-[#ff3e00]">
+                        Code: <b>{viewingHosting.projectId.projectCode}</b>
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-[#88888e] italic">General Client Hosting (No Project)</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Server & Infrastructure */}
+              <div className="p-3 bg-[#18181b]/50 border border-[#242428] space-y-2">
+                <span className="text-[10px] text-[#88888e] uppercase font-bold tracking-wider block">SERVER SPECS</span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <div>
+                    <span className="text-[#88888e] text-[10px] block">SERVER HOST / IP</span>
+                    <span className="text-white">{viewingHosting.serverHost || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[#88888e] text-[10px] block">PORT</span>
+                    <span className="text-white">{viewingHosting.port || '22'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[#88888e] text-[10px] block">USERNAME</span>
+                    <span className="text-white">{viewingHosting.username || '—'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dates & Auto Renewal */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 bg-[#18181b]/50 border border-[#242428]">
+                <div>
+                  <span className="text-[#88888e] text-[10px] block">START DATE</span>
+                  <span className="text-white">
+                    {viewingHosting.startDate
+                      ? new Date(viewingHosting.startDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                      : '—'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[#88888e] text-[10px] block">EXPIRY DATE</span>
+                  <span className="text-white font-bold">
+                    {new Date(viewingHosting.expiryDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[#88888e] text-[10px] block">DAYS REMAINING</span>
+                  <span className={`font-bold ${viewingHosting.daysRemaining <= 0 ? 'text-red-400' : viewingHosting.daysRemaining <= 30 ? 'text-amber-400' : 'text-[#00d664]'}`}>
+                    {viewingHosting.daysRemaining <= 0 ? `Expired (${Math.abs(viewingHosting.daysRemaining)}d ago)` : `${viewingHosting.daysRemaining} days`}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[#88888e] text-[10px] block">AUTO RENEWAL</span>
+                  <span className={viewingHosting.autoRenewal ? 'text-[#00d664] font-semibold' : 'text-[#88888e]'}>
+                    {viewingHosting.autoRenewal ? 'Enabled' : 'Manual'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Notes */}
+              {viewingHosting.notes && (
+                <div className="p-3 bg-[#18181b]/50 border border-[#242428]">
+                  <span className="text-[10px] text-[#88888e] uppercase font-bold tracking-wider block mb-1">NOTES</span>
+                  <p className="text-[#a1a1aa] whitespace-pre-wrap">{viewingHosting.notes}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Actions Footer */}
+            <div className="flex items-center justify-between pt-3 border-t border-[#242428]">
+              <button
+                onClick={() => {
+                  const h = viewingHosting;
+                  setShowDetailModal(false);
+                  setViewingHosting(null);
+                  handleRevealSecrets(h);
+                }}
+                className="px-3 py-2 bg-[#ff3e00]/10 hover:bg-[#ff3e00]/20 border border-[#ff3e00]/40 text-[#ff3e00] font-mono text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Reveal Credentials</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const h = viewingHosting;
+                    setShowDetailModal(false);
+                    setViewingHosting(null);
+                    setSelectedHosting(h);
+                    setFormData({
+                      clientId: h.clientId?._id || '',
+                      projectId: h.projectId?._id || '',
+                      hostingProvider: h.hostingProvider,
+                      customProvider: '',
+                      hostingType: h.hostingType,
+                      panelUrl: h.panelUrl || '',
+                      serverHost: h.serverHost || '',
+                      domain: h.domain,
+                      port: String(h.port || ''),
+                      planName: h.planName || '',
+                      username: h.username || '',
+                      password: '',
+                      sshKey: '',
+                      apiToken: '',
+                      startDate: h.startDate ? new Date(h.startDate).toISOString().split('T')[0] : '',
+                      expiryDate: new Date(h.expiryDate).toISOString().split('T')[0],
+                      autoRenewal: h.autoRenewal,
+                      notes: h.notes || '',
+                    });
+                    setShowEditModal(true);
+                  }}
+                  className="crm-btn-secondary px-3 py-2 text-xs flex items-center gap-1"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span>Edit</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowDetailModal(false);
+                    setViewingHosting(null);
+                  }}
+                  className="crm-btn-secondary px-4 py-2 text-xs"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add Hosting Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs overflow-y-auto">
@@ -874,41 +1158,130 @@ export default function HostingPage() {
             </div>
 
             <form onSubmit={handleAddHosting} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Client *</label>
-                  <select
-                    required
-                    value={formData.clientId}
-                    onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
+              {/* Project & Derived Client Selector */}
+              <div className="space-y-3 p-3 bg-[#0d0d10] border border-[#242428] rounded-none md:rounded-xs">
+                <div className="flex items-center justify-between">
+                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#ff3e00]">
+                    1. Associated Project & Client *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !isDirectClientMode;
+                      setIsDirectClientMode(next);
+                      if (next) {
+                        setFormData(prev => ({ ...prev, projectId: '' }));
+                      } else {
+                        setFormData(prev => ({ ...prev, clientId: '' }));
+                      }
+                    }}
+                    className="text-[10px] font-mono text-[#88888e] hover:text-white underline transition-colors cursor-pointer"
                   >
-                    <option value="">Select Client</option>
-                    {clients.map((c) => (
-                      <option key={c._id} value={c._id}>
-                        {c.name} ({c.clientCode})
-                      </option>
-                    ))}
-                  </select>
+                    {isDirectClientMode ? '← Link to Project' : 'Direct Client (No Project) →'}
+                  </button>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Project (Optional)</label>
-                  <select
-                    value={formData.projectId}
-                    onChange={(e) => setFormData({ ...formData, projectId: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
-                  >
-                    <option value="">None / General Client Hosting</option>
-                    {projects
-                      .filter((p) => !formData.clientId || p.clientId?._id === formData.clientId)
-                      .map((p) => (
-                        <option key={p._id} value={p._id}>
-                          {p.name} ({p.projectCode})
+                {!isDirectClientMode ? (
+                  <div className="space-y-2">
+                    {/* Search Projects */}
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-[#52525b]" />
+                      <input
+                        type="text"
+                        placeholder="Search projects by name, code, or client..."
+                        value={projectSearch}
+                        onChange={(e) => setProjectSearch(e.target.value)}
+                        className="w-full pl-8 pr-3 py-1.5 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white placeholder-[#52525b] outline-none"
+                      />
+                    </div>
+
+                    {/* Project Dropdown */}
+                    <div className="space-y-1">
+                      <select
+                        required={!isDirectClientMode}
+                        value={formData.projectId}
+                        onChange={(e) => {
+                          const projId = e.target.value;
+                          const proj = projects.find((p) => p._id === projId);
+                          if (proj) {
+                            const derivedClientId = proj.clientId?._id || proj.clientId;
+                            setFormData(prev => ({
+                              ...prev,
+                              projectId: proj._id,
+                              clientId: derivedClientId ? String(derivedClientId) : '',
+                            }));
+                          } else {
+                            setFormData(prev => ({ ...prev, projectId: '', clientId: '' }));
+                          }
+                        }}
+                        className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
+                      >
+                        <option value="">Select Project (Client auto-derived) ▼</option>
+                        {filteredProjects.map((p) => {
+                          const clientName = p.clientId?.name || 'Client';
+                          const clientCode = p.clientId?.clientCode ? ` [${p.clientId.clientCode}]` : '';
+                          return (
+                            <option key={p._id} value={p._id}>
+                              {clientName}{clientCode} — {p.name} ({p.projectCode})
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    {/* Derived Client Info Display */}
+                    {selectedProjectObj ? (
+                      <div className="p-3 bg-[#141416] border border-[#00d664]/30 rounded-none md:rounded-xs space-y-1.5 mt-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono text-[10px] uppercase font-bold text-[#00d664] flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3 h-3" /> Client Automatically Populated
+                          </span>
+                          <span className="font-mono text-[10px] text-[#88888e]">
+                            Code: <b className="text-white">{selectedProjectObj.clientId?.clientCode || 'N/A'}</b>
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
+                          <div>
+                            <span className="text-[#88888e] text-[10px] block">CLIENT</span>
+                            <span className="text-white font-bold">{selectedProjectObj.clientId?.name || 'Unknown'}</span>
+                            {selectedProjectObj.clientId?.company && (
+                              <span className="text-[#a1a1aa] text-[11px] block">{selectedProjectObj.clientId.company}</span>
+                            )}
+                          </div>
+                          <div>
+                            <span className="text-[#88888e] text-[10px] block">PROJECT</span>
+                            <span className="text-[#ff3e00] font-bold">{selectedProjectObj.name}</span>
+                            <span className="text-[#88888e] text-[11px] block">Code: {selectedProjectObj.projectCode}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-2.5 bg-[#141416]/50 border border-dashed border-[#242428] text-center font-mono text-[11px] text-[#88888e]">
+                        Select a project above to automatically populate and lock the associated client.
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* Direct Client Mode (fallback when hosting has no project) */
+                  <div className="space-y-2">
+                    <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e]">
+                      Client (Direct / No Project) *
+                    </label>
+                    <select
+                      required={isDirectClientMode}
+                      value={formData.clientId}
+                      onChange={(e) => setFormData(prev => ({ ...prev, clientId: e.target.value, projectId: '' }))}
+                      className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
+                    >
+                      <option value="">Select Client Directly ▼</option>
+                      {clients.map((c) => (
+                        <option key={c._id} value={c._id}>
+                          {c.name} ({c.clientCode}) {c.company ? `• ${c.company}` : ''}
                         </option>
                       ))}
-                  </select>
-                </div>
+                    </select>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1143,6 +1516,65 @@ export default function HostingPage() {
             </div>
 
             <form onSubmit={handleEditHosting} className="space-y-4">
+              {/* Project & Client Relationship */}
+              <div className="p-3 bg-[#0d0d10] border border-[#242428] rounded-none md:rounded-xs space-y-2 font-mono">
+                <span className="text-[10px] font-bold text-[#88888e] uppercase tracking-wider block">
+                  Project & Client Association
+                </span>
+                <div className="space-y-1">
+                  <label className="block text-[10px] uppercase text-[#88888e]">Change Project (Updates Client Automatically)</label>
+                  <select
+                    value={formData.projectId}
+                    onChange={(e) => {
+                      const projId = e.target.value;
+                      const proj = projects.find((p) => p._id === projId);
+                      if (proj) {
+                        const derivedClientId = proj.clientId?._id || proj.clientId;
+                        setFormData(prev => ({
+                          ...prev,
+                          projectId: proj._id,
+                          clientId: derivedClientId ? String(derivedClientId) : '',
+                        }));
+                      } else {
+                        setFormData(prev => ({ ...prev, projectId: '' }));
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs text-white outline-none"
+                  >
+                    <option value="">No Specific Project / Keep General</option>
+                    {projects.map((p) => {
+                      const clientName = p.clientId?.name || 'Client';
+                      const clientCode = p.clientId?.clientCode ? ` [${p.clientId.clientCode}]` : '';
+                      return (
+                        <option key={p._id} value={p._id}>
+                          {clientName}{clientCode} — {p.name} ({p.projectCode})
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#242428] text-xs">
+                  <div>
+                    <span className="text-[#88888e] text-[10px] block">CLIENT</span>
+                    <span className="text-white font-bold">
+                      {projects.find(p => p._id === formData.projectId)?.clientId?.name ||
+                       selectedHosting.clientId?.name || 'N/A'}
+                    </span>
+                    <span className="text-[#88888e] text-[11px] block">
+                      Code: {projects.find(p => p._id === formData.projectId)?.clientId?.clientCode ||
+                             selectedHosting.clientId?.clientCode || 'N/A'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[#88888e] text-[10px] block">PROJECT</span>
+                    <span className="text-[#ff3e00] font-bold">
+                      {projects.find(p => p._id === formData.projectId)?.name ||
+                       selectedHosting.projectId?.name || 'General Client Hosting'}
+                    </span>
+                  </div>
+                </div>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e] mb-1">Domain *</label>

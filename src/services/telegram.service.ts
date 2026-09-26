@@ -11,12 +11,14 @@ import TeamMember from '@/models/TeamMember';
 import Task from '@/models/Task';
 import TeamPayment from '@/models/TeamPayment';
 import User from '@/models/User';
+import Hosting from '@/models/Hosting';
 import { ClientService } from './client.service';
 import { PaymentService } from './payment.service';
 import { AuditService } from './audit.service';
 import { StorageService } from './storage.service';
 import { TeamMemberService } from './team-member.service';
 import { TaskService } from './task.service';
+import { HostingService } from './hosting.service';
 import { dbConnect } from '@/lib/db/connect';
 
 export type TelegramIdentityType = 'ADMIN' | 'TEAM_MEMBER' | 'CLIENT' | 'CONFLICT' | 'UNLINKED';
@@ -126,6 +128,7 @@ export class TelegramService {
     { command: 'payments', description: 'View payment history' },
     { command: 'invoices', description: 'View invoices history' },
     { command: 'status', description: 'View project progress' },
+    { command: 'hosting', description: 'View hosting details' },
     { command: 'help', description: 'Show available commands' },
     { command: 'start', description: 'Start client bot session' },
   ];
@@ -504,7 +507,7 @@ export class TelegramService {
       keyboard: [
         [{ text: '📊 Profile' }, { text: '📁 Projects' }],
         [{ text: '💰 Payments' }, { text: '🧾 Invoices' }],
-        [{ text: '📈 Status' }],
+        [{ text: '📈 Status' }, { text: '🖥️ Hosting' }],
       ],
       resize_keyboard: true,
       one_time_keyboard: false,
@@ -555,6 +558,7 @@ export class TelegramService {
     // 2. Lookup TeamMember & Client concurrently
     const [teamMember, client] = await Promise.all([
       TeamMember.findOne({
+        telegramConnected: true,
         $or: [
           { telegramUserId: strUserId },
           ...(strChatId ? [{ telegramChatId: strChatId }] : []),
@@ -1657,9 +1661,9 @@ export class TelegramService {
     const isStartCommand = text.startsWith('/start');
     let startToken: string | null = null;
     if (isStartCommand) {
-      const parts = text.split(' ');
-      if (parts.length > 1) {
-        startToken = parts[1].trim();
+      const match = text.match(/^\/start(?:@\w+)?\s+(\S+)/i);
+      if (match) {
+        startToken = match[1].trim();
       }
     }
 
@@ -1869,6 +1873,7 @@ export class TelegramService {
         '💰 Payments', 'Payments',
         '🧾 Invoices', 'Invoices',
         '📈 Status', 'Status',
+        '🖥️ Hosting', 'Hosting',
       ].includes(rawText);
 
       const handlerStart = performance.now();
@@ -1960,6 +1965,7 @@ export class TelegramService {
       else if (rawText === '💰 Payments' || rawText === 'Payments') clientCmdName = '/payments';
       else if (rawText === '🧾 Invoices' || rawText === 'Invoices') clientCmdName = '/invoices';
       else if (rawText === '📈 Status' || rawText === 'Status') clientCmdName = '/status';
+      else if (rawText === '🖥️ Hosting' || rawText === 'Hosting') clientCmdName = '/hosting';
 
       return {
         command: clientCmdName,
@@ -2056,13 +2062,14 @@ export class TelegramService {
     else if (raw === '💰 Payments' || raw === 'Payments') cmd = '/payments';
     else if (raw === '🧾 Invoices' || raw === 'Invoices') cmd = '/invoices';
     else if (raw === '📈 Status' || raw === 'Status') cmd = '/status';
+    else if (raw === '🖥️ Hosting' || raw === 'Hosting') cmd = '/hosting';
 
     switch (cmd) {
       case '/start':
       case '/help':
         await this.sendMessageRaw(
           chatId,
-          `<b>👋 Hello, ${client.name}!</b>\n\nHere are the available commands:\n/myprofile - View Profile Information\n/myproject - View Project Budgets\n/payments - View Payments List\n/invoices - View Invoices & PDF\n/status - Check Current Phase`,
+          `<b>👋 Hello, ${client.name}!</b>\n\nHere are the available commands:\n/myprofile - View Profile Information\n/myproject - View Project Budgets\n/payments - View Payments List\n/invoices - View Invoices & PDF\n/status - Check Current Phase\n/hosting - View Hosting Details`,
           { reply_markup: this.getClientReplyKeyboard() }
         );
         break;
@@ -2436,6 +2443,88 @@ export class TelegramService {
         } else {
           await this.sendMessage(chatId, `❌ Invalid request selection. Type /requests to see the list.`, timings);
         }
+        break;
+      }
+
+      case '/hosting':
+      case '/hostings':
+      case '/myhosting': {
+        const dbStart = performance.now();
+        // Server-side authorization: strictly query hosting records belonging to this authenticated client
+        const hostings = await Hosting.find({ clientId: client._id })
+          .populate('projectId', 'name projectCode')
+          .sort({ expiryDate: 1 })
+          .lean();
+
+        if (timings) {
+          timings.databaseQuery += Math.round(performance.now() - dbStart);
+        }
+
+        if (!hostings || hostings.length === 0) {
+          await this.sendMessageRaw(
+            chatId,
+            `🖥️ <b>Your Hosting</b>\n\nYou currently don't have any hosting records associated with your projects.`,
+            { reply_markup: this.getClientReplyKeyboard() }
+          );
+          return;
+        }
+
+        let msg = `🖥️ <b>Your Hosting Services (${hostings.length})</b>\n\n`;
+
+        hostings.forEach((h: any, idx: number) => {
+          const daysRemaining = HostingService.calculateDaysRemaining(h.expiryDate);
+          const currentStatus = HostingService.deriveStatus(h.expiryDate, h.status);
+
+          let statusEmoji = '🟢';
+          let statusText = 'Active';
+          if (currentStatus === 'EXPIRING_SOON') {
+            statusEmoji = '⚠️';
+            statusText = 'Expiring Soon';
+          } else if (currentStatus === 'EXPIRED') {
+            statusEmoji = '🔴';
+            statusText = 'Expired';
+          } else if (currentStatus === 'CANCELLED') {
+            statusEmoji = '⚪';
+            statusText = 'Cancelled';
+          }
+
+          const expiryDateFormatted = new Date(h.expiryDate).toLocaleDateString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+          });
+
+          const projectName = h.projectId?.name
+            ? `${h.projectId.name} (${h.projectId.projectCode})`
+            : 'General Client Hosting';
+
+          const daysText = daysRemaining <= 0
+            ? `Expired (${Math.abs(daysRemaining)} days ago)`
+            : `${daysRemaining} day${daysRemaining > 1 ? 's' : ''} remaining`;
+
+          msg += `${idx + 1}. <b>${h.domain}</b>\n` +
+                 `   <b>Project:</b> ${projectName}\n` +
+                 `   <b>Provider:</b> ${h.hostingProvider}${h.hostingType ? ` (${h.hostingType})` : ''}\n` +
+                 `   <b>Status:</b> ${statusEmoji} ${statusText}\n` +
+                 `   <b>Expires:</b> ${expiryDateFormatted} <i>(${daysText})</i>\n`;
+
+          if (h.serverHost) {
+            msg += `   <b>Server:</b> <code>${h.serverHost}</code>\n`;
+          }
+          if (h.panelUrl) {
+            msg += `   <b>Panel:</b> ${h.panelUrl}\n`;
+          }
+          if (h.planName) {
+            msg += `   <b>Plan:</b> ${h.planName}\n`;
+          }
+          msg += `\n`;
+        });
+
+        msg += `<i>Note: For security reasons, server passwords and keys are not shared over Telegram. Please log in to your CRM dashboard to view credentials securely.</i>`;
+
+        await this.sendMessageRaw(chatId, msg, {
+          reply_markup: this.getClientReplyKeyboard(),
+        });
         break;
       }
 
