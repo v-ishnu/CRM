@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import Client, { IClient } from '@/models/Client';
 import { AuditService } from './audit.service';
+import { CacheService } from './cache.service';
 import { dbConnect } from '@/lib/db/connect';
 
 export class ClientService {
@@ -61,6 +62,8 @@ export class ClientService {
       code: savedClient.clientCode,
     });
 
+    await CacheService.invalidateClientsCache();
+
     return savedClient;
   }
 
@@ -115,6 +118,17 @@ export class ClientService {
     await dbConnect();
 
     const { search, status, sortBy = 'createdAt', sortOrder = 'desc', page = 1, limit = 10 } = params;
+
+    // Cache-aside: only cache standard unfiltered queries
+    const isCacheable = !search && !status;
+    const cacheKey = isCacheable ? `crm:clients:list:p${page}_l${limit}_s${sortBy}_o${sortOrder}` : null;
+    if (cacheKey) {
+      const cached = await CacheService.get<{ clients: any[]; pagination: any }>(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    }
+
     const query: Record<string, any> = {};
 
     if (status) {
@@ -140,7 +154,7 @@ export class ClientService {
       .skip(skip)
       .limit(limit);
 
-    return {
+    const result = {
       clients,
       pagination: {
         total,
@@ -149,6 +163,12 @@ export class ClientService {
         pages: Math.ceil(total / limit),
       },
     };
+
+    if (cacheKey) {
+      await CacheService.set(cacheKey, result, CacheService.DEFAULT_TTL);
+    }
+
+    return result;
   }
 
   /**
@@ -218,6 +238,8 @@ export class ClientService {
       telegramUserId: telegramInfo.telegramUserId,
       telegramUsername: telegramInfo.telegramUsername,
     });
+
+    await CacheService.invalidateClientsCache();
 
     return updatedClient;
   }

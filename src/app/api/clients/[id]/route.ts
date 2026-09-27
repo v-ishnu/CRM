@@ -10,6 +10,7 @@ import DataRequest from '@/models/DataRequest';
 import { AuditService } from '@/services/audit.service';
 import { PaymentService } from '@/services/payment.service';
 import { StorageService } from '@/services/storage.service';
+import { CacheService } from '@/services/cache.service';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -147,6 +148,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       updatedFields: Object.keys(body),
     });
 
+    await CacheService.invalidateClientsCache();
+
     return NextResponse.json({
       success: true,
       data: updatedClient,
@@ -242,6 +245,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       clientCode: client.clientCode,
       name: client.name,
     });
+
+    await CacheService.invalidateClientsCache();
+    await CacheService.invalidateProjectsCache(id);
 
     return NextResponse.json({
       success: true,

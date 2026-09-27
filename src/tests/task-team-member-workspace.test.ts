@@ -51,6 +51,10 @@ describe('Team Member ↔ Task Management Workspace & Security Tests', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(Client, 'findById').mockResolvedValue({
+      name: 'Mock Client',
+      status: 'ACTIVE',
+    } as any);
   });
 
   // ==========================================

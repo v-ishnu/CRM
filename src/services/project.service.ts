@@ -1,6 +1,7 @@
 import Project, { IProject } from '@/models/Project';
 import Client from '@/models/Client';
 import { AuditService } from './audit.service';
+import { CacheService } from './cache.service';
 import { dbConnect } from '@/lib/db/connect';
 
 export class ProjectService {
@@ -83,6 +84,8 @@ export class ProjectService {
       clientId: savedProject.clientId,
     });
 
+    await CacheService.invalidateProjectsCache(savedProject.clientId.toString());
+
     return savedProject;
   }
 
@@ -139,6 +142,8 @@ export class ProjectService {
       clientId: project.clientId,
     });
 
+    await CacheService.invalidateProjectsCache(project.clientId.toString());
+
     return { success: true, projectName: project.name };
   }
 
@@ -155,6 +160,21 @@ export class ProjectService {
     await dbConnect();
 
     const { clientId, status, search, sortBy = 'createdAt', sortOrder = 'desc' } = params;
+
+    // Cache-aside check: only cache standard queries without dynamic search keyword
+    let cacheKey: string | null = null;
+    if (!search && !status) {
+      if (clientId) {
+        cacheKey = CacheService.projectsByClientKey(clientId.toString());
+      } else {
+        cacheKey = CacheService.allProjectsKey();
+      }
+      const cached = await CacheService.get<any[]>(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    }
+
     const query: Record<string, any> = {};
 
     if (clientId) {
@@ -176,6 +196,10 @@ export class ProjectService {
     const projects = await Project.find(query)
       .populate('clientId', 'name company clientCode')
       .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 });
+
+    if (cacheKey) {
+      await CacheService.set(cacheKey, projects, CacheService.DEFAULT_TTL);
+    }
 
     return projects;
   }
@@ -215,6 +239,8 @@ export class ProjectService {
       newStatus,
     });
 
+    await CacheService.invalidateProjectsCache(updatedProject.clientId.toString());
+
     return updatedProject;
   }
 
@@ -236,6 +262,7 @@ export class ProjectService {
     const updatableFields = [
       'name',
       'description',
+      'clientId',
       'serviceType',
       'totalAmount',
       'currency',
@@ -272,6 +299,8 @@ export class ProjectService {
       updatedFields,
       oldValues,
     });
+
+    await CacheService.invalidateProjectsCache(saved?.clientId?.toString(), oldValues?.clientId?.toString());
 
     return saved;
   }

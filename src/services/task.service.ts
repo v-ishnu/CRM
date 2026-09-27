@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import Task, { ITask, TaskPriority, TaskStatus, SubmissionType } from '@/models/Task';
 import Project from '@/models/Project';
+import Client from '@/models/Client';
 import TeamMember from '@/models/TeamMember';
 import { AuditService } from './audit.service';
 import { TelegramService } from './telegram.service';
@@ -85,6 +86,10 @@ export class TaskService {
       throw new Error('Task title is required');
     }
 
+    if (!data.projectId) {
+      throw new Error('Project is required');
+    }
+
     const project = await Project.findById(data.projectId);
     if (!project) {
       throw new Error('Project not found');
@@ -92,6 +97,11 @@ export class TaskService {
 
     // Validate Client -> Project relationship
     if (data.clientId) {
+      const client = await Client.findById(data.clientId);
+      if (!client) {
+        throw new Error('Client not found');
+      }
+
       const projectClientId = project.clientId?.toString();
       const requestedClientId = data.clientId.toString();
       if (projectClientId && projectClientId !== requestedClientId) {
@@ -201,17 +211,26 @@ export class TaskService {
 
     const effectiveProjectId = data.projectId !== undefined ? data.projectId : task.projectId;
     if (data.projectId !== undefined || data.clientId !== undefined) {
-      if (effectiveProjectId) {
-        const project = await Project.findById(effectiveProjectId);
-        if (!project) throw new Error('Project not found');
-        const checkClientId = data.clientId || (data.projectId !== undefined ? undefined : task.clientId);
-        if (checkClientId && project.clientId && project.clientId.toString() !== checkClientId.toString()) {
+      if (!effectiveProjectId) {
+        throw new Error('Project is required');
+      }
+      const project = await Project.findById(effectiveProjectId);
+      if (!project) throw new Error('Project not found');
+
+      const checkClientId = data.clientId || (data.projectId !== undefined ? undefined : task.clientId);
+      if (checkClientId) {
+        const client = await Client.findById(checkClientId);
+        if (!client) throw new Error('Client not found');
+
+        const projectClientId = project.clientId?.toString();
+        const requestedClientId = checkClientId.toString();
+        if (projectClientId && projectClientId !== requestedClientId) {
           throw new Error('Invalid relationship: Selected project does not belong to the selected client');
         }
-        if (data.projectId !== undefined) {
-          task.projectId = project._id as any;
-          task.clientId = project.clientId as any;
-        }
+      }
+      if (data.projectId !== undefined) {
+        task.projectId = project._id as any;
+        task.clientId = project.clientId as any;
       }
     }
 

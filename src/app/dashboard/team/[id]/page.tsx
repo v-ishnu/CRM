@@ -168,7 +168,7 @@ export default function TeamMemberWorkspacePage() {
       const [memberRes, tasksRes, clientsRes, projectsRes] = await Promise.all([
         fetch(`/api/team-members/${memberId}`),
         fetch(`/api/tasks?assignedTo=${memberId}`),
-        fetch('/api/clients?limit=100'),
+        fetch('/api/clients?limit=500'),
         fetch('/api/projects'),
       ]);
 
@@ -188,7 +188,7 @@ export default function TeamMemberWorkspacePage() {
         setTasks(tasksData.data || []);
       }
       if (clientsData.success) {
-        setClients(clientsData.data || []);
+        setClients(clientsData.clients || clientsData.data?.clients || clientsData.data || []);
       }
       if (projectsData.success) {
         setProjects(projectsData.data || []);
@@ -327,15 +327,11 @@ export default function TeamMemberWorkspacePage() {
 
   // Open Assign Task Modal (Preselected & locked to this member)
   const handleOpenAssignTask = () => {
-    const defaultProj = projects[0];
-    const defaultProjId = defaultProj?._id || '';
-    const defaultClientId = defaultProj?.clientId?._id || defaultProj?.clientId || '';
-
     setAssignTaskForm({
       title: '',
       description: '',
-      clientId: defaultClientId,
-      projectId: defaultProjId,
+      clientId: '',
+      projectId: '',
       priority: 'MEDIUM',
       dueDate: '',
       agreedAmount: '',
@@ -347,9 +343,7 @@ export default function TeamMemberWorkspacePage() {
       submissionInstructions: '',
     });
     setAssignTaskError('');
-    if (defaultProjId) {
-      loadProjectCredentials(defaultProjId);
-    }
+    setProjectCredentials([]);
     setShowAssignTaskModal(true);
   };
 
@@ -408,8 +402,10 @@ export default function TeamMemberWorkspacePage() {
   const handleOpenEditTask = (task: any) => {
     setSelectedTask(task);
     setEditTaskError('');
-    const pId = task.projectId?._id || task.projectId || '';
-    const cId = task.clientId?._id || task.clientId || (task.projectId?.clientId?._id || task.projectId?.clientId) || '';
+    const pId = task.projectId?._id ? String(task.projectId._id) : (task.projectId ? String(task.projectId) : '');
+    const cId = task.clientId?._id
+      ? String(task.clientId._id)
+      : (task.clientId ? String(task.clientId) : (task.projectId?.clientId?._id ? String(task.projectId.clientId._id) : (task.projectId?.clientId ? String(task.projectId.clientId) : '')));
 
     setEditTaskForm({
       title: task.title || '',
@@ -1717,7 +1713,9 @@ export default function TeamMemberWorkspacePage() {
                         ...prev,
                         clientId: newCId,
                         projectId: '',
+                        requiredCredentialIds: [],
                       }));
+                      setProjectCredentials([]);
                     }}
                     className="w-full bg-[#0a0a0a] border border-[#242428] px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                   >
@@ -1737,19 +1735,28 @@ export default function TeamMemberWorkspacePage() {
                     value={assignTaskForm.projectId}
                     onChange={(e) => {
                       const pId = e.target.value;
-                      const selectedProj = projects.find((p) => p._id === pId);
+                      const selectedProj = projects.find((p) => String(p._id) === String(pId));
+                      const derivedClientId = selectedProj?.clientId?._id
+                        ? String(selectedProj.clientId._id)
+                        : (selectedProj?.clientId ? String(selectedProj.clientId) : assignTaskForm.clientId);
                       setAssignTaskForm((prev) => ({
                         ...prev,
                         projectId: pId,
-                        clientId: selectedProj?.clientId?._id || selectedProj?.clientId || prev.clientId,
+                        clientId: derivedClientId || prev.clientId,
+                        requiredCredentialIds: [],
                       }));
                       if (pId) loadProjectCredentials(pId);
+                      else setProjectCredentials([]);
                     }}
                     className="w-full bg-[#0a0a0a] border border-[#242428] px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                   >
                     <option value="">Select Project</option>
                     {projects
-                      .filter((p) => !assignTaskForm.clientId || (p.clientId?._id || p.clientId) === assignTaskForm.clientId)
+                      .filter((p) => {
+                        if (!assignTaskForm.clientId) return true;
+                        const pClientId = p.clientId?._id ? String(p.clientId._id) : String(p.clientId || '');
+                        return pClientId === String(assignTaskForm.clientId);
+                      })
                       .map((p) => (
                         <option key={p._id} value={p._id}>
                           {p.name} ({p.projectCode})
@@ -1937,7 +1944,9 @@ export default function TeamMemberWorkspacePage() {
                         ...prev,
                         clientId: newCId,
                         projectId: '',
+                        requiredCredentialIds: [],
                       }));
+                      setProjectCredentials([]);
                     }}
                     className="w-full bg-[#0a0a0a] border border-[#242428] px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                   >
@@ -1957,19 +1966,28 @@ export default function TeamMemberWorkspacePage() {
                     value={editTaskForm.projectId}
                     onChange={(e) => {
                       const pId = e.target.value;
-                      const selectedProj = projects.find((p) => p._id === pId);
+                      const selectedProj = projects.find((p) => String(p._id) === String(pId));
+                      const derivedClientId = selectedProj?.clientId?._id
+                        ? String(selectedProj.clientId._id)
+                        : (selectedProj?.clientId ? String(selectedProj.clientId) : editTaskForm.clientId);
                       setEditTaskForm((prev) => ({
                         ...prev,
                         projectId: pId,
-                        clientId: selectedProj?.clientId?._id || selectedProj?.clientId || prev.clientId,
+                        clientId: derivedClientId || prev.clientId,
+                        requiredCredentialIds: [],
                       }));
                       if (pId) loadProjectCredentials(pId);
+                      else setProjectCredentials([]);
                     }}
                     className="w-full bg-[#0a0a0a] border border-[#242428] px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
                   >
                     <option value="">Select Project</option>
                     {projects
-                      .filter((p) => !editTaskForm.clientId || (p.clientId?._id || p.clientId) === editTaskForm.clientId)
+                      .filter((p) => {
+                        if (!editTaskForm.clientId) return true;
+                        const pClientId = p.clientId?._id ? String(p.clientId._id) : String(p.clientId || '');
+                        return pClientId === String(editTaskForm.clientId);
+                      })
                       .map((p) => (
                         <option key={p._id} value={p._id}>
                           {p.name} ({p.projectCode})
