@@ -112,6 +112,7 @@
   color: #f5f5f2;
   font-size: 0.75rem;
   padding: 0.5rem 0.75rem;
+  border-radius: 2px;
   transition: all 0.15s ease-in-out;
 }
 
@@ -119,6 +120,83 @@
   outline: none;
   border-color: #ff3e00;
   box-shadow: 0 0 0 1px #ff3e00;
+}
+
+/* Unified CRM Dropdown / Select Design System */
+.crm-select {
+  width: 100%;
+  background-color: #0a0a0a;
+  border: 1px solid #242428;
+  color: #f5f5f2;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  padding: 0.5rem 2.25rem 0.5rem 0.875rem;
+  border-radius: 2px;
+  transition: all 0.15s ease-in-out;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238a8a93'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem 1rem;
+}
+
+.crm-select:focus {
+  outline: none;
+  border-color: #ff3e00;
+  box-shadow: 0 0 0 1px #ff3e00;
+}
+
+.crm-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.crm-select option {
+  background-color: #0a0a0a;
+  color: #f5f5f2;
+  padding: 0.5rem;
+}
+
+/* Compact filter-bar select (used in table header toolbars) */
+.crm-select-sm {
+  width: auto;
+  background-color: #0d0d10;
+  border: 1px solid #27272a;
+  color: #f5f5f2;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  padding: 0.375rem 2rem 0.375rem 0.75rem;
+  border-radius: 2px;
+  transition: all 0.15s ease-in-out;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2371717a'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+  background-size: 0.875rem 0.875rem;
+}
+
+.crm-select-sm:focus {
+  outline: none;
+  border-color: #ff3e00;
+  box-shadow: 0 0 0 1px #ff3e00;
+}
+
+.crm-select-sm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.crm-select-sm option {
+  background-color: #0d0d10;
+  color: #f5f5f2;
+  padding: 0.375rem;
 }
 
 .crm-label {

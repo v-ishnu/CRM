@@ -58,8 +58,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // Invoices
     const invoices = await Invoice.find({ clientId: id }).sort({ createdAt: -1 });
 
-    // Payments
-    const payments = await Payment.find({ clientId: id }).sort({ paymentDate: -1 });
+    // Payments (Clients must never view internal bonus records)
+    const paymentsQuery: any = { clientId: id };
+    if (userRole === 'CLIENT') {
+      paymentsQuery.paymentType = { $ne: 'CLIENT_BONUS' };
+    }
+    const payments = await Payment.find(paymentsQuery).sort({ paymentDate: -1 });
+
+    // Bonus calculations for internal accounting
+    const bonusPayments = await Payment.find({
+      clientId: id,
+      paymentType: 'CLIENT_BONUS',
+      status: 'COMPLETED',
+    });
+    const totalBonus = bonusPayments.reduce((sum, p) => sum + p.amount, 0);
+    const totalReceived = totalPaid + totalBonus;
 
     // Audit logs
     const auditLogs = await AuditLog.find({
@@ -103,6 +116,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           totalProjectValue,
           totalPaid,
           outstanding,
+          totalBonus,
+          totalReceived,
         },
       },
     });

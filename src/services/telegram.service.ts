@@ -2119,7 +2119,11 @@ export class TelegramService {
         const dbStart2 = performance.now();
         const projectsWithBalances = await Promise.all(
           projects.map(async (p) => {
-            const payments = await Payment.find({ projectId: p._id, status: 'COMPLETED' })
+            const payments = await Payment.find({
+              projectId: p._id,
+              status: 'COMPLETED',
+              paymentType: { $ne: 'CLIENT_BONUS' },
+            })
               .select('amount')
               .lean();
             const paidAmount = payments.reduce((sum, pay) => sum + pay.amount, 0);
@@ -2186,7 +2190,11 @@ export class TelegramService {
         const dbStart2 = performance.now();
         const projectsWithPayments = await Promise.all(
           projects.map(async (p) => {
-            const payments = await Payment.find({ projectId: p._id, status: 'COMPLETED' })
+            const payments = await Payment.find({
+              projectId: p._id,
+              status: 'COMPLETED',
+              paymentType: { $ne: 'CLIENT_BONUS' },
+            })
               .select('amount paymentType paymentMethod paymentNumber paymentDate')
               .sort({ paymentDate: -1 })
               .lean();
@@ -2333,7 +2341,11 @@ export class TelegramService {
         const dbStart2 = performance.now();
         const projectsWithStatus = await Promise.all(
           projects.map(async (p) => {
-            const payments = await Payment.find({ projectId: p._id, status: 'COMPLETED' })
+            const payments = await Payment.find({
+              projectId: p._id,
+              status: 'COMPLETED',
+              paymentType: { $ne: 'CLIENT_BONUS' },
+            })
               .select('amount')
               .lean();
             const paidAmount = payments.reduce((sum, pay) => sum + pay.amount, 0);

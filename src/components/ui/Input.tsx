@@ -58,14 +58,16 @@ export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElemen
   label?: string;
   error?: string;
   hint?: string;
+  sizeVariant?: 'normal' | 'sm';
 }
 
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
-  ({ label, error, hint, className = '', id, children, ...props }, ref) => {
+  ({ label, error, hint, sizeVariant = 'normal', className = '', id, children, ...props }, ref) => {
     const selectId = id || (label ? label.toLowerCase().replace(/\s+/g, '-') : undefined);
+    const baseClass = sizeVariant === 'sm' ? 'crm-select-sm' : 'crm-select';
 
     return (
-      <div className="w-full">
+      <div className={sizeVariant === 'sm' ? 'inline-block' : 'w-full'}>
         {label && (
           <label
             htmlFor={selectId}
@@ -78,11 +80,9 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
         <select
           ref={ref}
           id={selectId}
-          className={`w-full bg-[#0d0d10] border rounded-sm px-3.5 py-2.5 text-xs sm:text-sm text-[#f5f5f2] outline-none transition-all duration-150 ${
-            error
-              ? 'border-red-500/60 focus:border-red-500 focus:ring-1 focus:ring-red-500'
-              : 'border-[#27272a] focus:border-[#ff3e00] focus:ring-1 focus:ring-[#ff3e00]'
-          } disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+          className={`${baseClass} ${
+            error ? '!border-red-500/60 !focus:border-red-500 !focus:ring-red-500' : ''
+          } ${className}`}
           {...props}
         >
           {children}

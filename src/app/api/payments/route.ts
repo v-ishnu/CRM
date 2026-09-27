@@ -15,13 +15,22 @@ export async function GET(req: NextRequest) {
     const clientId = searchParams.get('clientId') || undefined;
     const projectId = searchParams.get('projectId') || undefined;
     const status = searchParams.get('status') || undefined;
+    const paymentType = searchParams.get('paymentType') || undefined;
     const search = searchParams.get('search') || undefined;
 
+    const userRole = req.headers.get('x-user-role');
     const query: Record<string, any> = {};
 
     if (clientId) query.clientId = clientId;
     if (projectId) query.projectId = projectId;
     if (status) query.status = status;
+
+    // Security: Clients must never view internal bonus records
+    if (userRole === 'CLIENT') {
+      query.paymentType = { $ne: 'CLIENT_BONUS' };
+    } else if (paymentType) {
+      query.paymentType = paymentType;
+    }
 
     if (search) {
       const searchRegex = new RegExp(search, 'i');
@@ -48,6 +57,16 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const actor = req.headers.get('x-user-email') || 'admin';
+  const actorRole = req.headers.get('x-user-role') || 'ADMIN';
+
+  // Role check: Only authorized admin/staff users may record payments or bonuses
+  if (actorRole === 'CLIENT') {
+    return NextResponse.json(
+      { success: false, error: { code: 'FORBIDDEN', message: 'Clients are not authorized to record payments' } },
+      { status: 403 }
+    );
+  }
+
   try {
     await dbConnect();
     const body = await req.json();
@@ -55,8 +74,10 @@ export async function POST(req: NextRequest) {
     const payment = await PaymentService.recordPayment(body, actor);
 
     // If payment recorded, trigger Telegram confirmation if client is linked
-    const notifyClient = body.notifyClient !== false;
-    if (notifyClient) {
+    // CRITICAL: CLIENT_BONUS is strictly internal-only and must NEVER trigger client notifications
+    const isBonus = payment.paymentType === 'CLIENT_BONUS';
+    const notifyClient = !isBonus && body.notifyClient !== false;
+    if (notifyClient && payment.projectId) {
       const client = await Client.findById(payment.clientId);
       if (client && client.telegramConnected) {
         try {

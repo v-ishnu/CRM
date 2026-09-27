@@ -129,7 +129,7 @@ export default function ProjectsPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 bg-[#0d0d10] border border-[#27272a] focus:border-[#ff3e00] text-xs font-mono text-[#f5f5f2] rounded-xs outline-none transition-all cursor-pointer w-full sm:w-44"
+            className="crm-select-sm w-full sm:w-44"
           >
             <option value="">ALL PROJECT STATES</option>
             <option value="PLANNED">PLANNED</option>
@@ -216,7 +216,7 @@ export default function ProjectsPage() {
                           <select
                             value={proj.status}
                             onChange={(e) => handleStatusChange(proj._id, e.target.value)}
-                            className="bg-[#0d0d10] border border-[#27272a] hover:border-[#ff3e00]/50 text-[10px] font-mono font-bold uppercase text-[#a1a1aa] rounded-xs px-1.5 py-0.5 outline-none cursor-pointer"
+                            className="crm-select-sm !px-1.5 !py-0.5 !text-[10px]"
                           >
                             <option value="PLANNED">PLANNED</option>
                             <option value="ONBOARDING">ONBOARDING</option>

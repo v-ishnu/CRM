@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Payment, { IPayment } from '@/models/Payment';
 import Project from '@/models/Project';
 import Invoice from '@/models/Invoice';
@@ -9,6 +10,8 @@ export interface ProjectBalance {
   paidAmount: number;
   outstandingAmount: number;
   currency: string;
+  bonusAmount?: number;
+  totalReceived?: number;
 }
 
 export class PaymentService {
@@ -40,6 +43,7 @@ export class PaymentService {
   /**
    * Calculate financial balances for a project
    * SINGLE SOURCE OF TRUTH: Aggregates total completed payments from DB
+   * IMPORTANT: CLIENT_BONUS payments do NOT reduce the outstanding project balance.
    */
   static async calculateProjectBalances(projectId: string): Promise<ProjectBalance> {
     await dbConnect();
@@ -49,35 +53,57 @@ export class PaymentService {
       throw new Error('Project not found');
     }
 
-    // Sum all COMPLETED payments for this project
-    const payments = await Payment.find({
+    // Sum all COMPLETED regular payments for this project (excluding CLIENT_BONUS)
+    const regularPayments = await Payment.find({
       projectId,
       status: 'COMPLETED',
+      paymentType: { $ne: 'CLIENT_BONUS' },
     });
 
-    const paidAmount = payments.reduce((sum, p) => sum + p.amount, 0);
+    // Sum all COMPLETED client bonus payments for this project
+    const bonusPayments = await Payment.find({
+      projectId,
+      status: 'COMPLETED',
+      paymentType: 'CLIENT_BONUS',
+    });
+
+    const paidAmount = regularPayments.reduce((sum, p) => sum + p.amount, 0);
+    const bonusAmount = bonusPayments.reduce((sum, p) => sum + p.amount, 0);
     const outstandingAmount = Math.max(0, project.totalAmount - paidAmount);
+    const totalReceived = paidAmount + bonusAmount;
 
     return {
       totalAmount: project.totalAmount,
       paidAmount,
       outstandingAmount,
       currency: project.currency,
+      bonusAmount,
+      totalReceived,
     };
   }
 
   /**
-   * Record a new payment transaction with validations
+   * Record a new payment or client bonus transaction with validations
    */
   static async recordPayment(
-    paymentData: Partial<IPayment>,
+    paymentData: Partial<Omit<IPayment, 'clientId' | 'projectId' | 'invoiceId'>> & {
+      clientId?: mongoose.Types.ObjectId | string;
+      projectId?: mongoose.Types.ObjectId | string;
+      invoiceId?: mongoose.Types.ObjectId | string;
+    },
     actor: string
   ): Promise<IPayment> {
     await dbConnect();
 
-    const { projectId, clientId, amount, paymentMethod, paymentType, transactionReference, notes, invoiceId } = paymentData;
+    const { projectId, clientId, amount, paymentMethod, paymentType, transactionReference, notes, invoiceId, currency } = paymentData;
 
-    if (!projectId || !clientId || amount === undefined || amount === null || !paymentMethod) {
+    const isBonus = paymentType === 'CLIENT_BONUS';
+
+    if (!clientId || amount === undefined || amount === null || !paymentMethod) {
+      throw new Error('Client, Amount, and Payment Method are required');
+    }
+
+    if (!isBonus && !projectId) {
       throw new Error('Project, Client, Amount, and Payment Method are required');
     }
 
@@ -86,34 +112,54 @@ export class PaymentService {
       throw new Error('Payment amount must be a valid positive number');
     }
 
-    // Verify project and client
-    const project = await Project.findById(projectId);
-    if (!project) {
-      throw new Error('Project not found');
+    // Verify client exists
+    const Client = (await import('@/models/Client')).default;
+    const client = await Client.findById(clientId);
+    if (!client) {
+      throw new Error('Client not found');
     }
 
-    if (project.clientId.toString() !== clientId.toString()) {
-      throw new Error('Project does not belong to the specified client');
-    }
-
-    // Financial integrity check: check outstanding balance
-    const balances = await this.calculateProjectBalances(projectId.toString());
-    
-    // Check if new payment exceeds outstanding balance
-    const currencySymbol = project.currency === 'INR' ? '₹' : (project.currency === 'USD' ? '$' : project.currency);
-    if (numAmount > balances.outstandingAmount) {
-      throw new Error(
-        `Payment exceeds outstanding balance. Outstanding: ${currencySymbol}${balances.outstandingAmount.toLocaleString('en-IN')} Maximum payment allowed: ${currencySymbol}${balances.outstandingAmount.toLocaleString('en-IN')}`
-      );
-    }
-
-    // Auto-link to existing invoice if not provided
-    let finalInvoiceId = invoiceId;
-    if (!finalInvoiceId) {
-      const invoice = await Invoice.findOne({ projectId });
-      if (invoice) {
-        finalInvoiceId = invoice._id;
+    let project: any = null;
+    if (projectId) {
+      project = await Project.findById(projectId);
+      if (!project) {
+        throw new Error('Project not found');
       }
+
+      if (project.clientId.toString() !== clientId.toString()) {
+        throw new Error('Project does not belong to the specified client');
+      }
+    }
+
+    let finalInvoiceId = invoiceId;
+    let paymentCurrency = currency || 'INR';
+
+    if (!isBonus) {
+      // Financial integrity check: regular payments cannot exceed outstanding balance
+      const balances = await this.calculateProjectBalances(projectId!.toString());
+      
+      const currencySymbol = project.currency === 'INR' ? '₹' : (project.currency === 'USD' ? '$' : project.currency);
+      if (numAmount > balances.outstandingAmount) {
+        throw new Error(
+          `Payment exceeds outstanding balance. Outstanding: ${currencySymbol}${balances.outstandingAmount.toLocaleString('en-IN')} Maximum payment allowed: ${currencySymbol}${balances.outstandingAmount.toLocaleString('en-IN')}`
+        );
+      }
+
+      paymentCurrency = project.currency;
+
+      // Auto-link to existing invoice if not provided
+      if (!finalInvoiceId) {
+        const invoice = await Invoice.findOne({ projectId });
+        if (invoice) {
+          finalInvoiceId = invoice._id;
+        }
+      }
+    } else {
+      // Client bonus: optional project, does not check against project balance limit
+      if (project && !currency) {
+        paymentCurrency = project.currency;
+      }
+      finalInvoiceId = undefined; // Bonus does not link to standard invoice
     }
 
     let savedPayment: IPayment | null = null;
@@ -124,10 +170,10 @@ export class PaymentService {
         const payment = new Payment({
           paymentNumber,
           clientId,
-          projectId,
+          projectId: projectId || undefined,
           invoiceId: finalInvoiceId,
           amount: numAmount,
-          currency: project.currency,
+          currency: paymentCurrency,
           paymentMethod,
           paymentType: paymentType || 'INSTALLMENT',
           paymentDate: paymentData.paymentDate || new Date(),
@@ -152,35 +198,50 @@ export class PaymentService {
       throw new Error('Failed to generate unique payment number after multiple attempts');
     }
 
-    // Log action
-    await AuditService.logAction(actor, 'PAYMENT_CREATED', 'Payment', savedPayment._id, {
-      paymentNumber: savedPayment.paymentNumber,
-      amount: savedPayment.amount,
-      projectId: savedPayment.projectId,
-    });
-
-    // Update project status to COMPLETED if fully paid
-    const updatedBalances = await this.calculateProjectBalances(projectId.toString());
-    if (updatedBalances.outstandingAmount === 0 && project.status !== 'COMPLETED') {
-      const oldStatus = project.status;
-      project.status = 'COMPLETED';
-      project.completionDate = new Date();
-      await project.save();
-      
-      await AuditService.logAction(actor, 'PROJECT_STATUS_CHANGED', 'Project', project._id, {
-        oldStatus,
-        newStatus: 'COMPLETED',
-      });
+    // Invalidate client/project cache
+    const { CacheService } = await import('./cache.service');
+    await CacheService.invalidateClientsCache();
+    if (projectId) {
+      await CacheService.invalidateProjectsCache(clientId.toString());
     }
 
-    // Update invoice status and regenerate invoice PDF if linked
-    if (finalInvoiceId) {
-      await this.updateInvoiceStatusFromPayments(finalInvoiceId.toString());
-      try {
-        const { InvoiceService } = await import('./invoice.service');
-        await InvoiceService.generatePDF(finalInvoiceId.toString());
-      } catch (pdfErr) {
-        console.error('Failed to regenerate invoice PDF after recording payment:', pdfErr);
+    // Log action
+    const actionName = isBonus ? 'CLIENT_BONUS_RECORDED' : 'PAYMENT_CREATED';
+    await AuditService.logAction(actor, actionName, 'Payment', savedPayment._id, {
+      paymentNumber: savedPayment.paymentNumber,
+      amount: savedPayment.amount,
+      currency: savedPayment.currency,
+      paymentMethod: savedPayment.paymentMethod,
+      paymentType: savedPayment.paymentType,
+      clientId: savedPayment.clientId,
+      projectId: savedPayment.projectId,
+      notes: savedPayment.notes,
+    });
+
+    if (!isBonus && project) {
+      // Update project status to COMPLETED if fully paid
+      const updatedBalances = await this.calculateProjectBalances(projectId!.toString());
+      if (updatedBalances.outstandingAmount === 0 && project.status !== 'COMPLETED') {
+        const oldStatus = project.status;
+        project.status = 'COMPLETED';
+        project.completionDate = new Date();
+        await project.save();
+        
+        await AuditService.logAction(actor, 'PROJECT_STATUS_CHANGED', 'Project', project._id, {
+          oldStatus,
+          newStatus: 'COMPLETED',
+        });
+      }
+
+      // Update invoice status and regenerate invoice PDF if linked
+      if (finalInvoiceId) {
+        await this.updateInvoiceStatusFromPayments(finalInvoiceId.toString());
+        try {
+          const { InvoiceService } = await import('./invoice.service');
+          await InvoiceService.generatePDF(finalInvoiceId.toString());
+        } catch (pdfErr) {
+          console.error('Failed to regenerate invoice PDF after recording payment:', pdfErr);
+        }
       }
     }
 
@@ -189,15 +250,17 @@ export class PaymentService {
 
   /**
    * Helper to recalculate and update invoice status
+   * Note: CLIENT_BONUS payments are excluded as they do not apply against invoice balances.
    */
   static async updateInvoiceStatusFromPayments(invoiceId: string): Promise<void> {
     const invoice = await Invoice.findById(invoiceId);
     if (!invoice) return;
 
-    // Find all completed payments for this invoice
+    // Find all completed regular payments for this invoice
     const payments = await Payment.find({
       invoiceId,
       status: 'COMPLETED',
+      paymentType: { $ne: 'CLIENT_BONUS' },
     });
 
     const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);

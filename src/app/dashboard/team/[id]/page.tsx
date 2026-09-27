@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useMasterData } from '@/hooks/useMasterData';
 import {
   ArrowLeft,
   UserCheck,
@@ -42,6 +43,23 @@ export default function TeamMemberWorkspacePage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const memberId = params.id as string;
+
+  const { items: masterDesignations, refresh: refreshDesignations } = useMasterData('TEAM_DESIGNATION');
+
+  const defaultDesignations = [
+    'Full Stack Developer',
+    'Frontend Engineer',
+    'Backend Engineer',
+    'WordPress Specialist',
+    'UI/UX Designer',
+    'SEO Specialist',
+    'DevOps Engineer',
+    'QA / Test Engineer',
+    'Project Manager',
+  ];
+  const renderedDesignations = masterDesignations.length > 0
+    ? masterDesignations.map((d) => d.label)
+    : defaultDesignations;
 
   const activeTab = searchParams.get('tab') || 'overview';
 
@@ -87,6 +105,7 @@ export default function TeamMemberWorkspacePage() {
     email: '',
     phone: '',
     role: 'DEVELOPER',
+    designation: '',
     permissions: [] as string[],
     bankDetails: {
       accountHolderName: '',
@@ -232,11 +251,13 @@ export default function TeamMemberWorkspacePage() {
   // Open Edit Member Modal
   const handleOpenEditMember = () => {
     if (!member) return;
+    refreshDesignations();
     setEditMemberForm({
       name: member.name,
       email: member.email,
       phone: member.phone || '',
       role: member.role || 'DEVELOPER',
+      designation: member.designation || member.role || 'DEVELOPER',
       permissions: member.permissions || [],
       bankDetails: {
         accountHolderName: member.bankDetails?.accountHolderName || '',
@@ -259,7 +280,8 @@ export default function TeamMemberWorkspacePage() {
         name: editMemberForm.name,
         email: editMemberForm.email,
         phone: editMemberForm.phone || undefined,
-        role: editMemberForm.role,
+        role: editMemberForm.role || 'DEVELOPER',
+        designation: editMemberForm.designation,
         permissions: editMemberForm.permissions,
       };
 
@@ -727,7 +749,7 @@ export default function TeamMemberWorkspacePage() {
               <div className="flex items-center gap-2.5 flex-wrap">
                 <h1 className="text-lg md:text-xl font-bold text-white font-mono">{member.name}</h1>
                 <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 border bg-[#18181b] border-[#242428] text-[#8a8a93]">
-                  {member.role}
+                  {member.designation || member.role}
                 </span>
                 <span
                   className={`text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 border ${
@@ -1132,7 +1154,7 @@ export default function TeamMemberWorkspacePage() {
                         <select
                           value={task.status}
                           onChange={(e) => handleTaskStatusChange(task._id, e.target.value)}
-                          className="px-2.5 py-1.5 bg-[#0a0a0a] border border-[#242428] text-white focus:outline-none focus:border-[#ff3e00] cursor-pointer"
+                          className="crm-select-sm"
                         >
                           {statusOptions.map((opt) => (
                             <option key={opt.value} value={opt.value} className="bg-[#0a0a0a] text-white">
@@ -1503,18 +1525,18 @@ export default function TeamMemberWorkspacePage() {
               </div>
 
               <div>
-                <label className="block text-[10px] uppercase text-[#88888e] mb-1">Role</label>
+                <label className="block text-[10px] uppercase text-[#88888e] mb-1">Role / Designation</label>
                 <select
-                  value={editMemberForm.role}
-                  onChange={(e) => setEditMemberForm({ ...editMemberForm, role: e.target.value })}
-                  className="w-full bg-[#0a0a0a] border border-[#242428] px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                  value={editMemberForm.designation}
+                  onChange={(e) => setEditMemberForm({ ...editMemberForm, designation: e.target.value })}
+                  className="crm-select"
                 >
-                  <option value="DEVELOPER">DEVELOPER</option>
-                  <option value="DESIGNER">DESIGNER</option>
-                  <option value="QA_TESTER">QA_TESTER</option>
-                  <option value="PROJECT_MANAGER">PROJECT_MANAGER</option>
-                  <option value="DEVOPS">DEVOPS</option>
-                  <option value="CONTENT_WRITER">CONTENT_WRITER</option>
+                  {renderedDesignations.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                  {editMemberForm.designation && !renderedDesignations.includes(editMemberForm.designation) && (
+                    <option value={editMemberForm.designation}>{editMemberForm.designation} (Inactive)</option>
+                  )}
                 </select>
               </div>
 
@@ -1682,7 +1704,7 @@ export default function TeamMemberWorkspacePage() {
               <div className="p-3 bg-[#0a0a0a] border border-[#242428] flex items-center justify-between">
                 <div>
                   <span className="text-[10px] text-[#88888e] uppercase block">Assigned Team Member</span>
-                  <span className="text-white font-bold">{member.name} ({member.role})</span>
+                  <span className="text-white font-bold">{member.name} ({member.designation || member.role})</span>
                 </div>
                 <span className="text-[10px] text-[#00D664] bg-[#0e1f15] border border-[#00d664]/30 px-2 py-0.5">
                   PRESELECTED
@@ -1717,7 +1739,7 @@ export default function TeamMemberWorkspacePage() {
                       }));
                       setProjectCredentials([]);
                     }}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select"
                   >
                     <option value="">All Clients</option>
                     {clients.map((c) => (
@@ -1748,7 +1770,7 @@ export default function TeamMemberWorkspacePage() {
                       if (pId) loadProjectCredentials(pId);
                       else setProjectCredentials([]);
                     }}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select"
                   >
                     <option value="">Select Project</option>
                     {projects
@@ -1772,7 +1794,7 @@ export default function TeamMemberWorkspacePage() {
                   <select
                     value={assignTaskForm.priority}
                     onChange={(e) => setAssignTaskForm({ ...assignTaskForm, priority: e.target.value })}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select"
                   >
                     <option value="LOW">Low</option>
                     <option value="MEDIUM">Medium</option>
@@ -1948,7 +1970,7 @@ export default function TeamMemberWorkspacePage() {
                       }));
                       setProjectCredentials([]);
                     }}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select"
                   >
                     <option value="">All Clients</option>
                     {clients.map((c) => (
@@ -1979,7 +2001,7 @@ export default function TeamMemberWorkspacePage() {
                       if (pId) loadProjectCredentials(pId);
                       else setProjectCredentials([]);
                     }}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select"
                   >
                     <option value="">Select Project</option>
                     {projects
@@ -2003,7 +2025,7 @@ export default function TeamMemberWorkspacePage() {
                   <select
                     value={editTaskForm.priority}
                     onChange={(e) => setEditTaskForm({ ...editTaskForm, priority: e.target.value as any })}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select"
                   >
                     <option value="LOW">Low</option>
                     <option value="MEDIUM">Medium</option>
@@ -2332,7 +2354,7 @@ export default function TeamMemberWorkspacePage() {
                   required
                   value={paymentForm.projectId}
                   onChange={(e) => setPaymentForm({ ...paymentForm, projectId: e.target.value })}
-                  className="w-full bg-[#0a0a0a] border border-[#242428] px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                  className="crm-select"
                 >
                   <option value="">Select Project</option>
                   {projects.map((p) => (
@@ -2357,7 +2379,7 @@ export default function TeamMemberWorkspacePage() {
                       description: t ? `Payment for task: ${t.title}` : paymentForm.description,
                     });
                   }}
-                  className="w-full bg-[#0a0a0a] border border-[#242428] px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                  className="crm-select"
                 >
                   <option value="">No specific task (General compensation)</option>
                   {tasks.map((t) => (
@@ -2387,7 +2409,7 @@ export default function TeamMemberWorkspacePage() {
                   <select
                     value={paymentForm.paymentMethod}
                     onChange={(e) => setPaymentForm({ ...paymentForm, paymentMethod: e.target.value })}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select"
                   >
                     <option value="UPI">UPI</option>
                     <option value="BANK_TRANSFER">Bank Transfer (IMPS/NEFT)</option>

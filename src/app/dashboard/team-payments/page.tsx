@@ -276,7 +276,7 @@ export default function TeamPaymentsPage() {
         <select
           value={memberFilter}
           onChange={(e) => setMemberFilter(e.target.value)}
-          className="bg-[#0a0a0a] border border-[#242428] px-3 py-1.5 text-xs text-[#8a8a93] font-mono focus:outline-none focus:border-[#ff3e00] cursor-pointer"
+          className="crm-select-sm"
         >
           <option value="">ALL TEAM MEMBERS</option>
           {teamMembers.map((m) => (
@@ -289,7 +289,7 @@ export default function TeamPaymentsPage() {
         <select
           value={projectFilter}
           onChange={(e) => setProjectFilter(e.target.value)}
-          className="bg-[#0a0a0a] border border-[#242428] px-3 py-1.5 text-xs text-[#8a8a93] font-mono focus:outline-none focus:border-[#ff3e00] cursor-pointer"
+          className="crm-select-sm"
         >
           <option value="">ALL PROJECTS</option>
           {projects.map((p) => (
@@ -302,7 +302,7 @@ export default function TeamPaymentsPage() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="bg-[#0a0a0a] border border-[#242428] px-3 py-1.5 text-xs text-[#8a8a93] font-mono focus:outline-none focus:border-[#ff3e00] cursor-pointer"
+          className="crm-select-sm"
         >
           <option value="">ALL STATUSES</option>
           <option value="PAID">PAID</option>
@@ -479,7 +479,7 @@ export default function TeamPaymentsPage() {
                     required
                     value={formData.teamMemberId}
                     onChange={(e) => setFormData({ ...formData, teamMemberId: e.target.value })}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] px-3 py-2 text-xs text-[#f5f5f2] focus:outline-none focus:border-[#ff3e00] font-sans cursor-pointer"
+                    className="crm-select"
                   >
                     <option value="">Select Member</option>
                     {teamMembers.map((m) => (
@@ -498,7 +498,7 @@ export default function TeamPaymentsPage() {
                     required
                     value={formData.projectId}
                     onChange={(e) => setFormData({ ...formData, projectId: e.target.value, taskId: '' })}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] px-3 py-2 text-xs text-[#f5f5f2] focus:outline-none focus:border-[#ff3e00] font-sans cursor-pointer"
+                    className="crm-select"
                   >
                     <option value="">Select Project</option>
                     {projects.map((p) => (
@@ -517,7 +517,7 @@ export default function TeamPaymentsPage() {
                 <select
                   value={formData.taskId}
                   onChange={(e) => setFormData({ ...formData, taskId: e.target.value })}
-                  className="w-full bg-[#0a0a0a] border border-[#242428] px-3 py-2 text-xs text-[#f5f5f2] focus:outline-none focus:border-[#ff3e00] font-sans cursor-pointer"
+                  className="crm-select"
                 >
                   <option value="">No linked task (General Project Payout)</option>
                   {availableProjectTasks.map((t) => (
@@ -551,7 +551,7 @@ export default function TeamPaymentsPage() {
                   <select
                     value={formData.paymentMethod}
                     onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value as any })}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] px-3 py-2 text-xs text-[#f5f5f2] font-mono focus:outline-none focus:border-[#ff3e00] cursor-pointer"
+                    className="crm-select font-mono"
                   >
                     <option value="UPI">UPI</option>
                     <option value="BANK_TRANSFER">BANK TRANSFER</option>
@@ -583,7 +583,7 @@ export default function TeamPaymentsPage() {
                   <select
                     value={formData.status}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] px-3 py-2 text-xs text-[#f5f5f2] font-mono focus:outline-none focus:border-[#ff3e00] cursor-pointer"
+                    className="crm-select font-mono"
                   >
                     <option value="PAID">PAID (Sends Telegram Receipt)</option>
                     <option value="PENDING">PENDING</option>

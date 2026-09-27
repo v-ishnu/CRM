@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useMasterData } from '@/hooks/useMasterData';
 import {
   UserPlus,
   Search,
@@ -28,6 +29,23 @@ import {
 
 export default function TeamMembersPage() {
   const [activeTab, setActiveTab] = useState<'members' | 'invitations'>('members');
+
+  const { items: masterDesignations, refresh: refreshDesignations } = useMasterData('TEAM_DESIGNATION');
+
+  const defaultDesignations = [
+    'Full Stack Developer',
+    'Frontend Engineer',
+    'Backend Engineer',
+    'WordPress Specialist',
+    'UI/UX Designer',
+    'SEO Specialist',
+    'DevOps Engineer',
+    'QA / Test Engineer',
+    'Project Manager',
+  ];
+  const renderedDesignations = masterDesignations.length > 0
+    ? masterDesignations.map((d) => d.label)
+    : defaultDesignations;
 
   const [members, setMembers] = useState<any[]>([]);
   const [invitations, setInvitations] = useState<any[]>([]);
@@ -71,6 +89,7 @@ export default function TeamMembersPage() {
     email: string;
     phone: string;
     role: string;
+    designation: string;
     permissions: string[];
     bankDetails: {
       accountHolderName: string;
@@ -84,6 +103,7 @@ export default function TeamMembersPage() {
     email: '',
     phone: '',
     role: 'DEVELOPER',
+    designation: '',
     permissions: ['VIEW_PROJECT', 'VIEW_TASKS'],
     bankDetails: {
       accountHolderName: '',
@@ -150,11 +170,13 @@ export default function TeamMembersPage() {
   }, [activeTab]);
 
   const handleOpenAdd = () => {
+    refreshDesignations();
     setFormData({
       name: '',
       email: '',
       phone: '',
       role: 'DEVELOPER',
+      designation: renderedDesignations[0] || 'Full Stack Developer',
       permissions: ['VIEW_PROJECT', 'VIEW_TASKS'],
       bankDetails: {
         accountHolderName: '',
@@ -169,12 +191,14 @@ export default function TeamMembersPage() {
   };
 
   const handleOpenEdit = (member: any) => {
+    refreshDesignations();
     setSelectedMember(member);
     setFormData({
       name: member.name,
       email: member.email,
       phone: member.phone || '',
-      role: member.role,
+      role: member.role || 'DEVELOPER',
+      designation: member.designation || member.role || 'DEVELOPER',
       permissions: member.permissions || [],
       bankDetails: {
         accountHolderName: member.bankDetails?.accountHolderName || '',
@@ -205,7 +229,8 @@ export default function TeamMembersPage() {
         name: formData.name,
         email: formData.email,
         phone: formData.phone || undefined,
-        role: formData.role,
+        role: formData.role || 'DEVELOPER',
+        designation: formData.designation,
         permissions: formData.permissions,
       };
 
@@ -249,7 +274,8 @@ export default function TeamMembersPage() {
         name: formData.name,
         email: formData.email,
         phone: formData.phone || undefined,
-        role: formData.role,
+        role: formData.role || 'DEVELOPER',
+        designation: formData.designation,
         permissions: formData.permissions,
       };
 
@@ -546,7 +572,7 @@ export default function TeamMembersPage() {
               <select
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value)}
-                className="bg-[#0d0d10] border border-[#27272a] focus:border-[#ff3e00] rounded-xs px-3 py-2 text-xs font-mono text-[#f5f5f2] outline-none cursor-pointer"
+                className="crm-select-sm"
               >
                 <option value="">ALL ROLES</option>
                 <option value="ADMIN">ADMIN</option>
@@ -555,12 +581,15 @@ export default function TeamMembersPage() {
                 <option value="DESIGNER">DESIGNER</option>
                 <option value="SEO">SEO</option>
                 <option value="OTHER">OTHER</option>
+                {renderedDesignations.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
               </select>
 
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="bg-[#0d0d10] border border-[#27272a] focus:border-[#ff3e00] rounded-xs px-3 py-2 text-xs font-mono text-[#f5f5f2] outline-none cursor-pointer"
+                className="crm-select-sm"
               >
                 <option value="">ALL STATUSES</option>
                 <option value="ACTIVE">ACTIVE</option>
@@ -602,7 +631,7 @@ export default function TeamMembersPage() {
                         <p className="text-xs font-mono text-[#8a8a93] mt-1 truncate">{member.email}</p>
                       </div>
                       <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 border bg-[#0a0a0a] border-[#242428] text-white">
-                        {member.role}
+                        {member.designation || member.role}
                       </span>
                     </div>
 
@@ -880,7 +909,7 @@ export default function TeamMembersPage() {
                   <select
                     value={inviteRole}
                     onChange={(e) => setInviteRole(e.target.value)}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select"
                   >
                     <option value="DEVELOPER">Developer</option>
                     <option value="DESIGNER">Designer</option>
@@ -896,7 +925,7 @@ export default function TeamMembersPage() {
                   <select
                     value={inviteExpiresDays}
                     onChange={(e) => setInviteExpiresDays(Number(e.target.value))}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select"
                   >
                     <option value={1}>1 Day (24 hours)</option>
                     <option value={3}>3 Days</option>
@@ -1168,18 +1197,16 @@ export default function TeamMembersPage() {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Role *</label>
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Role / Designation *</label>
                   <select
-                    value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    value={formData.designation}
+                    onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
+                    className="crm-select"
                   >
-                    <option value="DEVELOPER">Developer</option>
-                    <option value="DESIGNER">Designer</option>
-                    <option value="MANAGER">Manager</option>
-                    <option value="SEO">SEO</option>
-                    <option value="ADMIN">Admin</option>
-                    <option value="OTHER">Other</option>
+                    <option value="" disabled>Select designation</option>
+                    {renderedDesignations.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -1373,18 +1400,18 @@ export default function TeamMembersPage() {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Role</label>
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Role / Designation</label>
                   <select
-                    value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    value={formData.designation}
+                    onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
+                    className="crm-select"
                   >
-                    <option value="DEVELOPER">Developer</option>
-                    <option value="DESIGNER">Designer</option>
-                    <option value="MANAGER">Manager</option>
-                    <option value="SEO">SEO</option>
-                    <option value="ADMIN">Admin</option>
-                    <option value="OTHER">Other</option>
+                    {renderedDesignations.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                    {formData.designation && !renderedDesignations.includes(formData.designation) && (
+                      <option value={formData.designation}>{formData.designation} (Inactive)</option>
+                    )}
                   </select>
                 </div>
               </div>

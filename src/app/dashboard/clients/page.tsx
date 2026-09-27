@@ -120,7 +120,7 @@ export default function ClientsPage() {
               setStatus(e.target.value);
               setPage(1);
             }}
-            className="px-3 py-2 bg-[#0d0d10] border border-[#27272a] focus:border-[#ff3e00] text-xs font-mono text-[#f5f5f2] rounded-xs outline-none transition-all cursor-pointer w-full sm:w-44"
+            className="crm-select-sm w-full sm:w-44"
           >
             <option value="">ALL STATUSES</option>
             <option value="LEAD">LEAD</option>

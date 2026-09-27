@@ -11,6 +11,7 @@ export interface IAuditLog extends Document {
     | 'PROJECT_DELETED'
     | 'PAYMENT_CREATED' 
     | 'PAYMENT_UPDATED' 
+    | 'CLIENT_BONUS_RECORDED'
     | 'INVOICE_CREATED' 
     | 'INVOICE_SENT' 
     | 'TELEGRAM_SENT' 
@@ -91,8 +92,11 @@ export interface IAuditLog extends Document {
     | 'INVITATION_REVOKED'
     | 'INVITATION_USED'
     | 'BANK_DETAILS_REVEALED'
-    | 'BANK_DETAILS_UPDATED';
-  entityType: 'Client' | 'Project' | 'Payment' | 'Invoice' | 'Notification' | 'Auth' | 'DataRequest' | 'RequestResponse' | 'Credential' | 'TeamMember' | 'Task' | 'TeamPayment' | 'Inquiry' | 'Hosting' | 'Agreement' | 'TeamMemberInvitation' | 'TaskSubmission';
+    | 'BANK_DETAILS_UPDATED'
+    | 'MASTER_DATA_CREATED'
+    | 'MASTER_DATA_UPDATED'
+    | 'MASTER_DATA_DELETED';
+  entityType: 'Client' | 'Project' | 'Payment' | 'Invoice' | 'Notification' | 'Auth' | 'DataRequest' | 'RequestResponse' | 'Credential' | 'TeamMember' | 'Task' | 'TeamPayment' | 'Inquiry' | 'Hosting' | 'Agreement' | 'TeamMemberInvitation' | 'TaskSubmission' | 'MasterData';
   entityId?: mongoose.Types.ObjectId | string;
   metadata?: Record<string, any>;
   timestamp: Date;
@@ -117,6 +121,7 @@ const AuditLogSchema = new Schema<IAuditLog>(
         'PROJECT_DELETED',
         'PAYMENT_CREATED',
         'PAYMENT_UPDATED',
+        'CLIENT_BONUS_RECORDED',
         'INVOICE_CREATED',
         'INVOICE_SENT',
         'TELEGRAM_SENT',
@@ -198,13 +203,16 @@ const AuditLogSchema = new Schema<IAuditLog>(
         'INVITATION_USED',
         'BANK_DETAILS_REVEALED',
         'BANK_DETAILS_UPDATED',
+        'MASTER_DATA_CREATED',
+        'MASTER_DATA_UPDATED',
+        'MASTER_DATA_DELETED',
       ],
       required: true,
       index: true,
     },
     entityType: {
       type: String,
-      enum: ['Client', 'Project', 'Payment', 'Invoice', 'Notification', 'Auth', 'DataRequest', 'RequestResponse', 'Credential', 'TeamMember', 'Task', 'TeamPayment', 'Inquiry', 'Hosting', 'Agreement', 'TeamMemberInvitation', 'TaskSubmission'],
+      enum: ['Client', 'Project', 'Payment', 'Invoice', 'Notification', 'Auth', 'DataRequest', 'RequestResponse', 'Credential', 'TeamMember', 'Task', 'TeamPayment', 'Inquiry', 'Hosting', 'Agreement', 'TeamMemberInvitation', 'TaskSubmission', 'MasterData'],
       required: true,
       index: true,
     },

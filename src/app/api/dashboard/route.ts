@@ -22,9 +22,21 @@ export async function GET(req: NextRequest) {
     const projects = await Project.find({ status: { $ne: 'CANCELLED' } });
     const totalRevenue = projects.reduce((sum, p) => sum + p.totalAmount, 0);
 
-    const completedPayments = await Payment.find({ status: 'COMPLETED' });
-    const totalPaid = completedPayments.reduce((sum, p) => sum + p.amount, 0);
+    // Regular project payments (exclude CLIENT_BONUS so outstanding balance is never distorted)
+    const completedRegularPayments = await Payment.find({
+      status: 'COMPLETED',
+      paymentType: { $ne: 'CLIENT_BONUS' },
+    });
+    const totalPaid = completedRegularPayments.reduce((sum, p) => sum + p.amount, 0);
     const outstandingAmount = Math.max(0, totalRevenue - totalPaid);
+
+    // Client bonus payments (internal accounting)
+    const completedBonusPayments = await Payment.find({
+      status: 'COMPLETED',
+      paymentType: 'CLIENT_BONUS',
+    });
+    const totalBonus = completedBonusPayments.reduce((sum, p) => sum + p.amount, 0);
+    const totalCashReceived = totalPaid + totalBonus;
 
     // 4. Payments this month
     const startOfMonth = new Date();
@@ -35,11 +47,19 @@ export async function GET(req: NextRequest) {
     endOfMonth.setDate(0);
     endOfMonth.setHours(23, 59, 59, 999);
 
-    const thisMonthPayments = await Payment.find({
+    const thisMonthRegularPayments = await Payment.find({
       status: 'COMPLETED',
+      paymentType: { $ne: 'CLIENT_BONUS' },
       paymentDate: { $gte: startOfMonth, $lte: endOfMonth },
     });
-    const paymentsThisMonth = thisMonthPayments.reduce((sum, p) => sum + p.amount, 0);
+    const paymentsThisMonth = thisMonthRegularPayments.reduce((sum, p) => sum + p.amount, 0);
+
+    const thisMonthBonusPayments = await Payment.find({
+      status: 'COMPLETED',
+      paymentType: 'CLIENT_BONUS',
+      paymentDate: { $gte: startOfMonth, $lte: endOfMonth },
+    });
+    const bonusThisMonth = thisMonthBonusPayments.reduce((sum, p) => sum + p.amount, 0);
 
     // 5. Pending Invoices count
     const pendingInvoices = await Invoice.countDocuments({
@@ -58,7 +78,11 @@ export async function GET(req: NextRequest) {
         activeProjects,
         totalRevenue,
         outstandingAmount,
+        totalPaid,
+        totalBonus,
+        totalCashReceived,
         paymentsThisMonth,
+        bonusThisMonth,
         pendingInvoices,
         recentActivity,
       },

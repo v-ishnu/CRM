@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Search, CreditCard, Plus, CheckCircle2, XCircle, Loader2, X } from 'lucide-react';
+import { Search, CreditCard, Plus, CheckCircle2, XCircle, Loader2, X, Gift, Lock } from 'lucide-react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { useMasterData } from '@/hooks/useMasterData';
 
 interface Payment {
   _id: string;
@@ -13,6 +14,7 @@ interface Payment {
   amount: number;
   currency: string;
   paymentMethod: string;
+  paymentType?: string;
   paymentDate: string;
   transactionReference?: string;
   status: 'PENDING' | 'COMPLETED' | 'FAILED' | 'REFUNDED';
@@ -53,6 +55,21 @@ export default function PaymentsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
 
+  const { items: masterPaymentMethods } = useMasterData('PAYMENT_METHOD');
+
+  const defaultPaymentMethods = [
+    { key: 'BANK_TRANSFER', label: 'BANK TRANSFER' },
+    { key: 'UPI', label: 'UPI' },
+    { key: 'CASH', label: 'CASH' },
+    { key: 'RAZORPAY', label: 'RAZORPAY' },
+    { key: 'STRIPE', label: 'STRIPE' },
+    { key: 'OTHER', label: 'OTHER' },
+  ];
+
+  const renderedPaymentMethods = masterPaymentMethods.length > 0
+    ? masterPaymentMethods.map((m) => ({ key: m.key, label: m.label }))
+    : defaultPaymentMethods;
+
   // Record Payment Modal State
   const [showModal, setShowModal] = useState(false);
   const [clientsList, setClientsList] = useState<ClientBrief[]>([]);
@@ -68,6 +85,23 @@ export default function PaymentsPage() {
     paymentMethod: 'BANK_TRANSFER',
     transactionReference: '',
     paymentDate: new Date().toISOString().split('T')[0],
+    notes: '',
+  });
+
+  // Record Client Bonus Modal State (Internal Only)
+  const [showBonusModal, setShowBonusModal] = useState(false);
+  const [submittingBonus, setSubmittingBonus] = useState(false);
+  const [bonusFormError, setBonusFormError] = useState<string | null>(null);
+  const [bonusFilteredProjects, setBonusFilteredProjects] = useState<ProjectBrief[]>([]);
+  const [bonusFormData, setBonusFormData] = useState({
+    clientId: '',
+    projectId: '',
+    amount: '',
+    currency: 'INR',
+    paymentMethod: 'UPI',
+    transactionReference: '',
+    paymentDate: new Date().toISOString().split('T')[0],
+    reason: '',
     notes: '',
   });
 
@@ -183,6 +217,116 @@ export default function PaymentsPage() {
     }
   };
 
+  const handleOpenBonusModal = async () => {
+    setShowBonusModal(true);
+    setBonusFormError(null);
+    try {
+      if (clientsList.length === 0) {
+        const clientsRes = await fetch('/api/clients?limit=100');
+        const clientsJson = await clientsRes.json();
+        if (clientsJson.success) {
+          setClientsList(clientsJson.clients);
+        }
+      }
+      if (projectsList.length === 0) {
+        const projectsRes = await fetch('/api/projects');
+        const projectsJson = await projectsRes.json();
+        if (projectsJson.success) {
+          setProjectsList(projectsJson.data);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to pre-load form dependencies:', err);
+    }
+  };
+
+  const handleBonusClientSelectionChange = (clientId: string) => {
+    setBonusFormData((prev) => ({
+      ...prev,
+      clientId,
+      projectId: '',
+    }));
+    const matches = projectsList.filter(
+      (p) => p.clientId?.toString() === clientId || (p.clientId as any)?._id === clientId
+    );
+    setBonusFilteredProjects(matches);
+  };
+
+  const handleBonusFormChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
+    setBonusFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleBonusFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBonusFormError(null);
+    setSubmittingBonus(true);
+
+    if (!bonusFormData.clientId || !bonusFormData.amount) {
+      setBonusFormError('Please select a Client and enter a Bonus Amount.');
+      setSubmittingBonus(false);
+      return;
+    }
+
+    const numAmount = Number(bonusFormData.amount);
+    if (isNaN(numAmount) || numAmount <= 0) {
+      setBonusFormError('Bonus amount must be a valid positive number.');
+      setSubmittingBonus(false);
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: bonusFormData.clientId,
+          projectId: bonusFormData.projectId || undefined,
+          amount: numAmount,
+          currency: bonusFormData.currency,
+          paymentMethod: bonusPaymentMethodName(bonusFormData.paymentMethod),
+          paymentType: 'CLIENT_BONUS',
+          transactionReference: bonusFormData.transactionReference || undefined,
+          paymentDate: new Date(bonusFormData.paymentDate).toISOString(),
+          notes: [bonusFormData.reason ? `Reason: ${bonusFormData.reason}` : '', bonusFormData.notes]
+            .filter(Boolean)
+            .join(' | ') || undefined,
+          notifyClient: false,
+        }),
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        setShowBonusModal(false);
+        setBonusFormData({
+          clientId: '',
+          projectId: '',
+          amount: '',
+          currency: 'INR',
+          paymentMethod: 'UPI',
+          transactionReference: '',
+          paymentDate: new Date().toISOString().split('T')[0],
+          reason: '',
+          notes: '',
+        });
+        fetchPayments();
+      } else {
+        setBonusFormError(json.error?.message || 'Failed to record client bonus');
+      }
+    } catch (err) {
+      setBonusFormError('An error occurred during submission.');
+    } finally {
+      setSubmittingBonus(false);
+    }
+  };
+
+  const bonusPaymentMethodName = (m: string) => m || 'UPI';
+
   const renderStatusBadge = (status: Payment['status']) => {
     switch (status) {
       case 'COMPLETED':
@@ -205,14 +349,23 @@ export default function PaymentsPage() {
         title="Transaction History"
         description="Review incoming deposits, bank transfers, UPI transactions, and invoices linked payments."
         action={
-          <Button
-            variant="primary"
-            size="md"
-            onClick={handleOpenModal}
-            icon={<Plus className="w-4 h-4" />}
-          >
-            RECORD PAYMENT
-          </Button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleOpenBonusModal}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-[#18181b] hover:bg-amber-500 hover:text-black border border-amber-500/40 text-amber-400 text-xs font-mono uppercase tracking-wider font-semibold rounded-none md:rounded-xs transition-all cursor-pointer"
+            >
+              <Gift className="w-3.5 h-3.5" />
+              ADD BONUS
+            </button>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleOpenModal}
+              icon={<Plus className="w-4 h-4" />}
+            >
+              RECORD PAYMENT
+            </Button>
+          </div>
         }
       />
 
@@ -239,7 +392,7 @@ export default function PaymentsPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-[#8a8a93] text-xs font-mono rounded-none outline-none focus:border-[#ff3e00] transition-colors cursor-pointer w-full sm:w-48"
+            className="crm-select-sm w-full sm:w-48"
           >
             <option value="">ALL STATES</option>
             <option value="COMPLETED">COMPLETED</option>
@@ -282,7 +435,14 @@ export default function PaymentsPage() {
                 {payments.map((p) => (
                   <tr key={p._id} className="hover:bg-[#18181b] transition-colors">
                     <td className="px-5 py-3.5 font-mono font-bold text-white tracking-wide">
-                      {p.paymentNumber}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span>{p.paymentNumber}</span>
+                        {p.paymentType === 'CLIENT_BONUS' && (
+                          <span className="px-1.5 py-0.5 rounded-none md:rounded-xs text-[9px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                            CLIENT BONUS
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-5 py-3.5">
                       {p.clientId ? (
@@ -303,10 +463,18 @@ export default function PaymentsPage() {
                     </td>
                     <td className="px-5 py-3.5">
                       <div className="text-[#f5f5f2] font-medium">
-                        {p.projectId?.name || <span className="text-[#6b6b76] italic font-mono text-[11px]">Unassigned Project</span>}
+                        {p.projectId?.name || (p.paymentType === 'CLIENT_BONUS' ? (
+                          <span className="text-amber-400/90 font-mono text-[11px]">Direct Client Bonus</span>
+                        ) : (
+                          <span className="text-[#6b6b76] italic font-mono text-[11px]">Unassigned Project</span>
+                        ))}
                       </div>
                       <div className="text-[10px] font-mono text-[#8a8a93] mt-0.5">
-                        {p.invoiceId ? `INV: ${p.invoiceId.invoiceNumber}` : 'DIRECT DEPOSIT'}
+                        {p.paymentType === 'CLIENT_BONUS' ? (
+                          <span className="text-amber-400/70">INTERNAL BONUS</span>
+                        ) : (
+                          p.invoiceId ? `INV: ${p.invoiceId.invoiceNumber}` : 'DIRECT DEPOSIT'
+                        )}
                       </div>
                     </td>
                     <td className="px-5 py-3.5">
@@ -370,7 +538,7 @@ export default function PaymentsPage() {
                   required
                   value={formData.clientId}
                   onChange={(e) => handleClientSelectionChange(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] focus:outline-none focus:border-[#ff3e00] font-sans cursor-pointer"
+                  className="crm-select"
                 >
                   <option value="">Select client account...</option>
                   {clientsList.map((c) => (
@@ -391,7 +559,7 @@ export default function PaymentsPage() {
                   value={formData.projectId}
                   onChange={handleFormChange}
                   name="projectId"
-                  className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] focus:outline-none focus:border-[#ff3e00] font-sans disabled:opacity-40 cursor-pointer"
+                  className="crm-select"
                 >
                   <option value="">Select linked project...</option>
                   {filteredProjects.map((p) => (
@@ -425,14 +593,14 @@ export default function PaymentsPage() {
                     name="paymentMethod"
                     value={formData.paymentMethod}
                     onChange={handleFormChange}
-                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] focus:outline-none focus:border-[#ff3e00] font-mono cursor-pointer"
+                    className="crm-select font-mono"
                   >
-                    <option value="BANK_TRANSFER">BANK TRANSFER</option>
-                    <option value="UPI">UPI</option>
-                    <option value="CASH">CASH</option>
-                    <option value="RAZORPAY">RAZORPAY</option>
-                    <option value="STRIPE">STRIPE</option>
-                    <option value="OTHER">OTHER</option>
+                    {renderedPaymentMethods.map((m) => (
+                      <option key={m.key} value={m.key}>{m.label}</option>
+                    ))}
+                    {formData.paymentMethod && !renderedPaymentMethods.some((m) => m.key === formData.paymentMethod) && (
+                      <option value={formData.paymentMethod}>{formData.paymentMethod} (Inactive)</option>
+                    )}
                   </select>
                 </div>
               </div>
@@ -500,6 +668,231 @@ export default function PaymentsPage() {
                     </>
                   ) : (
                     'RECORD ENTRY'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Record Client Bonus Modal (Internal Only) */}
+      {showBonusModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-[#141416] border border-[#242428] w-full max-w-lg p-6 relative animate-in fade-in zoom-in-95 duration-150">
+            <button
+              onClick={() => setShowBonusModal(false)}
+              className="absolute top-5 right-5 text-[#8a8a93] hover:text-white transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="mb-5 space-y-1">
+              <span className="font-mono text-[10px] text-amber-400 uppercase font-bold tracking-widest flex items-center gap-1.5">
+                <Gift className="w-3.5 h-3.5" />
+                FINANCIAL LEDGER // CLIENT BONUS
+              </span>
+              <h2 className="text-base font-semibold text-white tracking-tight">Record Client Bonus</h2>
+              <p className="text-xs text-[#8a8a93] font-mono">
+                Log additional appreciation or bonus received. Internal accounting only.
+              </p>
+            </div>
+
+            {/* Internal Only Callout */}
+            <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-none md:rounded-xs text-[11px] font-mono text-amber-300 space-y-1">
+              <div className="font-bold flex items-center gap-1.5">
+                <Lock className="w-3 h-3 text-amber-400" />
+                INTERNAL ACCOUNTING ONLY
+              </div>
+              <p className="text-[10px] text-amber-200/80 leading-relaxed">
+                The client will NEVER receive any Telegram message, payment receipt, email, or invoice notification.
+                This bonus does NOT reduce the client&apos;s project outstanding balance.
+              </p>
+            </div>
+
+            {bonusFormError && (
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-mono flex items-center gap-2">
+                <XCircle className="w-4 h-4 shrink-0" />
+                <span>{bonusFormError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleBonusFormSubmit} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                  Client Account *
+                </label>
+                <select
+                  required
+                  value={bonusFormData.clientId}
+                  onChange={(e) => handleBonusClientSelectionChange(e.target.value)}
+                  className="crm-select"
+                >
+                  <option value="">Select client account...</option>
+                  {clientsList.map((c) => (
+                    <option key={c._id} value={c._id}>
+                      {c.name} ({c.clientCode})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                  Project Ledger (Optional)
+                </label>
+                <select
+                  value={bonusFormData.projectId}
+                  onChange={handleBonusFormChange}
+                  name="projectId"
+                  className="crm-select"
+                  disabled={!bonusFormData.clientId}
+                >
+                  <option value="">No Project (Direct Client Bonus)</option>
+                  {bonusFilteredProjects.map((p) => (
+                    <option key={p._id} value={p._id}>
+                      {p.name} ({p.projectCode})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                    Bonus Amount *
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    min="0.01"
+                    name="amount"
+                    value={bonusFormData.amount}
+                    onChange={handleBonusFormChange}
+                    placeholder="0.00"
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] font-mono font-bold focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                    Currency *
+                  </label>
+                  <select
+                    name="currency"
+                    value={bonusFormData.currency}
+                    onChange={handleBonusFormChange}
+                    className="crm-select font-mono"
+                  >
+                    <option value="INR">INR (₹)</option>
+                    <option value="USD">USD ($)</option>
+                    <option value="EUR">EUR (€)</option>
+                    <option value="GBP">GBP (£)</option>
+                    <option value="AED">AED</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                    Payment Method *
+                  </label>
+                  <select
+                    name="paymentMethod"
+                    value={bonusFormData.paymentMethod}
+                    onChange={handleBonusFormChange}
+                    className="crm-select font-mono"
+                    required
+                  >
+                    {renderedPaymentMethods.map((m) => (
+                      <option key={m.key} value={m.key}>{m.label}</option>
+                    ))}
+                    {bonusFormData.paymentMethod && !renderedPaymentMethods.some((m) => m.key === bonusFormData.paymentMethod) && (
+                      <option value={bonusFormData.paymentMethod}>{bonusFormData.paymentMethod}</option>
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                    Received Date *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    name="paymentDate"
+                    value={bonusFormData.paymentDate}
+                    onChange={handleBonusFormChange}
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] font-mono focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                  Reason / Description
+                </label>
+                <input
+                  type="text"
+                  name="reason"
+                  value={bonusFormData.reason}
+                  onChange={handleBonusFormChange}
+                  placeholder="e.g. Appreciation for early delivery"
+                  className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                  Transaction Reference
+                </label>
+                <input
+                  type="text"
+                  name="transactionReference"
+                  value={bonusFormData.transactionReference}
+                  onChange={handleBonusFormChange}
+                  placeholder="UTR / UPI Ref ID"
+                  className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] font-mono focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono font-semibold text-[#8a8a93] uppercase tracking-wider mb-1.5">
+                  Internal Journal Notes
+                </label>
+                <textarea
+                  name="notes"
+                  rows={2}
+                  value={bonusFormData.notes}
+                  onChange={handleBonusFormChange}
+                  placeholder="Additional settlement notes..."
+                  className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div className="flex gap-2.5 justify-end pt-4 border-t border-[#242428]">
+                <button
+                  type="button"
+                  onClick={() => setShowBonusModal(false)}
+                  className="px-4 py-2 bg-[#0a0a0a] hover:bg-[#242428] border border-[#242428] text-[#8a8a93] hover:text-white text-xs font-mono uppercase tracking-wider transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingBonus}
+                  className="flex items-center gap-1.5 px-5 py-2 bg-amber-500 hover:bg-amber-400 text-black text-xs font-mono font-semibold uppercase tracking-wider transition-all disabled:opacity-40 cursor-pointer"
+                >
+                  {submittingBonus ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      RECORDING...
+                    </>
+                  ) : (
+                    <>
+                      <Gift className="w-3.5 h-3.5" />
+                      RECORD BONUS (INTERNAL)
+                    </>
                   )}
                 </button>
               </div>

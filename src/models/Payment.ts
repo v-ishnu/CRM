@@ -3,12 +3,12 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 export interface IPayment extends Document {
   paymentNumber: string;
   clientId: mongoose.Types.ObjectId;
-  projectId: mongoose.Types.ObjectId;
+  projectId?: mongoose.Types.ObjectId;
   invoiceId?: mongoose.Types.ObjectId;
   amount: number;
   currency: string;
   paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'UPI' | 'RAZORPAY' | 'STRIPE' | 'CARD' | 'OTHER';
-  paymentType: 'ADVANCE' | 'INSTALLMENT' | 'FINAL_PAYMENT' | 'OTHER';
+  paymentType: 'ADVANCE' | 'INSTALLMENT' | 'FINAL_PAYMENT' | 'OTHER' | 'CLIENT_BONUS';
   paymentDate: Date;
   transactionReference?: string;
   status: 'PENDING' | 'COMPLETED' | 'FAILED' | 'REFUNDED';
@@ -36,7 +36,9 @@ const PaymentSchema = new Schema<IPayment>(
     projectId: {
       type: Schema.Types.ObjectId,
       ref: 'Project',
-      required: true,
+      required: function(this: any) {
+        return this.paymentType !== 'CLIENT_BONUS';
+      },
       index: true,
     },
     invoiceId: {
@@ -63,7 +65,7 @@ const PaymentSchema = new Schema<IPayment>(
     },
     paymentType: {
       type: String,
-      enum: ['ADVANCE', 'INSTALLMENT', 'FINAL_PAYMENT', 'OTHER'],
+      enum: ['ADVANCE', 'INSTALLMENT', 'FINAL_PAYMENT', 'OTHER', 'CLIENT_BONUS'],
       default: 'INSTALLMENT',
       required: true,
     },

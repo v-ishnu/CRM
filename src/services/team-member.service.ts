@@ -22,6 +22,7 @@ export interface CreateTeamMemberDTO {
   email: string;
   phone?: string;
   role?: TeamRole;
+  designation?: string;
   telegramUserId?: string;
   telegramUsername?: string;
   permissions?: TeamPermission[];
@@ -34,6 +35,7 @@ export interface UpdateTeamMemberDTO {
   email?: string;
   phone?: string;
   role?: TeamRole;
+  designation?: string;
   telegramUserId?: string;
   telegramUsername?: string;
   permissions?: TeamPermission[];
@@ -54,9 +56,20 @@ export class TeamMemberService {
       throw new Error(`Team member with email ${email} already exists`);
     }
 
+    const validRoles: TeamRole[] = ['ADMIN', 'MANAGER', 'DEVELOPER', 'DESIGNER', 'SEO', 'OTHER'];
+    let safeRole: TeamRole = 'DEVELOPER';
+    let safeDesignation = data.designation?.trim();
+
+    if (data.role && validRoles.includes(data.role as TeamRole)) {
+      safeRole = data.role as TeamRole;
+    } else if (data.role && !safeDesignation) {
+      safeDesignation = String(data.role).trim();
+      safeRole = 'DEVELOPER';
+    }
+
     const defaultPermissions: TeamPermission[] = data.permissions && data.permissions.length > 0 
       ? data.permissions 
-      : (data.role === 'ADMIN' 
+      : (safeRole === 'ADMIN' 
           ? ['VIEW_CREDENTIALS', 'REQUEST_CREDENTIALS', 'MANAGE_TASKS', 'VIEW_PROJECT', 'VIEW_CLIENT', 'MANAGE_PROJECT', 'VIEW_TASKS']
           : ['VIEW_PROJECT', 'VIEW_TASKS']);
 
@@ -66,7 +79,8 @@ export class TeamMemberService {
       name: data.name.trim(),
       email,
       phone: data.phone?.trim(),
-      role: data.role || 'DEVELOPER',
+      role: safeRole,
+      designation: safeDesignation,
       telegramUserId: data.telegramUserId?.trim(),
       telegramUsername: data.telegramUsername?.trim(),
       telegramConnected: !!data.telegramUserId,
@@ -87,6 +101,7 @@ export class TeamMemberService {
         name: teamMember.name,
         email: teamMember.email,
         role: teamMember.role,
+        designation: teamMember.designation,
         permissions: teamMember.permissions,
         hasBankDetails: !!bankDetails?.isComplete,
       },
@@ -117,7 +132,17 @@ export class TeamMemberService {
 
     if (data.name !== undefined) teamMember.name = data.name.trim();
     if (data.phone !== undefined) teamMember.phone = data.phone?.trim();
-    if (data.role !== undefined) teamMember.role = data.role;
+    if (data.designation !== undefined) {
+      teamMember.designation = data.designation ? data.designation.trim() : undefined;
+    }
+    if (data.role !== undefined) {
+      const validRoles: TeamRole[] = ['ADMIN', 'MANAGER', 'DEVELOPER', 'DESIGNER', 'SEO', 'OTHER'];
+      if (validRoles.includes(data.role as TeamRole)) {
+        teamMember.role = data.role as TeamRole;
+      } else if (!teamMember.designation) {
+        teamMember.designation = String(data.role).trim();
+      }
+    }
     if (data.telegramUserId !== undefined) {
       teamMember.telegramUserId = data.telegramUserId.trim() || undefined;
       teamMember.telegramConnected = !!teamMember.telegramUserId;
@@ -357,7 +382,9 @@ export class TeamMemberService {
     await dbConnect();
 
     const query: any = {};
-    if (filter.role) query.role = filter.role;
+    if (filter.role) {
+      query.$or = [{ role: filter.role }, { designation: filter.role }];
+    }
     if (filter.status) query.status = filter.status;
     if (filter.search) {
       query.$or = [

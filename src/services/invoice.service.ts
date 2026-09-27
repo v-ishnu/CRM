@@ -157,13 +157,14 @@ export class InvoiceService {
     const compPhone = process.env.COMPANY_PHONE || '+1 (555) 019-9000';
     // const compWebsite = process.env.COMPANY_WEBSITE || 'www.example.com';
 
-    // Calculate total payments and remaining balance
+    // Calculate total payments and remaining balance (excluding client bonuses)
     const payments = await Payment.find({
       $or: [
         { invoiceId: invoice._id },
         { projectId: project._id }
       ],
       status: 'COMPLETED',
+      paymentType: { $ne: 'CLIENT_BONUS' },
     });
     const paidAmount = payments.reduce((sum, p) => sum + p.amount, 0);
     const balanceDue = Math.max(0, invoice.total - paidAmount);

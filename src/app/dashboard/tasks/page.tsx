@@ -27,6 +27,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
+import { useMasterData } from '@/hooks/useMasterData';
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<any[]>([]);
@@ -34,6 +35,32 @@ export default function TasksPage() {
   const [clients, setClients] = useState<any[]>([]);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const { items: masterCredTypes } = useMasterData('CREDENTIAL_TYPE');
+  const { items: masterPaymentMethods } = useMasterData('PAYMENT_METHOD');
+
+  const defaultCredTypes = [
+    { key: 'WORDPRESS', label: 'WordPress Admin' },
+    { key: 'HOSTING', label: 'Hosting / cPanel' },
+    { key: 'SSH', label: 'SSH / VPS Server' },
+    { key: 'DATABASE', label: 'Database' },
+    { key: 'API_KEY', label: 'API Key / Token' },
+    { key: 'CUSTOM', label: 'Custom Credential' },
+  ];
+  const renderedCredTypes = masterCredTypes.length > 0
+    ? masterCredTypes.map((c) => ({ key: c.key, label: c.label }))
+    : defaultCredTypes;
+
+  const defaultPaymentMethods = [
+    { key: 'UPI', label: 'UPI' },
+    { key: 'BANK_TRANSFER', label: 'Bank Transfer' },
+    { key: 'CASH', label: 'Cash' },
+    { key: 'PAYPAL', label: 'PayPal' },
+    { key: 'OTHER', label: 'Other' },
+  ];
+  const renderedPaymentMethods = masterPaymentMethods.length > 0
+    ? masterPaymentMethods.map((m) => ({ key: m.key, label: m.label }))
+    : defaultPaymentMethods;
 
   // Filters
   const [statusTab, setStatusTab] = useState('ALL');
@@ -723,7 +750,7 @@ export default function TasksPage() {
         <select
           value={projectFilter}
           onChange={(e) => setProjectFilter(e.target.value)}
-          className="bg-[#0d0d10] border border-[#27272a] focus:border-[#ff3e00] rounded-xs px-3 py-2 text-xs font-mono text-[#f5f5f2] outline-none cursor-pointer"
+          className="crm-select-sm"
         >
           <option value="">ALL PROJECTS</option>
           {projects.map((p) => (
@@ -736,7 +763,7 @@ export default function TasksPage() {
         <select
           value={memberFilter}
           onChange={(e) => setMemberFilter(e.target.value)}
-          className="bg-[#0d0d10] border border-[#27272a] focus:border-[#ff3e00] rounded-xs px-3 py-2 text-xs font-mono text-[#f5f5f2] outline-none cursor-pointer"
+          className="crm-select-sm"
         >
           <option value="">ALL ASSIGNEES</option>
           {teamMembers.map((m) => (
@@ -749,7 +776,7 @@ export default function TasksPage() {
         <select
           value={priorityFilter}
           onChange={(e) => setPriorityFilter(e.target.value)}
-          className="bg-[#0d0d10] border border-[#27272a] focus:border-[#ff3e00] rounded-xs px-3 py-2 text-xs font-mono text-[#f5f5f2] outline-none cursor-pointer"
+          className="crm-select-sm"
         >
           <option value="">ALL PRIORITIES</option>
           <option value="LOW">LOW</option>
@@ -878,7 +905,7 @@ export default function TasksPage() {
                     <select
                       value={task.status}
                       onChange={(e) => handleStatusChange(task._id, e.target.value)}
-                      className="text-xs font-mono font-semibold px-2.5 py-1.5 bg-[#0a0a0a] border border-[#242428] text-white focus:outline-none focus:border-[#ff3e00] cursor-pointer"
+                      className="crm-select-sm font-semibold"
                     >
                       {statusOptions.map((opt) => (
                         <option key={opt.value} value={opt.value} className="bg-[#0a0a0a] text-white">
@@ -1179,7 +1206,7 @@ export default function TasksPage() {
                       }));
                       setProjectCredentials([]);
                     }}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select font-mono"
                   >
                     <option value="">All Clients</option>
                     {clients.map((c) => (
@@ -1196,7 +1223,7 @@ export default function TasksPage() {
                     required
                     value={formData.projectId}
                     onChange={(e) => handleProjectSelect(e.target.value)}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select font-mono"
                   >
                     <option value="">Select Project</option>
                     {projects
@@ -1220,7 +1247,7 @@ export default function TasksPage() {
                   <select
                     value={formData.assignedTo}
                     onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select font-mono"
                   >
                     <option value="">Unassigned</option>
                     {teamMembers.map((m) => (
@@ -1236,7 +1263,7 @@ export default function TasksPage() {
                   <select
                     value={formData.priority}
                     onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select font-mono"
                   >
                     <option value="LOW">Low</option>
                     <option value="MEDIUM">Medium</option>
@@ -1662,7 +1689,7 @@ export default function TasksPage() {
                       }));
                       setProjectCredentials([]);
                     }}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select font-mono"
                   >
                     <option value="">All Clients</option>
                     {clients.map((c) => (
@@ -1696,7 +1723,7 @@ export default function TasksPage() {
                         setProjectCredentials([]);
                       }
                     }}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select font-mono"
                   >
                     <option value="">Select Project</option>
                     {projects
@@ -1720,7 +1747,7 @@ export default function TasksPage() {
                   <select
                     value={editFormData.assignedTo}
                     onChange={(e) => setEditFormData({ ...editFormData, assignedTo: e.target.value })}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select font-mono"
                   >
                     <option value="">Unassigned</option>
                     {teamMembers.map((m) => (
@@ -1736,7 +1763,7 @@ export default function TasksPage() {
                   <select
                     value={editFormData.priority}
                     onChange={(e) => setEditFormData({ ...editFormData, priority: e.target.value as any })}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select font-mono"
                   >
                     <option value="LOW">Low</option>
                     <option value="MEDIUM">Medium</option>
@@ -2066,13 +2093,14 @@ export default function TasksPage() {
                   <select
                     value={paymentFormData.paymentMethod}
                     onChange={(e) => setPaymentFormData({ ...paymentFormData, paymentMethod: e.target.value })}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select font-mono"
                   >
-                    <option value="UPI">UPI</option>
-                    <option value="BANK_TRANSFER">Bank Transfer</option>
-                    <option value="CASH">Cash</option>
-                    <option value="PAYPAL">PayPal</option>
-                    <option value="OTHER">Other</option>
+                    {renderedPaymentMethods.map((m) => (
+                      <option key={m.key} value={m.key}>{m.label}</option>
+                    ))}
+                    {paymentFormData.paymentMethod && !renderedPaymentMethods.some((m) => m.key === paymentFormData.paymentMethod) && (
+                      <option value={paymentFormData.paymentMethod}>{paymentFormData.paymentMethod} (Inactive)</option>
+                    )}
                   </select>
                 </div>
 
@@ -2104,7 +2132,7 @@ export default function TasksPage() {
                 <select
                   value={paymentFormData.status}
                   onChange={(e) => setPaymentFormData({ ...paymentFormData, status: e.target.value })}
-                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                  className="crm-select font-mono"
                 >
                   <option value="PAID">PAID (Sends Telegram Receipt)</option>
                   <option value="PENDING">PENDING</option>
@@ -2252,7 +2280,7 @@ export default function TasksPage() {
                     required
                     value={manualCredData.projectId}
                     onChange={(e) => setManualCredData({ ...manualCredData, projectId: e.target.value })}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select font-mono"
                   >
                     <option value="">Select Project</option>
                     {projects.map((p) => (
@@ -2268,7 +2296,7 @@ export default function TasksPage() {
                   <select
                     value={manualCredData.taskId}
                     onChange={(e) => setManualCredData({ ...manualCredData, taskId: e.target.value })}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select font-mono"
                   >
                     <option value="">None (Project-wide)</option>
                     {tasks
@@ -2300,14 +2328,14 @@ export default function TasksPage() {
                   <select
                     value={manualCredData.credentialType}
                     onChange={(e) => setManualCredData({ ...manualCredData, credentialType: e.target.value })}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select font-mono"
                   >
-                    <option value="WORDPRESS">WordPress Admin</option>
-                    <option value="HOSTING">Hosting / cPanel</option>
-                    <option value="SSH">SSH / VPS Server</option>
-                    <option value="DATABASE">Database</option>
-                    <option value="API_KEY">API Key / Token</option>
-                    <option value="CUSTOM">Custom Credential</option>
+                    {renderedCredTypes.map((c) => (
+                      <option key={c.key} value={c.key}>{c.label}</option>
+                    ))}
+                    {manualCredData.credentialType && !renderedCredTypes.some((c) => c.key === manualCredData.credentialType) && (
+                      <option value={manualCredData.credentialType}>{manualCredData.credentialType} (Inactive)</option>
+                    )}
                   </select>
                 </div>
               </div>

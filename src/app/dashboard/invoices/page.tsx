@@ -148,7 +148,7 @@ export default function InvoicesPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-[#8a8a93] text-xs font-mono rounded-none outline-none focus:border-[#ff3e00] transition-colors cursor-pointer w-full sm:w-48"
+            className="crm-select-sm w-full sm:w-48"
           >
             <option value="">ALL STATES</option>
             <option value="ISSUED">ISSUED</option>

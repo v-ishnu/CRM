@@ -25,6 +25,7 @@ import {
   Loader2,
   Send,
 } from 'lucide-react';
+import { useMasterData } from '@/hooks/useMasterData';
 
 interface HostingItem {
   _id: string;
@@ -90,6 +91,35 @@ export default function HostingPage() {
   const [isDirectClientMode, setIsDirectClientMode] = useState(false);
   const [clientsLoading, setClientsLoading] = useState(false);
   const [clientsError, setClientsError] = useState<string | null>(null);
+
+  const { items: masterProviders } = useMasterData('HOSTING_PROVIDER');
+  const { items: masterTypes } = useMasterData('HOSTING_TYPE');
+
+  const defaultProviders = [
+    'Hostinger',
+    'Cloudways',
+    'DigitalOcean',
+    'AWS',
+    'GoDaddy',
+    'SiteGround',
+    'Namecheap',
+    'VPS',
+    'Shared',
+  ];
+  const renderedProviders = masterProviders.length > 0 
+    ? masterProviders.map((p) => p.label) 
+    : defaultProviders;
+
+  const defaultTypes = [
+    'Shared',
+    'Cloud',
+    'VPS',
+    'Dedicated',
+    'cPanel',
+  ];
+  const renderedTypes = masterTypes.length > 0
+    ? masterTypes.map((t) => t.label)
+    : defaultTypes;
 
   // Form states
   const [formData, setFormData] = useState({
@@ -610,7 +640,7 @@ export default function HostingPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 bg-[#0d0d10] border border-[#27272a] focus:border-[#ff3e00] rounded-xs text-xs font-mono text-[#f5f5f2] outline-none cursor-pointer"
+            className="crm-select-sm"
           >
             <option value="">ALL STATUSES</option>
             <option value="ACTIVE">ACTIVE</option>
@@ -622,7 +652,7 @@ export default function HostingPage() {
           <select
             value={clientFilter}
             onChange={(e) => setClientFilter(e.target.value)}
-            className="px-3 py-2 bg-[#0d0d10] border border-[#27272a] focus:border-[#ff3e00] rounded-xs text-xs font-mono text-[#f5f5f2] outline-none cursor-pointer"
+            className="crm-select-sm"
           >
             <option value="">ALL CLIENTS</option>
             {clients.map((c) => (
@@ -1276,9 +1306,9 @@ export default function HostingPage() {
                             setFormData(prev => ({ ...prev, projectId: '', clientId: '' }));
                           }
                         }}
-                        className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
+                        className="crm-select font-mono"
                       >
-                        <option value="">Select Project (Client auto-derived) ▼</option>
+                        <option value="">Select Project (Client auto-derived)</option>
                         {filteredProjects.map((p) => {
                           const clientName = p.clientId?.name || 'Client';
                           const clientCode = p.clientId?.clientCode ? ` [${p.clientId.clientCode}]` : '';
@@ -1365,14 +1395,14 @@ export default function HostingPage() {
                         required={isDirectClientMode}
                         value={formData.clientId}
                         onChange={(e) => setFormData(prev => ({ ...prev, clientId: e.target.value, projectId: '' }))}
-                        className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
+                        className="crm-select font-mono"
                       >
                         <option value="">
                           {clientsLoading
                             ? 'Loading clients...'
                             : clients.length === 0
                             ? 'No clients available.'
-                            : 'Select Client Directly ▼'}
+                            : 'Select Client Directly'}
                         </option>
                         {filteredClients.map((c) => {
                           const clientCode = c.clientCode ? ` [${c.clientCode}]` : '';
@@ -1437,17 +1467,14 @@ export default function HostingPage() {
                   <select
                     value={formData.hostingProvider}
                     onChange={(e) => setFormData({ ...formData, hostingProvider: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
+                    className="crm-select font-mono"
                   >
-                    <option value="Hostinger">Hostinger</option>
-                    <option value="Cloudways">Cloudways</option>
-                    <option value="DigitalOcean">DigitalOcean</option>
-                    <option value="AWS">AWS</option>
-                    <option value="GoDaddy">GoDaddy</option>
-                    <option value="SiteGround">SiteGround</option>
-                    <option value="Namecheap">Namecheap</option>
-                    <option value="VPS">VPS</option>
-                    <option value="Shared">Shared Hosting</option>
+                    {renderedProviders.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                    {formData.hostingProvider && formData.hostingProvider !== 'Custom' && !renderedProviders.includes(formData.hostingProvider) && (
+                      <option value={formData.hostingProvider}>{formData.hostingProvider} (Inactive)</option>
+                    )}
                     <option value="Custom">Custom Provider...</option>
                   </select>
                 </div>
@@ -1473,13 +1500,14 @@ export default function HostingPage() {
                   <select
                     value={formData.hostingType}
                     onChange={(e) => setFormData({ ...formData, hostingType: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
+                    className="crm-select font-mono"
                   >
-                    <option value="Shared">Shared</option>
-                    <option value="Cloud">Cloud</option>
-                    <option value="VPS">VPS</option>
-                    <option value="Dedicated">Dedicated</option>
-                    <option value="cPanel">cPanel</option>
+                    {renderedTypes.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                    {formData.hostingType && formData.hostingType !== 'Custom' && !renderedTypes.includes(formData.hostingType) && (
+                      <option value={formData.hostingType}>{formData.hostingType} (Inactive)</option>
+                    )}
                     <option value="Custom">Custom</option>
                   </select>
                 </div>
@@ -1674,7 +1702,7 @@ export default function HostingPage() {
                         setFormData(prev => ({ ...prev, projectId: '' }));
                       }
                     }}
-                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs text-white outline-none"
+                    className="crm-select font-mono"
                   >
                     <option value="">No Specific Project / Keep General</option>
                     {projects.map((p) => {
@@ -1727,17 +1755,14 @@ export default function HostingPage() {
                   <select
                     value={formData.hostingProvider}
                     onChange={(e) => setFormData({ ...formData, hostingProvider: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
+                    className="crm-select font-mono"
                   >
-                    <option value="Hostinger">Hostinger</option>
-                    <option value="Cloudways">Cloudways</option>
-                    <option value="DigitalOcean">DigitalOcean</option>
-                    <option value="AWS">AWS</option>
-                    <option value="GoDaddy">GoDaddy</option>
-                    <option value="SiteGround">SiteGround</option>
-                    <option value="Namecheap">Namecheap</option>
-                    <option value="VPS">VPS</option>
-                    <option value="Shared">Shared Hosting</option>
+                    {renderedProviders.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                    {formData.hostingProvider && formData.hostingProvider !== 'Custom' && !renderedProviders.includes(formData.hostingProvider) && (
+                      <option value={formData.hostingProvider}>{formData.hostingProvider} (Inactive)</option>
+                    )}
                     <option value="Custom">Custom Provider...</option>
                   </select>
                 </div>
@@ -1749,13 +1774,14 @@ export default function HostingPage() {
                   <select
                     value={formData.hostingType}
                     onChange={(e) => setFormData({ ...formData, hostingType: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
+                    className="crm-select font-mono"
                   >
-                    <option value="Shared">Shared</option>
-                    <option value="Cloud">Cloud</option>
-                    <option value="VPS">VPS</option>
-                    <option value="Dedicated">Dedicated</option>
-                    <option value="cPanel">cPanel</option>
+                    {renderedTypes.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                    {formData.hostingType && formData.hostingType !== 'Custom' && !renderedTypes.includes(formData.hostingType) && (
+                      <option value={formData.hostingType}>{formData.hostingType} (Inactive)</option>
+                    )}
                     <option value="Custom">Custom</option>
                   </select>
                 </div>

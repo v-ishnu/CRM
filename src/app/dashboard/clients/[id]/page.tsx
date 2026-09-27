@@ -28,7 +28,9 @@ import {
   Server,
   FolderKanban,
   Edit2,
+  Gift,
 } from 'lucide-react';
+import { useMasterData } from '@/hooks/useMasterData';
 
 interface Project {
   _id: string;
@@ -102,6 +104,8 @@ interface ClientDetails {
     totalProjectValue: number;
     totalPaid: number;
     outstanding: number;
+    totalBonus?: number;
+    totalReceived?: number;
   };
 }
 
@@ -125,6 +129,63 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
   const [confirmClientCode, setConfirmClientCode] = useState('');
   const [deleting, setDeleting] = useState(false);
 
+  const { items: masterServices } = useMasterData('SERVICE');
+  const { items: masterPaymentMethods } = useMasterData('PAYMENT_METHOD');
+  const { items: masterPaymentTypes } = useMasterData('PAYMENT_TYPE');
+  const { items: masterCredTypes } = useMasterData('CREDENTIAL_TYPE');
+
+  const defaultServices = [
+    { key: 'WEBSITE', label: 'Website' },
+    { key: 'WEB_APPLICATION', label: 'Web Application' },
+    { key: 'MOBILE_APPLICATION', label: 'Mobile Application' },
+    { key: 'API_DEVELOPMENT', label: 'API Development' },
+    { key: 'WORDPRESS', label: 'WordPress' },
+    { key: 'ECOMMERCE', label: 'E-Commerce' },
+    { key: 'MAINTENANCE', label: 'Maintenance' },
+    { key: 'OTHER', label: 'Other' },
+  ];
+  const renderedServices = masterServices.length > 0
+    ? masterServices.map((s) => ({ key: s.key, label: s.label }))
+    : defaultServices;
+
+  const defaultPaymentMethods = [
+    { key: 'UPI', label: 'UPI' },
+    { key: 'BANK_TRANSFER', label: 'BANK TRANSFER' },
+    { key: 'CASH', label: 'CASH' },
+    { key: 'CARD', label: 'CARD' },
+    { key: 'OTHER', label: 'OTHER' },
+  ];
+  const renderedPaymentMethods = masterPaymentMethods.length > 0
+    ? masterPaymentMethods.map((m) => ({ key: m.key, label: m.label }))
+    : defaultPaymentMethods;
+
+  const defaultPaymentTypes = [
+    { key: 'INSTALLMENT', label: 'INSTALLMENT' },
+    { key: 'ADVANCE', label: 'ADVANCE' },
+    { key: 'FINAL_PAYMENT', label: 'FINAL PAYMENT' },
+    { key: 'OTHER', label: 'OTHER' },
+  ];
+  const renderedPaymentTypes = masterPaymentTypes.length > 0
+    ? masterPaymentTypes.map((t) => ({ key: t.key, label: t.label }))
+    : defaultPaymentTypes;
+
+  const defaultCredTypes = [
+    { key: 'HOSTING', label: 'HOSTING' },
+    { key: 'DOMAIN', label: 'DOMAIN' },
+    { key: 'WORDPRESS', label: 'WORDPRESS' },
+    { key: 'FTP', label: 'FTP' },
+    { key: 'SFTP', label: 'SFTP' },
+    { key: 'CPANEL', label: 'CPANEL' },
+    { key: 'DATABASE', label: 'DATABASE' },
+    { key: 'EMAIL', label: 'EMAIL' },
+    { key: 'CLOUD', label: 'CLOUD' },
+    { key: 'GITHUB', label: 'GITHUB' },
+    { key: 'OTHER', label: 'OTHER' },
+  ];
+  const renderedCredTypes = masterCredTypes.length > 0
+    ? masterCredTypes.map((c) => ({ key: c.key, label: c.label }))
+    : defaultCredTypes;
+
   // Record Payment States
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState('');
@@ -135,6 +196,18 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
   const [referenceId, setReferenceId] = useState('');
   const [paymentNotes, setPaymentNotes] = useState('');
   const [recordingPayment, setRecordingPayment] = useState(false);
+
+  // Record Client Bonus States
+  const [bonusModalOpen, setBonusModalOpen] = useState(false);
+  const [bonusProjectId, setBonusProjectId] = useState('');
+  const [bonusAmount, setBonusAmount] = useState('');
+  const [bonusCurrency, setBonusCurrency] = useState('INR');
+  const [bonusPaymentMethod, setBonusPaymentMethod] = useState('UPI');
+  const [bonusDate, setBonusDate] = useState(new Date().toISOString().split('T')[0]);
+  const [bonusReason, setBonusReason] = useState('');
+  const [bonusNotes, setBonusNotes] = useState('');
+  const [bonusRefId, setBonusRefId] = useState('');
+  const [recordingBonus, setRecordingBonus] = useState(false);
 
   // Add Project States
   const [addProjectModalOpen, setAddProjectModalOpen] = useState(false);
@@ -652,6 +725,57 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
     }
   };
 
+  const handleRecordBonus = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setActionError(null);
+
+    const numAmount = Number(bonusAmount);
+    if (isNaN(numAmount) || numAmount <= 0) {
+      setActionError('Bonus amount must be a valid positive number.');
+      return;
+    }
+
+    setRecordingBonus(true);
+    try {
+      const res = await fetch('/api/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: data!.client._id,
+          projectId: bonusProjectId || undefined,
+          amount: numAmount,
+          currency: bonusCurrency,
+          paymentMethod: bonusPaymentMethod,
+          paymentType: 'CLIENT_BONUS',
+          paymentDate: new Date(bonusDate).toISOString(),
+          transactionReference: bonusRefId || undefined,
+          notes: [bonusReason ? `Reason: ${bonusReason}` : '', bonusNotes].filter(Boolean).join(' | ') || undefined,
+          notifyClient: false,
+        }),
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        setActionSuccess(
+          `Client bonus of ${bonusCurrency} ${numAmount.toLocaleString('en-IN')} recorded successfully (Internal Only). Receipt: ${json.data.paymentNumber}`
+        );
+        setBonusAmount('');
+        setBonusRefId('');
+        setBonusReason('');
+        setBonusNotes('');
+        setBonusProjectId('');
+        setBonusModalOpen(false);
+        await fetchClientDetails();
+      } else {
+        setActionError(json.error?.message || 'Bonus was not recorded.');
+      }
+    } catch (err: any) {
+      setActionError('An error occurred while saving the bonus.');
+    } finally {
+      setRecordingBonus(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-6 animate-pulse">
@@ -865,7 +989,7 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
         {/* Right Columns: Financials, Projects, Invoices, Payments, History */}
         <div className="lg:col-span-2 space-y-8">
           {/* Financial summary blocks */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <div className="bg-[#141416] border border-[#242428] p-4 rounded-none md:rounded-xs text-center">
               <span className="text-[10px] text-[#88888e] font-mono font-bold uppercase tracking-wider">PROJECTS BUDGET</span>
               <p className="text-base md:text-lg font-bold font-mono text-white mt-1">
@@ -882,6 +1006,12 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
               <span className="text-[10px] text-[#88888e] font-mono font-bold uppercase tracking-wider">OUTSTANDING BALANCE</span>
               <p className="text-base md:text-lg font-bold font-mono text-[#ff3e00] mt-1">
                 Rs. {financials.outstanding.toLocaleString('en-IN')}
+              </p>
+            </div>
+            <div className="bg-[#141416] border border-[#242428] p-4 rounded-none md:rounded-xs text-center">
+              <span className="text-[10px] text-[#88888e] font-mono font-bold uppercase tracking-wider">CLIENT BONUS</span>
+              <p className="text-base md:text-lg font-bold font-mono text-amber-400 mt-1">
+                Rs. {(financials.totalBonus || 0).toLocaleString('en-IN')}
               </p>
             </div>
           </div>
@@ -1084,15 +1214,24 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
                   RECENT PAYMENTS
                 </h2>
               </div>
-              {projects.length > 0 && (
+              <div className="flex items-center gap-2">
+                {projects.length > 0 && (
+                  <button
+                    onClick={() => setPaymentModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-black hover:bg-[#ff3e00] hover:text-white text-xs font-mono uppercase tracking-wider font-semibold rounded-none md:rounded-xs transition-all"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    RECORD PAYMENT
+                  </button>
+                )}
                 <button
-                  onClick={() => setPaymentModalOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-black hover:bg-[#ff3e00] hover:text-white text-xs font-mono uppercase tracking-wider font-semibold rounded-none md:rounded-xs transition-all"
+                  onClick={() => setBonusModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#18181b] hover:bg-amber-500 hover:text-black border border-amber-500/40 text-amber-400 text-xs font-mono uppercase tracking-wider font-semibold rounded-none md:rounded-xs transition-all"
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  RECORD PAYMENT
+                  <Gift className="w-3.5 h-3.5" />
+                  ADD BONUS
                 </button>
-              )}
+              </div>
             </div>
 
             {payments.length === 0 ? (
@@ -1103,6 +1242,7 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
                   <thead>
                     <tr className="bg-[#0a0a0a] border-b border-[#242428] text-[#88888e] text-[10px] uppercase tracking-wider">
                       <th className="px-4 py-3">Receipt #</th>
+                      <th className="px-4 py-3">Type</th>
                       <th className="px-4 py-3">Method</th>
                       <th className="px-4 py-3">Ref ID</th>
                       <th className="px-4 py-3">Date</th>
@@ -1113,6 +1253,15 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
                     {payments.map((pay) => (
                       <tr key={pay._id} className="hover:bg-[#18181b]/50 transition-colors">
                         <td className="px-4 py-3 font-semibold text-white">{pay.paymentNumber}</td>
+                        <td className="px-4 py-3">
+                          {pay.paymentType === 'CLIENT_BONUS' ? (
+                            <span className="px-1.5 py-0.5 rounded-none md:rounded-xs text-[10px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                              CLIENT BONUS
+                            </span>
+                          ) : (
+                            <span className="text-[#88888e]">{pay.paymentType || 'INSTALLMENT'}</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3">{pay.paymentMethod}</td>
                         <td className="px-4 py-3 text-[#88888e]">{pay.transactionReference || '—'}</td>
                         <td className="px-4 py-3">{new Date(pay.paymentDate).toLocaleDateString()}</td>
@@ -1422,7 +1571,7 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
                 id="payment-project-select"
                 value={selectedProjectId}
                 onChange={(e) => setSelectedProjectId(e.target.value)}
-                className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2.5 text-white focus:outline-none focus:border-[#ff3e00] transition-colors"
+                className="crm-select font-mono"
                 required
               >
                 {projects.map((proj) => (
@@ -1501,14 +1650,15 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
                   id="payment-method-select"
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                  className="crm-select font-mono"
                   required
                 >
-                  <option value="UPI">UPI</option>
-                  <option value="BANK_TRANSFER">BANK TRANSFER</option>
-                  <option value="CASH">CASH</option>
-                  <option value="CARD">CARD</option>
-                  <option value="OTHER">OTHER</option>
+                  {renderedPaymentMethods.map((m) => (
+                    <option key={m.key} value={m.key}>{m.label}</option>
+                  ))}
+                  {paymentMethod && !renderedPaymentMethods.some((m) => m.key === paymentMethod) && (
+                    <option value={paymentMethod}>{paymentMethod} (Inactive)</option>
+                  )}
                 </select>
               </div>
               <div className="space-y-1.5">
@@ -1517,13 +1667,15 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
                   id="payment-type-select"
                   value={paymentType}
                   onChange={(e) => setPaymentType(e.target.value)}
-                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                  className="crm-select font-mono"
                   required
                 >
-                  <option value="INSTALLMENT">INSTALLMENT</option>
-                  <option value="ADVANCE">ADVANCE</option>
-                  <option value="FINAL_PAYMENT">FINAL PAYMENT</option>
-                  <option value="OTHER">OTHER</option>
+                  {renderedPaymentTypes.map((t) => (
+                    <option key={t.key} value={t.key}>{t.label}</option>
+                  ))}
+                  {paymentType && !renderedPaymentTypes.some((t) => t.key === paymentType) && (
+                    <option value={paymentType}>{paymentType} (Inactive)</option>
+                  )}
                 </select>
               </div>
             </div>
@@ -1603,6 +1755,233 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
       </div>
     )}
 
+    {/* Add Client Bonus Modal (Internal Only) */}
+    {bonusModalOpen && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 overflow-y-auto">
+        <div className="bg-[#141416] border border-[#242428] rounded-none md:rounded-xs max-w-md w-full p-6 space-y-5 shadow-2xl">
+          <div className="space-y-1 pb-3 border-b border-[#242428]">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                <h3 className="text-xs font-mono font-bold text-white uppercase tracking-wider flex items-center">
+                  <Gift className="w-4 h-4 mr-2 text-amber-400" />
+                  SYS::RECORD_CLIENT_BONUS
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBonusModalOpen(false)}
+                className="text-[#88888e] hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-[11px] font-mono text-[#88888e]">
+              Record client appreciation or bonus payment for internal accounting.
+            </p>
+          </div>
+
+          {/* Internal-only Banner */}
+          <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-none md:rounded-xs text-[11px] font-mono text-amber-300 space-y-1">
+            <div className="font-bold flex items-center gap-1.5">
+              <Lock className="w-3 h-3 text-amber-400" />
+              INTERNAL ACCOUNTING ONLY
+            </div>
+            <p className="text-[10px] text-amber-200/80 leading-relaxed">
+              The client will NEVER receive any Telegram message, payment receipt, email, or invoice notification.
+              This bonus does NOT reduce the client&apos;s project balance.
+            </p>
+          </div>
+
+          <form onSubmit={handleRecordBonus} className="space-y-4 text-xs font-mono">
+            {/* Client (fixed/read-only) */}
+            <div className="space-y-1.5">
+              <label className="block text-[10px] uppercase tracking-wider text-[#88888e]">Client *</label>
+              <input
+                type="text"
+                readOnly
+                value={`${data.client.name} (${data.client.clientCode})`}
+                className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-[#a1a1aa] font-mono cursor-not-allowed"
+              />
+            </div>
+
+            {/* Project (optional) */}
+            <div className="space-y-1.5">
+              <label htmlFor="bonus-project-select" className="block text-[10px] uppercase tracking-wider text-[#88888e]">
+                Project (Optional)
+              </label>
+              <select
+                id="bonus-project-select"
+                value={bonusProjectId}
+                onChange={(e) => setBonusProjectId(e.target.value)}
+                className="crm-select font-mono"
+              >
+                <option value="">No Project (Direct Client Bonus)</option>
+                {projects.map((proj) => (
+                  <option key={proj._id} value={proj._id}>
+                    {proj.name} ({proj.projectCode})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Amount & Currency */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2 space-y-1.5">
+                <label htmlFor="bonus-amount-input" className="block text-[10px] uppercase tracking-wider text-[#88888e]">
+                  Bonus Amount *
+                </label>
+                <input
+                  id="bonus-amount-input"
+                  type="number"
+                  value={bonusAmount}
+                  onChange={(e) => setBonusAmount(e.target.value)}
+                  placeholder="e.g. 5000"
+                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2.5 text-white focus:outline-none focus:border-amber-400 transition-colors font-bold"
+                  required
+                  min="0.01"
+                  step="any"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor="bonus-currency-select" className="block text-[10px] uppercase tracking-wider text-[#88888e]">
+                  Currency *
+                </label>
+                <select
+                  id="bonus-currency-select"
+                  value={bonusCurrency}
+                  onChange={(e) => setBonusCurrency(e.target.value)}
+                  className="crm-select font-mono"
+                  required
+                >
+                  <option value="INR">INR (₹)</option>
+                  <option value="USD">USD ($)</option>
+                  <option value="EUR">EUR (€)</option>
+                  <option value="GBP">GBP (£)</option>
+                  <option value="AED">AED</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Payment Method & Date */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label htmlFor="bonus-method-select" className="block text-[10px] uppercase tracking-wider text-[#88888e]">
+                  Method *
+                </label>
+                <select
+                  id="bonus-method-select"
+                  value={bonusPaymentMethod}
+                  onChange={(e) => setBonusPaymentMethod(e.target.value)}
+                  className="crm-select font-mono"
+                  required
+                >
+                  {renderedPaymentMethods.map((m) => (
+                    <option key={m.key} value={m.key}>{m.label}</option>
+                  ))}
+                  {bonusPaymentMethod && !renderedPaymentMethods.some((m) => m.key === bonusPaymentMethod) && (
+                    <option value={bonusPaymentMethod}>{bonusPaymentMethod}</option>
+                  )}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor="bonus-date-input" className="block text-[10px] uppercase tracking-wider text-[#88888e]">
+                  Received Date *
+                </label>
+                <input
+                  id="bonus-date-input"
+                  type="date"
+                  value={bonusDate}
+                  onChange={(e) => setBonusDate(e.target.value)}
+                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3 py-2 text-white focus:outline-none focus:border-amber-400"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Description / Reason */}
+            <div className="space-y-1.5">
+              <label htmlFor="bonus-reason-input" className="block text-[10px] uppercase tracking-wider text-[#88888e]">
+                Reason / Description
+              </label>
+              <input
+                id="bonus-reason-input"
+                type="text"
+                value={bonusReason}
+                onChange={(e) => setBonusReason(e.target.value)}
+                placeholder="e.g. Appreciation for early delivery"
+                className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3 py-2 text-white focus:outline-none focus:border-amber-400 transition-colors"
+              />
+            </div>
+
+            {/* Transaction Reference */}
+            <div className="space-y-1.5">
+              <label htmlFor="bonus-ref-input" className="block text-[10px] uppercase tracking-wider text-[#88888e]">
+                Transaction Reference
+              </label>
+              <input
+                id="bonus-ref-input"
+                type="text"
+                value={bonusRefId}
+                onChange={(e) => setBonusRefId(e.target.value)}
+                placeholder="UPI/Bank Ref or UTR #"
+                className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3 py-2 text-white focus:outline-none focus:border-amber-400 transition-colors"
+              />
+            </div>
+
+            {/* Internal Notes */}
+            <div className="space-y-1.5">
+              <label htmlFor="bonus-notes-input" className="block text-[10px] uppercase tracking-wider text-[#88888e]">
+                Internal Notes
+              </label>
+              <textarea
+                id="bonus-notes-input"
+                value={bonusNotes}
+                onChange={(e) => setBonusNotes(e.target.value)}
+                placeholder="Confidential internal notes..."
+                className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3 py-2 text-white focus:outline-none focus:border-amber-400 transition-colors h-16 resize-none"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setBonusModalOpen(false);
+                  setBonusAmount('');
+                  setBonusRefId('');
+                  setBonusReason('');
+                  setBonusNotes('');
+                  setBonusProjectId('');
+                }}
+                className="px-4 py-2.5 bg-[#18181b] hover:bg-[#242428] border border-[#242428] text-[#88888e] hover:text-white rounded-none md:rounded-xs uppercase tracking-wider font-semibold transition-all"
+              >
+                CANCEL
+              </button>
+              <button
+                type="submit"
+                disabled={recordingBonus}
+                className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-semibold uppercase tracking-wider rounded-none md:rounded-xs flex items-center gap-1.5 transition-all disabled:opacity-50"
+              >
+                {recordingBonus ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    RECORDING...
+                  </>
+                ) : (
+                  <>
+                    <Gift className="w-3.5 h-3.5" />
+                    SAVE BONUS (INTERNAL)
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )}
+
     {/* Create Request Modal */}
     {requestModalOpen && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 overflow-y-auto">
@@ -1645,7 +2024,7 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
                       setRequestMessage('Please provide the requested website details.');
                     }
                   }}
-                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2.5 text-white focus:outline-none focus:border-[#ff3e00]"
+                  className="crm-select font-mono"
                 >
                   <option value="GENERAL">GENERAL TEXT</option>
                   <option value="CREDENTIAL">🔐 SECURE CREDENTIAL</option>
@@ -1661,7 +2040,7 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
                 <select
                   value={selectedProjectIdForReq}
                   onChange={(e) => setSelectedProjectIdForReq(e.target.value)}
-                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2.5 text-white focus:outline-none focus:border-[#ff3e00]"
+                  className="crm-select font-mono"
                 >
                   <option value="">None (General Client Request)</option>
                   {projects.map((p) => (
@@ -1680,19 +2059,14 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
                   <select
                     value={credentialType}
                     onChange={(e) => setCredentialType(e.target.value)}
-                    className="w-full bg-[#141416] border border-[#242428] rounded-none md:rounded-xs px-3 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select font-mono"
                   >
-                    <option value="HOSTING">HOSTING</option>
-                    <option value="DOMAIN">DOMAIN</option>
-                    <option value="WORDPRESS">WORDPRESS</option>
-                    <option value="FTP">FTP</option>
-                    <option value="SFTP">SFTP</option>
-                    <option value="CPANEL">CPANEL</option>
-                    <option value="DATABASE">DATABASE</option>
-                    <option value="EMAIL">EMAIL</option>
-                    <option value="CLOUD">CLOUD</option>
-                    <option value="GITHUB">GITHUB</option>
-                    <option value="OTHER">OTHER</option>
+                    {renderedCredTypes.map((c) => (
+                      <option key={c.key} value={c.key}>{c.label}</option>
+                    ))}
+                    {credentialType && !renderedCredTypes.some((c) => c.key === credentialType) && (
+                      <option value={credentialType}>{credentialType} (Inactive)</option>
+                    )}
                   </select>
                 </div>
                 <div>
@@ -2130,16 +2504,14 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
                   <select
                     value={newProjectServiceType}
                     onChange={(e) => setNewProjectServiceType(e.target.value)}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select font-mono"
                   >
-                    <option value="WEBSITE">Website</option>
-                    <option value="WEB_APPLICATION">Web Application</option>
-                    <option value="MOBILE_APPLICATION">Mobile Application</option>
-                    <option value="API_DEVELOPMENT">API Development</option>
-                    <option value="WORDPRESS">WordPress</option>
-                    <option value="ECOMMERCE">E-Commerce</option>
-                    <option value="MAINTENANCE">Maintenance</option>
-                    <option value="OTHER">Other</option>
+                    {renderedServices.map((s) => (
+                      <option key={s.key} value={s.key}>{s.label}</option>
+                    ))}
+                    {newProjectServiceType && !renderedServices.some((s) => s.key === newProjectServiceType) && (
+                      <option value={newProjectServiceType}>{newProjectServiceType} (Inactive)</option>
+                    )}
                   </select>
                 </div>
 
@@ -2148,7 +2520,7 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
                   <select
                     value={newProjectCurrency}
                     onChange={(e) => setNewProjectCurrency(e.target.value)}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select font-mono"
                   >
                     <option value="INR">INR (₹)</option>
                     <option value="USD">USD ($)</option>
@@ -2318,7 +2690,7 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
                 <select
                   value={selectedTeamMemberId}
                   onChange={(e) => setSelectedTeamMemberId(e.target.value)}
-                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                  className="crm-select font-mono"
                 >
                   {shareTeamMembers.map((m) => {
                     const hasPerm = m.permissions && m.permissions.includes('VIEW_CREDENTIALS');
@@ -2446,16 +2818,14 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
                   <select
                     value={editProjectServiceType}
                     onChange={(e) => setEditProjectServiceType(e.target.value)}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select font-mono"
                   >
-                    <option value="WEB_DEVELOPMENT">Web Development</option>
-                    <option value="APP_DEVELOPMENT">App Development</option>
-                    <option value="UI_UX_DESIGN">UI/UX Design</option>
-                    <option value="SEO">SEO</option>
-                    <option value="DIGITAL_MARKETING">Digital Marketing</option>
-                    <option value="MAINTENANCE">Maintenance</option>
-                    <option value="CONSULTING">Consulting</option>
-                    <option value="OTHER">Other</option>
+                    {renderedServices.map((s) => (
+                      <option key={s.key} value={s.key}>{s.label}</option>
+                    ))}
+                    {editProjectServiceType && !renderedServices.some((s) => s.key === editProjectServiceType) && (
+                      <option value={editProjectServiceType}>{editProjectServiceType} (Inactive)</option>
+                    )}
                   </select>
                 </div>
                 <div>
@@ -2463,7 +2833,7 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
                   <select
                     value={editProjectStatus}
                     onChange={(e) => setEditProjectStatus(e.target.value)}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select font-mono"
                   >
                     <option value="PENDING_AGREEMENT">Pending Agreement</option>
                     <option value="NOT_STARTED">Not Started</option>
@@ -2493,7 +2863,7 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
                   <select
                     value={editProjectCurrency}
                     onChange={(e) => setEditProjectCurrency(e.target.value)}
-                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3 py-2 text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select font-mono"
                   >
                     <option value="INR">INR (₹)</option>
                     <option value="USD">USD ($)</option>

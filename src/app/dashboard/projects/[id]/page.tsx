@@ -28,6 +28,7 @@ import {
   X,
   User,
 } from 'lucide-react';
+import { useMasterData } from '@/hooks/useMasterData';
 
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -42,6 +43,38 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [agreement, setAgreement] = useState<any | null>(null);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const { items: masterServices } = useMasterData('SERVICE');
+  const { items: masterCredentialTypes } = useMasterData('CREDENTIAL_TYPE');
+
+  const defaultServices = [
+    { key: 'WEBSITE', label: 'Website Development' },
+    { key: 'WEB_APPLICATION', label: 'Web Application' },
+    { key: 'MOBILE_APPLICATION', label: 'Mobile Application' },
+    { key: 'API_DEVELOPMENT', label: 'API Development' },
+    { key: 'WORDPRESS', label: 'WordPress' },
+    { key: 'ECOMMERCE', label: 'E-Commerce' },
+    { key: 'MAINTENANCE', label: 'Maintenance' },
+    { key: 'OTHER', label: 'Other' },
+  ];
+  const renderedServices = masterServices.length > 0
+    ? masterServices.map((s) => ({ key: s.key, label: s.label }))
+    : defaultServices;
+
+  const defaultCredTypes = [
+    { key: 'WORDPRESS', label: 'WordPress' },
+    { key: 'HOSTING', label: 'Hosting / cPanel' },
+    { key: 'SSH', label: 'SSH / SFTP' },
+    { key: 'DATABASE', label: 'Database' },
+    { key: 'CLOUDFLARE', label: 'Cloudflare' },
+    { key: 'GITHUB', label: 'GitHub' },
+    { key: 'EMAIL', label: 'Email / SMTP' },
+    { key: 'API', label: 'API Key / Token' },
+    { key: 'CUSTOM', label: 'Custom Access' },
+  ];
+  const renderedCredTypes = masterCredentialTypes.length > 0
+    ? masterCredentialTypes.map((c) => ({ key: c.key, label: c.label }))
+    : defaultCredTypes;
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<
@@ -723,7 +756,15 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                       <td className="px-4 py-3 font-semibold text-white">{p.paymentNumber}</td>
                       <td className="px-4 py-3">{new Date(p.paymentDate).toLocaleDateString()}</td>
                       <td className="px-4 py-3 text-white">{p.paymentMethod}</td>
-                      <td className="px-4 py-3">{p.paymentType || 'INSTALLMENT'}</td>
+                      <td className="px-4 py-3">
+                        {p.paymentType === 'CLIENT_BONUS' ? (
+                          <span className="px-1.5 py-0.5 rounded-none md:rounded-xs text-[10px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                            CLIENT BONUS
+                          </span>
+                        ) : (
+                          p.paymentType || 'INSTALLMENT'
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <span className="px-2 py-0.5 rounded-none md:rounded-xs text-[10px] font-semibold bg-[#00D664]/10 border border-[#00D664]/20 text-[#00D664]">
                           {p.status}
@@ -1122,16 +1163,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                   <select
                     value={editFormData.serviceType}
                     onChange={(e) => setEditFormData({ ...editFormData, serviceType: e.target.value })}
-                    className="w-full px-3.5 py-2 bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs text-xs font-mono text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select font-mono"
                   >
-                    <option value="WEBSITE">Website Development</option>
-                    <option value="WEB_APPLICATION">Web Application</option>
-                    <option value="MOBILE_APPLICATION">Mobile Application</option>
-                    <option value="API_DEVELOPMENT">API Development</option>
-                    <option value="WORDPRESS">WordPress</option>
-                    <option value="ECOMMERCE">E-Commerce</option>
-                    <option value="MAINTENANCE">Maintenance</option>
-                    <option value="OTHER">Other</option>
+                    {renderedServices.map((s) => (
+                      <option key={s.key} value={s.key}>{s.label}</option>
+                    ))}
+                    {editFormData.serviceType && !renderedServices.some((s) => s.key === editFormData.serviceType) && (
+                      <option value={editFormData.serviceType}>{editFormData.serviceType} (Inactive)</option>
+                    )}
                   </select>
                 </div>
               </div>
@@ -1155,7 +1194,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                   <select
                     value={editFormData.currency}
                     onChange={(e) => setEditFormData({ ...editFormData, currency: e.target.value })}
-                    className="w-full px-3.5 py-2 bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs text-xs font-mono text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select font-mono"
                   >
                     <option value="INR">INR (₹)</option>
                     <option value="USD">USD ($)</option>
@@ -1169,7 +1208,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                   <select
                     value={editFormData.status}
                     onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value })}
-                    className="w-full px-3.5 py-2 bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs text-xs font-mono text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select font-mono"
                   >
                     <option value="PLANNED">Planned</option>
                     <option value="PENDING_AGREEMENT">Pending Agreement</option>
@@ -1287,17 +1326,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                   <select
                     value={credFormData.credentialType}
                     onChange={(e) => setCredFormData({ ...credFormData, credentialType: e.target.value })}
-                    className="w-full px-3.5 py-2 bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs text-xs font-mono text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select font-mono"
                   >
-                    <option value="WORDPRESS">WordPress</option>
-                    <option value="HOSTING">Hosting / cPanel</option>
-                    <option value="SSH">SSH / SFTP</option>
-                    <option value="DATABASE">Database</option>
-                    <option value="CLOUDFLARE">Cloudflare</option>
-                    <option value="GITHUB">GitHub</option>
-                    <option value="EMAIL">Email / SMTP</option>
-                    <option value="API">API Key / Token</option>
-                    <option value="CUSTOM">Custom Access</option>
+                    {renderedCredTypes.map((c) => (
+                      <option key={c.key} value={c.key}>{c.label}</option>
+                    ))}
+                    {credFormData.credentialType && !renderedCredTypes.some((c) => c.key === credFormData.credentialType) && (
+                      <option value={credFormData.credentialType}>{credFormData.credentialType} (Inactive)</option>
+                    )}
                   </select>
                 </div>
 
@@ -1306,7 +1342,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                   <select
                     value={credFormData.taskId}
                     onChange={(e) => setCredFormData({ ...credFormData, taskId: e.target.value })}
-                    className="w-full px-3.5 py-2 bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs text-xs font-mono text-white focus:outline-none focus:border-[#ff3e00]"
+                    className="crm-select font-mono"
                   >
                     <option value="">Project-wide (General)</option>
                     {tasks.map((t) => (

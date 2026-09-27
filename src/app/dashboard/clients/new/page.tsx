@@ -313,7 +313,7 @@ export default function NewClientPage() {
                 name="serviceType"
                 value={formData.serviceType}
                 onChange={handleChange}
-                className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] font-mono focus:outline-none focus:border-[#ff3e00] cursor-pointer"
+                className="crm-select font-mono"
               >
                 <option value="WEBSITE">WEBSITE DEVELOPMENT</option>
                 <option value="WEB_APPLICATION">WEB APPLICATION</option>
@@ -333,7 +333,7 @@ export default function NewClientPage() {
                   name="currency"
                   value={formData.currency}
                   onChange={handleChange}
-                  className="w-full px-2 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] font-mono focus:outline-none focus:border-[#ff3e00] cursor-pointer"
+                  className="crm-select font-mono"
                 >
                   <option value="INR">INR (₹)</option>
                   <option value="USD">USD ($)</option>
@@ -433,7 +433,7 @@ export default function NewClientPage() {
                 name="paymentMethod"
                 value={formData.paymentMethod}
                 onChange={handleChange}
-                className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] text-xs text-[#f5f5f2] font-mono focus:outline-none focus:border-[#ff3e00] cursor-pointer"
+                className="crm-select font-mono"
               >
                 <option value="BANK_TRANSFER">BANK TRANSFER (IMPS/NEFT/RTGS)</option>
                 <option value="UPI">UPI (GPAY / PHONEPE / QR)</option>

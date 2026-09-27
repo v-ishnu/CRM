@@ -41,6 +41,7 @@ export interface ITeamMember extends Document {
   email: string;
   phone?: string;
   role: TeamRole;
+  designation?: string;
   telegramUserId?: string;
   telegramUsername?: string;
   telegramChatId?: string;
@@ -79,6 +80,10 @@ const TeamMemberSchema = new Schema<ITeamMember>(
       enum: ['ADMIN', 'MANAGER', 'DEVELOPER', 'DESIGNER', 'SEO', 'OTHER'],
       default: 'DEVELOPER',
       required: true,
+    },
+    designation: {
+      type: String,
+      trim: true,
     },
     telegramUserId: {
       type: String,

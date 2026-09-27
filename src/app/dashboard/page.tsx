@@ -37,6 +37,10 @@ interface DashboardStats {
   paymentsThisMonth: number;
   pendingInvoices: number;
   recentActivity: ActivityItem[];
+  totalPaid?: number;
+  totalBonus?: number;
+  totalCashReceived?: number;
+  bonusThisMonth?: number;
 }
 
 export default function DashboardPage() {
@@ -85,6 +89,10 @@ export default function DashboardPage() {
     paymentsThisMonth: 0,
     pendingInvoices: 0,
     recentActivity: [],
+    totalPaid: 0,
+    totalBonus: 0,
+    totalCashReceived: 0,
+    bonusThisMonth: 0,
   };
 
   const cards = [
@@ -214,7 +222,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-[#242428]">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-[#242428]">
               <div className="bg-[#0e0e11] p-4 border border-[#242428] rounded-xs">
                 <p className="font-mono text-[10px] text-[#71717a] uppercase font-bold tracking-wider">
                   Payments Realized
@@ -229,6 +237,22 @@ export default function DashboardPage() {
                 </p>
                 <p className="font-mono text-xl font-bold text-[#ff3e00] mt-1">
                   ₹{data.outstandingAmount.toLocaleString('en-IN')}
+                </p>
+              </div>
+              <div className="bg-[#0e0e11] p-4 border border-[#242428] rounded-xs">
+                <p className="font-mono text-[10px] text-[#71717a] uppercase font-bold tracking-wider">
+                  Client Bonuses
+                </p>
+                <p className="font-mono text-xl font-bold text-amber-400 mt-1">
+                  ₹{(data.totalBonus || 0).toLocaleString('en-IN')}
+                </p>
+              </div>
+              <div className="bg-[#0e0e11] p-4 border border-[#242428] rounded-xs">
+                <p className="font-mono text-[10px] text-[#71717a] uppercase font-bold tracking-wider">
+                  Total Cash Received
+                </p>
+                <p className="font-mono text-xl font-bold text-[#38bdf8] mt-1">
+                  ₹{(data.totalCashReceived ?? (totalPaid + (data.totalBonus || 0))).toLocaleString('en-IN')}
                 </p>
               </div>
             </div>

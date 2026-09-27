@@ -32,6 +32,9 @@ export class NotificationService {
     if (paymentId) {
       const payment = await Payment.findById(paymentId);
       if (payment) {
+        if (payment.paymentType === 'CLIENT_BONUS') {
+          throw new Error('Client bonus payments must not trigger client notifications');
+        }
         const balances = await PaymentService.calculateProjectBalances(projectId);
         const advancePercentage = Math.round((payment.amount / project.totalAmount) * 100);
         paymentInfoText = `Advance Payment Received:\n${project.currency} ${payment.amount.toLocaleString('en-IN')}\n\nPayment:\n${advancePercentage}% Advance`;
@@ -108,6 +111,9 @@ export class NotificationService {
 
     const payment = await Payment.findById(paymentId);
     if (!payment) throw new Error('Payment not found');
+    if (payment.paymentType === 'CLIENT_BONUS') {
+      throw new Error('Client bonus payments must not trigger client notifications');
+    }
 
     const balances = await PaymentService.calculateProjectBalances(projectId);
 
