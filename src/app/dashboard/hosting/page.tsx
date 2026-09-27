@@ -86,7 +86,10 @@ export default function HostingPage() {
 
   // Project selector search and direct client toggle
   const [projectSearch, setProjectSearch] = useState('');
+  const [clientSearch, setClientSearch] = useState('');
   const [isDirectClientMode, setIsDirectClientMode] = useState(false);
+  const [clientsLoading, setClientsLoading] = useState(false);
+  const [clientsError, setClientsError] = useState<string | null>(null);
 
   // Form states
   const [formData, setFormData] = useState({
@@ -135,7 +138,19 @@ export default function HostingPage() {
     );
   });
 
+  // Filter direct clients by search term (name, code, company, email)
+  const filteredClients = clients.filter((c) => {
+    if (!clientSearch.trim()) return true;
+    const term = clientSearch.toLowerCase();
+    const name = (c.name || '').toLowerCase();
+    const code = (c.clientCode || '').toLowerCase();
+    const company = (c.company || '').toLowerCase();
+    const email = (c.email || '').toLowerCase();
+    return name.includes(term) || code.includes(term) || company.includes(term) || email.includes(term);
+  });
+
   const selectedProjectObj = projects.find((p) => p._id === formData.projectId);
+  const selectedClientObj = clients.find((c) => c._id === formData.clientId);
 
   const fetchHostings = async () => {
     try {
@@ -157,20 +172,64 @@ export default function HostingPage() {
     }
   };
 
+  const fetchClients = async () => {
+    try {
+      setClientsLoading(true);
+      setClientsError(null);
+      const res = await fetch('/api/clients?limit=500');
+      const json = await res.json();
+      if (json.success) {
+        const clientList = Array.isArray(json.clients)
+          ? json.clients
+          : Array.isArray(json.data?.clients)
+          ? json.data.clients
+          : Array.isArray(json.data)
+          ? json.data
+          : [];
+        setClients(clientList);
+      } else {
+        setClientsError(json.error?.message || 'Unable to load clients.');
+      }
+    } catch (err: any) {
+      console.error('Failed to load clients for hosting:', err);
+      setClientsError('Unable to load clients. Retry.');
+    } finally {
+      setClientsLoading(false);
+    }
+  };
+
   const fetchDependencies = async () => {
     try {
+      setClientsLoading(true);
+      setClientsError(null);
       const [clientsRes, projectsRes] = await Promise.all([
-        fetch('/api/clients?limit=100'),
+        fetch('/api/clients?limit=500'),
         fetch('/api/projects'),
       ]);
       const [clientsJson, projectsJson] = await Promise.all([
         clientsRes.json(),
         projectsRes.json(),
       ]);
-      if (clientsJson.success) setClients(clientsJson.data?.clients || []);
-      if (projectsJson.success) setProjects(projectsJson.data || []);
+      if (clientsJson.success) {
+        const clientList = Array.isArray(clientsJson.clients)
+          ? clientsJson.clients
+          : Array.isArray(clientsJson.data?.clients)
+          ? clientsJson.data.clients
+          : Array.isArray(clientsJson.data)
+          ? clientsJson.data
+          : [];
+        setClients(clientList);
+      } else {
+        setClientsError(clientsJson.error?.message || 'Unable to load clients.');
+      }
+      if (projectsJson.success) {
+        setProjects(projectsJson.data || []);
+      }
     } catch (err) {
       console.error('Failed to load clients/projects for hosting:', err);
+      setClientsError('Unable to load clients. Retry.');
+    } finally {
+      setClientsLoading(false);
     }
   };
 
@@ -201,7 +260,7 @@ export default function HostingPage() {
       const payload = {
         ...formData,
         hostingProvider: provider,
-        projectId: formData.projectId || undefined,
+        projectId: isDirectClientMode ? null : (formData.projectId || undefined),
         clientId: formData.clientId || undefined,
         port: formData.port || undefined,
         startDate: formData.startDate ? new Date(formData.startDate) : undefined,
@@ -218,6 +277,7 @@ export default function HostingPage() {
         setBannerSuccess(`Hosting account for ${formData.domain} added successfully.`);
         setShowAddModal(false);
         setProjectSearch('');
+        setClientSearch('');
         setIsDirectClientMode(false);
         setFormData({
           clientId: '',
@@ -686,7 +746,7 @@ export default function HostingPage() {
                             </div>
                           </div>
                         ) : (
-                          <span className="text-[#88888e] text-[11px] italic">General Hosting</span>
+                          <span className="text-[#88888e] text-[11px] italic">Not associated with a project</span>
                         )}
                       </td>
 
@@ -1016,7 +1076,7 @@ export default function HostingPage() {
                       </div>
                     </div>
                   ) : (
-                    <span className="text-[#88888e] italic">General Client Hosting (No Project)</span>
+                    <span className="text-[#88888e] italic">Not associated with a project</span>
                   )}
                 </div>
               </div>
@@ -1170,9 +1230,11 @@ export default function HostingPage() {
                       const next = !isDirectClientMode;
                       setIsDirectClientMode(next);
                       if (next) {
-                        setFormData(prev => ({ ...prev, projectId: '' }));
+                        setFormData(prev => ({ ...prev, projectId: '', clientId: '' }));
+                        setProjectSearch('');
                       } else {
-                        setFormData(prev => ({ ...prev, clientId: '' }));
+                        setFormData(prev => ({ ...prev, projectId: '', clientId: '' }));
+                        setClientSearch('');
                       }
                     }}
                     className="text-[10px] font-mono text-[#88888e] hover:text-white underline transition-colors cursor-pointer"
@@ -1262,24 +1324,97 @@ export default function HostingPage() {
                     )}
                   </div>
                 ) : (
-                  /* Direct Client Mode (fallback when hosting has no project) */
+                  /* Direct Client Mode (when hosting has no project) */
                   <div className="space-y-2">
-                    <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e]">
-                      Client (Direct / No Project) *
-                    </label>
-                    <select
-                      required={isDirectClientMode}
-                      value={formData.clientId}
-                      onChange={(e) => setFormData(prev => ({ ...prev, clientId: e.target.value, projectId: '' }))}
-                      className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
-                    >
-                      <option value="">Select Client Directly ▼</option>
-                      {clients.map((c) => (
-                        <option key={c._id} value={c._id}>
-                          {c.name} ({c.clientCode}) {c.company ? `• ${c.company}` : ''}
+                    <div className="flex items-center justify-between">
+                      <label className="block font-mono text-[10px] uppercase font-bold tracking-wider text-[#88888e]">
+                        Client (Direct / No Project) *
+                      </label>
+                      {clientsLoading && (
+                        <span className="text-[10px] font-mono text-[#88888e] flex items-center gap-1">
+                          <Loader2 className="w-3 h-3 animate-spin text-[#ff3e00]" /> Loading clients...
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Search Clients */}
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-[#52525b]" />
+                      <input
+                        type="text"
+                        placeholder="Search clients by name, code, company, or email..."
+                        value={clientSearch}
+                        onChange={(e) => setClientSearch(e.target.value)}
+                        className="w-full pl-8 pr-3 py-1.5 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white placeholder-[#52525b] outline-none"
+                      />
+                    </div>
+
+                    {clientsError ? (
+                      <div className="p-2.5 bg-[#1c1110] border border-[#ef4444]/30 flex items-center justify-between text-xs font-mono text-[#ef4444]">
+                        <span>{clientsError}</span>
+                        <button
+                          type="button"
+                          onClick={fetchClients}
+                          className="underline text-white hover:text-[#ff3e00] ml-2 cursor-pointer font-bold"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    ) : (
+                      <select
+                        required={isDirectClientMode}
+                        value={formData.clientId}
+                        onChange={(e) => setFormData(prev => ({ ...prev, clientId: e.target.value, projectId: '' }))}
+                        className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#242428] focus:border-[#ff3e00] rounded-none md:rounded-xs text-xs font-mono text-white outline-none"
+                      >
+                        <option value="">
+                          {clientsLoading
+                            ? 'Loading clients...'
+                            : clients.length === 0
+                            ? 'No clients available.'
+                            : 'Select Client Directly ▼'}
                         </option>
-                      ))}
-                    </select>
+                        {filteredClients.map((c) => {
+                          const clientCode = c.clientCode ? ` [${c.clientCode}]` : '';
+                          const companyStr = c.company ? ` • ${c.company}` : '';
+                          return (
+                            <option key={c._id} value={c._id}>
+                              {c.name}{clientCode}{companyStr}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    )}
+
+                    {selectedClientObj ? (
+                      <div className="p-3 bg-[#141416] border border-[#00d664]/30 rounded-none md:rounded-xs space-y-1.5 mt-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono text-[10px] uppercase font-bold text-[#00d664] flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3 h-3" /> Direct Client Selected
+                          </span>
+                          <span className="font-mono text-[10px] text-[#88888e]">
+                            Code: <b className="text-white">{selectedClientObj.clientCode || 'N/A'}</b>
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
+                          <div>
+                            <span className="text-[#88888e] text-[10px] block">CLIENT</span>
+                            <span className="text-white font-bold">{selectedClientObj.name}</span>
+                            {selectedClientObj.company && (
+                              <span className="text-[#a1a1aa] text-[11px] block">{selectedClientObj.company}</span>
+                            )}
+                          </div>
+                          <div>
+                            <span className="text-[#88888e] text-[10px] block">PROJECT ASSOCIATION</span>
+                            <span className="text-[#a1a1aa] italic text-[11px]">Not associated with a project</span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-2.5 bg-[#141416]/50 border border-dashed border-[#242428] text-center font-mono text-[11px] text-[#88888e]">
+                        Select a client directly. No project will be associated with this hosting.
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

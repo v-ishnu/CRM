@@ -62,7 +62,11 @@ export class HostingService {
 
     let resolvedClientId = data.clientId;
 
-    if (data.projectId) {
+    const hasProject = !!(data.projectId && data.projectId !== 'null' && String(data.projectId).trim() !== '');
+    if (hasProject) {
+      if (!mongoose.Types.ObjectId.isValid(data.projectId!)) {
+        throw new Error('Invalid project ID');
+      }
       const project = await Project.findById(data.projectId);
       if (!project) {
         throw new Error('Project not found');
@@ -76,6 +80,10 @@ export class HostingService {
 
     if (!resolvedClientId) {
       throw new Error('Client is required (must select a valid Project or Client)');
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(resolvedClientId)) {
+      throw new Error('Invalid client ID');
     }
 
     const client = await Client.findById(resolvedClientId);
@@ -105,7 +113,7 @@ export class HostingService {
 
     const hosting = await Hosting.create({
       clientId: client._id,
-      projectId: data.projectId ? new mongoose.Types.ObjectId(data.projectId) : undefined,
+      projectId: hasProject ? new mongoose.Types.ObjectId(data.projectId) : undefined,
       hostingProvider: data.hostingProvider.trim(),
       hostingType: data.hostingType ? data.hostingType.trim() : 'Shared',
       panelUrl: data.panelUrl ? data.panelUrl.trim() : undefined,
