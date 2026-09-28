@@ -22,6 +22,7 @@ export interface TeamMemberChatPanelProps {
   teamMemberRole?: string;
   telegramConnected: boolean;
   telegramUsername?: string;
+  conversationId?: string;
   onGenerateLink?: () => void;
   onClose?: () => void;
   onConversationUpdated?: () => void;
@@ -56,6 +57,7 @@ export function TeamMemberChatPanel({
   teamMemberRole,
   telegramConnected,
   telegramUsername,
+  conversationId,
   onGenerateLink,
   onClose,
   onConversationUpdated,
@@ -107,7 +109,14 @@ export function TeamMemberChatPanel({
       if (!isSilent) setRefreshing(true);
 
       try {
-        const res = await fetch(`/api/team-members/${teamMemberId}/chat?page=${targetPage}&limit=50`);
+        const queryParams = new URLSearchParams({
+          page: String(targetPage),
+          limit: '50',
+        });
+        if (conversationId) {
+          queryParams.set('conversationId', conversationId);
+        }
+        const res = await fetch(`/api/team-members/${teamMemberId}/chat?${queryParams.toString()}`);
         const json = await res.json();
 
         if (json.success && json.data) {
@@ -140,7 +149,7 @@ export function TeamMemberChatPanel({
         setLoadingOlder(false);
       }
     },
-    [teamMemberId, onConversationUpdated]
+    [teamMemberId, conversationId, onConversationUpdated]
   );
 
   // Incremental poll for newly arrived messages (?after=)

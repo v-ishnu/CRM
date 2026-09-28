@@ -31,7 +31,15 @@ export default function LoginPage() {
       if (!res.ok || !data.success) {
         setError(data.error?.message || 'Login failed. Please verify credentials.');
       } else {
-        router.push('/dashboard');
+        let destination = '/dashboard';
+        if (typeof window !== 'undefined') {
+          const urlParams = new URLSearchParams(window.location.search);
+          const redirectParam = urlParams.get('redirect');
+          if (redirectParam && redirectParam.startsWith('/') && !redirectParam.startsWith('//')) {
+            destination = redirectParam;
+          }
+        }
+        router.push(destination);
         router.refresh();
       }
     } catch (err) {

@@ -3,6 +3,8 @@ import { PushNotificationService } from '@/services/push-notification.service';
 import { verifyJWT } from '@/lib/auth/jwt';
 import User from '@/models/User';
 
+import TeamMember from '@/models/TeamMember';
+
 export const runtime = 'nodejs';
 
 async function getAdminUser(req: NextRequest) {
@@ -31,13 +33,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const sampleMember = await TeamMember.findOne().select('_id').lean();
+    const testUrl = sampleMember
+      ? `/dashboard/team/${sampleMember._id}?tab=chat`
+      : '/dashboard/team';
+
     const result = await PushNotificationService.sendPushToAdmin(adminId, {
       title: 'Dr. Debuggers CRM',
       body: '🔔 Test Notification: Chrome Web Push is active and working!',
       icon: '/globe.svg',
       badge: '/globe.svg',
       data: {
-        url: '/dashboard/team',
+        url: testUrl,
+        teamMemberId: sampleMember ? sampleMember._id.toString() : undefined,
       },
     });
 

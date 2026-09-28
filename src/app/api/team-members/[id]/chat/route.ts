@@ -53,10 +53,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ success: true, data: incremental });
     }
 
+    const conversationId = searchParams.get('conversationId') || undefined;
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '50', 10);
 
-    const result = await TeamChatService.getConversationMessages(id, adminUser, { page, limit });
+    const result = await TeamChatService.getConversationMessages(id, adminUser, { page, limit, conversationId });
     return NextResponse.json({ success: true, data: result });
   } catch (error: any) {
     const status = error.message?.includes('not found') ? 404 : 400;

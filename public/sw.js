@@ -1,4 +1,4 @@
-// Service Worker for Chrome Web Push Notifications in Dr. Debuggers CRM
+// Service Worker v1.1.0 - Chrome Web Push & Deep-Link Navigation for Dr. Debuggers CRM
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -33,26 +33,30 @@ self.addEventListener('push', (event) => {
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
-// Handle notification click: focus existing window or open target conversation
+// Handle notification click: focus existing CRM window or open chat
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
-  const targetUrl = event.notification.data?.url || '/dashboard/team';
+  const rawUrl = event.notification?.data?.url || '/dashboard/team';
+  const targetUrl = new URL(rawUrl, self.location.origin).href;
 
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      for (const client of windowClients) {
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
         if ('focus' in client) {
           client.focus();
-          if ('navigate' in client && targetUrl) {
+          if ('navigate' in client) {
             return client.navigate(targetUrl);
           }
           return client;
         }
       }
+
       if (clients.openWindow) {
         return clients.openWindow(targetUrl);
       }
+
+      return undefined;
     })
   );
 });

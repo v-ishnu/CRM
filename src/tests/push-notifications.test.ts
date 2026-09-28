@@ -5,6 +5,7 @@ import path from 'path';
 import { NextRequest } from 'next/server';
 import webpush from 'web-push';
 import PushSubscription from '@/models/PushSubscription';
+import TeamMember from '@/models/TeamMember';
 import TeamMemberConversation from '@/models/TeamMemberConversation';
 import TeamMemberMessage from '@/models/TeamMemberMessage';
 import User from '@/models/User';
@@ -95,6 +96,13 @@ describe('Chrome Web Push Notifications Test Suite', () => {
     process.env.VAPID_PRIVATE_KEY = 'mock_private_vapid_key_server_only';
     process.env.VAPID_SUBJECT = 'mailto:admin@drdebuggers.com';
     (PushNotificationService as any).vapidConfigured = false;
+    vi.spyOn(TeamMember, 'findOne').mockReturnValue(mockMongooseQuery(null));
+    vi.spyOn(TeamMemberConversation.prototype, 'save').mockImplementation(async function (this: any) {
+      return this;
+    });
+    vi.spyOn(TeamMemberMessage.prototype, 'save').mockImplementation(async function (this: any) {
+      return this;
+    });
   });
 
   // ==========================================
@@ -215,6 +223,9 @@ describe('Chrome Web Push Notifications Test Suite', () => {
 
     it('POST /api/notifications/test should deliver test push to authenticated Admin only', async () => {
       vi.spyOn(PushSubscription, 'find').mockReturnValue(mockMongooseQuery([fakeSubscriptionA]));
+      vi.spyOn(TeamMember, 'findOne').mockReturnValue(mockMongooseQuery({
+        _id: new mongoose.Types.ObjectId(),
+      }));
       vi.spyOn(webpush, 'sendNotification').mockResolvedValue({ statusCode: 201 } as any);
 
       const req = new NextRequest('http://localhost:3000/api/notifications/test', {
@@ -345,6 +356,7 @@ describe('Chrome Web Push Notifications Test Suite', () => {
           title: '💬 Carlos Engineer',
           body: 'Finished frontend unit testing and deployment verification.',
           data: expect.objectContaining({
+            url: `/dashboard/team/${fakeMember._id.toString()}?tab=chat&conversationId=${mockConversation._id.toString()}`,
             teamMemberId: fakeMember._id.toString(),
             conversationId: mockConversation._id.toString(),
           }),
@@ -389,6 +401,122 @@ describe('Chrome Web Push Notifications Test Suite', () => {
 
       expect(incoming.status).toBe('DELIVERED');
       expect(incoming.text).toBe('Message when push network is down');
+    });
+  });
+
+  // ==========================================
+  // 7. NOTIFICATION CLICK ROUTING & DEEP LINKING
+  // ==========================================
+  describe('7. Notification Click Routing & Deep Linking', () => {
+    it('public/sw.js should contain robust notificationclick handling with clients.matchAll, client.focus, client.navigate, and clients.openWindow', () => {
+      const swPath = path.join(process.cwd(), 'public', 'sw.js');
+      const swContent = fs.readFileSync(swPath, 'utf8');
+
+      expect(swContent).toContain("addEventListener('notificationclick'");
+      expect(swContent).toContain('event.notification.close()');
+      expect(swContent).toContain('clients.matchAll');
+      expect(swContent).toContain('client.focus()');
+      expect(swContent).toContain('client.navigate(targetUrl)');
+      expect(swContent).toContain('clients.openWindow(targetUrl)');
+      expect(swContent).toContain('new URL(rawUrl, self.location.origin).href');
+    });
+
+    it('getConversationMessages should securely resolve specific conversationId belonging to team member', async () => {
+      const memberId = new mongoose.Types.ObjectId();
+      const convId = new mongoose.Types.ObjectId();
+      const mockAdminUser = { id: mockAdminAId, name: 'Admin', email: 'admin@drdebuggers.com' };
+
+      const mockTargetConversation = {
+        _id: convId,
+        adminId: new mongoose.Types.ObjectId(mockAdminAId),
+        teamMemberId: memberId,
+        status: 'OPEN',
+      };
+
+      const mockMember = {
+        _id: memberId,
+        name: 'Sara Engineer',
+        email: 'sara@drdebuggers.com',
+        role: 'DEVELOPER',
+        telegramConnected: true,
+      };
+
+      vi.spyOn(TeamMember, 'findById').mockReturnValue(mockMongooseQuery(mockMember));
+      vi.spyOn(TeamChatService, 'getOrCreateConversation').mockResolvedValue({
+        conversation: mockTargetConversation as any,
+        teamMember: mockMember as any,
+      });
+      vi.spyOn(TeamMemberConversation, 'findOne').mockImplementation((query: any) => {
+        if (query._id && query._id.toString() === convId.toString()) {
+          return mockMongooseQuery(mockTargetConversation);
+        }
+        return mockMongooseQuery(null);
+      });
+      vi.spyOn(TeamMemberMessage, 'countDocuments').mockResolvedValue(1);
+      vi.spyOn(TeamMemberMessage, 'find').mockReturnValue(mockMongooseQuery([{
+        _id: new mongoose.Types.ObjectId(),
+        conversationId: convId,
+        text: 'Hello from Sara',
+        sentAt: new Date(),
+      }]));
+
+      const result = await TeamChatService.getConversationMessages(
+        memberId.toString(),
+        mockAdminUser,
+        { conversationId: convId.toString() }
+      );
+
+      expect(result.conversation._id.toString()).toBe(convId.toString());
+      expect(result.messages.length).toBe(1);
+      expect(result.teamMember.name).toBe('Sara Engineer');
+    });
+
+    it('getConversationMessages should reject or fallback safely if conversationId does not belong to team member (Anti-Leakage)', async () => {
+      const memberIdA = new mongoose.Types.ObjectId();
+      const memberIdB = new mongoose.Types.ObjectId();
+      const convIdB = new mongoose.Types.ObjectId();
+      const mockAdminUser = { id: mockAdminAId, name: 'Admin', email: 'admin@drdebuggers.com' };
+
+      const mockMemberA = {
+        _id: memberIdA,
+        name: 'Member A',
+        email: 'a@drdebuggers.com',
+        role: 'DEVELOPER',
+        telegramConnected: true,
+      };
+
+      const mockDefaultConvA = {
+        _id: new mongoose.Types.ObjectId(),
+        adminId: new mongoose.Types.ObjectId(mockAdminAId),
+        teamMemberId: memberIdA,
+        status: 'OPEN',
+      };
+
+      vi.spyOn(TeamMember, 'findById').mockReturnValue(mockMongooseQuery(mockMemberA));
+      vi.spyOn(TeamChatService, 'getOrCreateConversation').mockResolvedValue({
+        conversation: mockDefaultConvA as any,
+        teamMember: mockMemberA as any,
+      });
+      vi.spyOn(TeamMemberConversation, 'findOne').mockImplementation((query: any) => {
+        // If query asks for convIdB for memberIdA, it must return null because convIdB belongs to memberIdB
+        if (query._id && query._id.toString() === convIdB.toString() && query.teamMemberId?.toString() === memberIdA.toString()) {
+          return mockMongooseQuery(null);
+        }
+        return mockMongooseQuery(mockDefaultConvA);
+      });
+      vi.spyOn(TeamMemberMessage, 'countDocuments').mockResolvedValue(0);
+      vi.spyOn(TeamMemberMessage, 'find').mockReturnValue(mockMongooseQuery([]));
+
+      // Attempting to query Member A with Member B's conversation ID
+      const result = await TeamChatService.getConversationMessages(
+        memberIdA.toString(),
+        mockAdminUser,
+        { conversationId: convIdB.toString() }
+      );
+
+      // Must NOT leak Member B's conversation: falls back to Member A's conversation
+      expect(result.conversation._id.toString()).not.toBe(convIdB.toString());
+      expect(result.conversation._id.toString()).toBe(mockDefaultConvA._id.toString());
     });
   });
 });

@@ -20,12 +20,17 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // If visiting /login and already logged in, redirect to dashboard
+  // If visiting /login and already logged in, redirect to dashboard or intended redirect target
   if (isLoginRoute) {
     if (sessionToken) {
       const payload = await verifyJWT(sessionToken);
       if (payload) {
-        return NextResponse.redirect(new URL('/dashboard', req.url));
+        const rawRedirect = req.nextUrl.searchParams.get('redirect');
+        const safeRedirect =
+          rawRedirect && rawRedirect.startsWith('/') && !rawRedirect.startsWith('//')
+            ? rawRedirect
+            : '/dashboard';
+        return NextResponse.redirect(new URL(safeRedirect, req.url));
       }
     }
     return NextResponse.next();
@@ -46,7 +51,12 @@ export async function middleware(req: NextRequest) {
           { status: 401 }
         );
       }
-      return NextResponse.redirect(new URL('/login', req.url));
+      const loginUrl = new URL('/login', req.url);
+      const fullPath = pathname + req.nextUrl.search;
+      if (fullPath !== '/' && fullPath !== '/dashboard') {
+        loginUrl.searchParams.set('redirect', fullPath);
+      }
+      return NextResponse.redirect(loginUrl);
     }
 
     const payload = await verifyJWT(sessionToken);
@@ -62,7 +72,12 @@ export async function middleware(req: NextRequest) {
         );
       }
       
-      const response = NextResponse.redirect(new URL('/login', req.url));
+      const loginUrl = new URL('/login', req.url);
+      const fullPath = pathname + req.nextUrl.search;
+      if (fullPath !== '/' && fullPath !== '/dashboard') {
+        loginUrl.searchParams.set('redirect', fullPath);
+      }
+      const response = NextResponse.redirect(loginUrl);
       response.cookies.delete('session');
       return response;
     }

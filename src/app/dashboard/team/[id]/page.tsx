@@ -1248,6 +1248,7 @@ export default function TeamMemberWorkspacePage() {
             teamMemberRole={member.role}
             telegramConnected={member.telegramConnected}
             telegramUsername={member.telegramUsername}
+            conversationId={searchParams.get('conversationId') || undefined}
             onGenerateLink={handleGenerateTelegramLink}
             onConversationUpdated={fetchMemberWorkspace}
           />

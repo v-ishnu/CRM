@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useMasterData } from '@/hooks/useMasterData';
 import {
   UserPlus,
@@ -26,8 +27,28 @@ import {
   ChevronUp,
   ExternalLink,
   MessageSquare,
+  Megaphone,
 } from 'lucide-react';
 import { TeamMemberChatModal } from '@/components/team/TeamMemberChatModal';
+import { TeamMemberBroadcastModal } from '@/components/team/TeamMemberBroadcastModal';
+
+function TeamChatQueryRedirect() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  useEffect(() => {
+    const chatMemberId = searchParams.get('chat') || searchParams.get('memberId');
+    if (chatMemberId) {
+      const convParam = searchParams.get('conversationId');
+      const target = convParam
+        ? `/dashboard/team/${chatMemberId}?tab=chat&conversationId=${encodeURIComponent(convParam)}`
+        : `/dashboard/team/${chatMemberId}?tab=chat`;
+      router.replace(target);
+    }
+  }, [searchParams, router]);
+
+  return null;
+}
 
 export default function TeamMembersPage() {
   const [activeTab, setActiveTab] = useState<'members' | 'invitations'>('members');
@@ -63,6 +84,7 @@ export default function TeamMembersPage() {
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showRevealBankModal, setShowRevealBankModal] = useState(false);
+  const [showBroadcastModal, setShowBroadcastModal] = useState(false);
   const [chatMember, setChatMember] = useState<any | null>(null);
 
   const [selectedMember, setSelectedMember] = useState<any>(null);
@@ -493,6 +515,9 @@ export default function TeamMembersPage() {
 
   return (
     <div className="space-y-6">
+      <Suspense fallback={null}>
+        <TeamChatQueryRedirect />
+      </Suspense>
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#242428]">
         <div>
@@ -507,6 +532,14 @@ export default function TeamMembersPage() {
           </p>
         </div>
         <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            onClick={() => setShowBroadcastModal(true)}
+            className="inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-xs bg-[#18181b] hover:bg-[#202024] border border-[#27272a] hover:border-[#ff3e00]/60 text-white font-mono text-xs uppercase font-bold tracking-wider transition-colors cursor-pointer shrink-0"
+            title="Broadcast Telegram message to multiple or all connected team members"
+          >
+            <Megaphone className="w-3.5 h-3.5 text-[#ff3e00]" />
+            <span>Broadcast Message</span>
+          </button>
           <button
             onClick={() => {
               setCreatedInviteUrl('');
@@ -1659,6 +1692,14 @@ export default function TeamMembersPage() {
           onConversationUpdated={fetchMembers}
         />
       )}
+
+      {/* Team Member Broadcast Modal */}
+      <TeamMemberBroadcastModal
+        isOpen={showBroadcastModal}
+        onClose={() => setShowBroadcastModal(false)}
+        teamMembers={members}
+        onBroadcastComplete={fetchMembers}
+      />
     </div>
   );
 }

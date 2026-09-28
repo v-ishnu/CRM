@@ -353,7 +353,7 @@ export class TeamChatService {
         icon: '/globe.svg',
         badge: '/globe.svg',
         data: {
-          url: `/dashboard/team?chat=${memberId.toString()}`,
+          url: `/dashboard/team/${memberId.toString()}?tab=chat&conversationId=${conversation._id.toString()}`,
           teamMemberId: memberId.toString(),
           conversationId: conversation._id.toString(),
         },
@@ -431,11 +431,25 @@ export class TeamChatService {
   static async getConversationMessages(
     teamMemberId: string,
     adminUser: AdminUserContext,
-    options: { page?: number; limit?: number } = {}
+    options: { page?: number; limit?: number; conversationId?: string } = {}
   ): Promise<ConversationMessagesResult> {
     await dbConnect();
 
-    const { conversation, teamMember } = await this.getOrCreateConversation(teamMemberId, adminUser);
+    const { teamMember } = await this.getOrCreateConversation(teamMemberId, adminUser);
+
+    let conversation: ITeamMemberConversation | null = null;
+    if (options.conversationId && mongoose.Types.ObjectId.isValid(options.conversationId)) {
+      // Find the specific conversation and verify that it matches this team member
+      conversation = await TeamMemberConversation.findOne({
+        _id: new mongoose.Types.ObjectId(options.conversationId),
+        teamMemberId: new mongoose.Types.ObjectId(teamMemberId),
+      });
+    }
+
+    if (!conversation) {
+      const convResult = await this.getOrCreateConversation(teamMemberId, adminUser);
+      conversation = convResult.conversation;
+    }
 
     const page = Math.max(1, Number(options.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(options.limit) || 50));
