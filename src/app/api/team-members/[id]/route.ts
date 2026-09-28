@@ -26,7 +26,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const { id } = await params;
     const body = await req.json();
-    const updated = await TeamMemberService.updateTeamMember(id, body, actor);
+
+    // Explicit allowlist of profile fields only - bankDetails are strictly prohibited here
+    const profilePayload: any = {};
+    if (body.name !== undefined) profilePayload.name = body.name;
+    if (body.email !== undefined) profilePayload.email = body.email;
+    if (body.phone !== undefined) profilePayload.phone = body.phone;
+    if (body.designation !== undefined) profilePayload.designation = body.designation;
+    if (body.role !== undefined) profilePayload.role = body.role;
+    if (body.status !== undefined) profilePayload.status = body.status;
+    if (body.telegramUserId !== undefined) profilePayload.telegramUserId = body.telegramUserId;
+    if (body.telegramUsername !== undefined) profilePayload.telegramUsername = body.telegramUsername;
+    if (body.permissions !== undefined) profilePayload.permissions = body.permissions;
+
+    const updated = await TeamMemberService.updateTeamMember(id, profilePayload, actor);
     return NextResponse.json({ success: true, data: updated });
   } catch (error: any) {
     return NextResponse.json(

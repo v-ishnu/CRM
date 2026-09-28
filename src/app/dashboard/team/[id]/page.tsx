@@ -101,7 +101,6 @@ export default function TeamMemberWorkspacePage() {
   const [bankCopiedField, setBankCopiedField] = useState<string | null>(null);
 
   // Edit Member Form State
-  const [showBankFields, setShowBankFields] = useState(false);
   const [editMemberForm, setEditMemberForm] = useState({
     name: '',
     email: '',
@@ -109,15 +108,23 @@ export default function TeamMemberWorkspacePage() {
     role: 'DEVELOPER',
     designation: '',
     permissions: [] as string[],
-    bankDetails: {
-      accountHolderName: '',
-      bankName: '',
-      accountNumber: '',
-      ifsc: '',
-      upiId: '',
-    },
   });
   const [updatingMember, setUpdatingMember] = useState(false);
+
+  // Dedicated Bank Details Form State
+  const [showBankDetailsModal, setShowBankDetailsModal] = useState(false);
+  const [bankDetailsForm, setBankDetailsForm] = useState({
+    accountHolderName: '',
+    bankName: '',
+    accountNumber: '',
+    ifsc: '',
+    upiId: '',
+    clearAccountNumber: false,
+    clearIfsc: false,
+    clearUpiId: false,
+  });
+  const [updatingBank, setUpdatingBank] = useState(false);
+  const [bankUpdateError, setBankUpdateError] = useState('');
 
   // Assign Task Form State
   const [assignTaskForm, setAssignTaskForm] = useState({
@@ -250,7 +257,7 @@ export default function TeamMemberWorkspacePage() {
     }
   };
 
-  // Open Edit Member Modal
+  // Open Edit Member Modal (Profile Only)
   const handleOpenEditMember = () => {
     if (!member) return;
     refreshDesignations();
@@ -261,46 +268,23 @@ export default function TeamMemberWorkspacePage() {
       role: member.role || 'DEVELOPER',
       designation: member.designation || member.role || 'DEVELOPER',
       permissions: member.permissions || [],
-      bankDetails: {
-        accountHolderName: member.bankDetails?.accountHolderName || '',
-        bankName: member.bankDetails?.bankName || '',
-        accountNumber: '',
-        ifsc: '',
-        upiId: '',
-      },
     });
-    setShowBankFields(!!member.bankDetails?.isComplete);
     setShowEditMemberModal(true);
   };
 
-  // Submit Member Edits
+  // Submit Member Profile Edits
   const handleEditMemberSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setUpdatingMember(true);
       const payload: any = {
-        name: editMemberForm.name,
-        email: editMemberForm.email,
-        phone: editMemberForm.phone || undefined,
+        name: editMemberForm.name.trim(),
+        email: editMemberForm.email.trim(),
+        phone: editMemberForm.phone?.trim() || undefined,
         role: editMemberForm.role || 'DEVELOPER',
-        designation: editMemberForm.designation,
+        designation: editMemberForm.designation?.trim(),
         permissions: editMemberForm.permissions,
       };
-
-      if (
-        editMemberForm.bankDetails.accountHolderName ||
-        editMemberForm.bankDetails.accountNumber ||
-        editMemberForm.bankDetails.ifsc ||
-        editMemberForm.bankDetails.upiId
-      ) {
-        payload.bankDetails = {
-          accountHolderName: editMemberForm.bankDetails.accountHolderName || undefined,
-          bankName: editMemberForm.bankDetails.bankName || undefined,
-          accountNumber: editMemberForm.bankDetails.accountNumber || undefined,
-          ifsc: editMemberForm.bankDetails.ifsc || undefined,
-          upiId: editMemberForm.bankDetails.upiId || undefined,
-        };
-      }
 
       const res = await fetch(`/api/team-members/${memberId}`, {
         method: 'PATCH',
@@ -310,7 +294,7 @@ export default function TeamMemberWorkspacePage() {
       const data = await res.json();
       if (data.success) {
         setShowEditMemberModal(false);
-        setBannerSuccess('Team member details updated successfully!');
+        setBannerSuccess('Team member profile updated successfully!');
         setTimeout(() => setBannerSuccess(null), 3500);
         fetchMemberWorkspace();
       } else {
@@ -320,6 +304,74 @@ export default function TeamMemberWorkspacePage() {
       console.error('Error updating member:', err);
     } finally {
       setUpdatingMember(false);
+    }
+  };
+
+  // Dedicated Bank Details Handlers
+  const handleOpenBankDetailsModal = () => {
+    if (!member) return;
+    setBankUpdateError('');
+    setBankDetailsForm({
+      accountHolderName: member.bankDetails?.accountHolderName || '',
+      bankName: member.bankDetails?.bankName || '',
+      accountNumber: '',
+      ifsc: '',
+      upiId: '',
+      clearAccountNumber: false,
+      clearIfsc: false,
+      clearUpiId: false,
+    });
+    setShowBankDetailsModal(true);
+  };
+
+  const handleBankDetailsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!member) return;
+    try {
+      setUpdatingBank(true);
+      setBankUpdateError('');
+
+      const bankPayload: any = {
+        accountHolderName: bankDetailsForm.accountHolderName.trim() || undefined,
+        bankName: bankDetailsForm.bankName.trim() || undefined,
+      };
+
+      if (bankDetailsForm.clearAccountNumber) {
+        bankPayload.clearAccountNumber = true;
+      } else if (bankDetailsForm.accountNumber.trim()) {
+        bankPayload.accountNumber = bankDetailsForm.accountNumber.trim();
+      }
+
+      if (bankDetailsForm.clearIfsc) {
+        bankPayload.clearIfsc = true;
+      } else if (bankDetailsForm.ifsc.trim()) {
+        bankPayload.ifsc = bankDetailsForm.ifsc.trim().toUpperCase();
+      }
+
+      if (bankDetailsForm.clearUpiId) {
+        bankPayload.clearUpiId = true;
+      } else if (bankDetailsForm.upiId.trim()) {
+        bankPayload.upiId = bankDetailsForm.upiId.trim();
+      }
+
+      const res = await fetch(`/api/team-members/${memberId}/bank-details`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bankPayload),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShowBankDetailsModal(false);
+        setBannerSuccess('Bank & payout details updated successfully!');
+        setTimeout(() => setBannerSuccess(null), 3500);
+        fetchMemberWorkspace();
+      } else {
+        setBankUpdateError(data.error?.message || 'Failed to update bank details');
+      }
+    } catch (err: any) {
+      setBankUpdateError(err.message || 'Error updating bank details');
+    } finally {
+      setUpdatingBank(false);
     }
   };
 
@@ -1344,7 +1396,7 @@ export default function TeamMemberWorkspacePage() {
                 </p>
               </div>
               <button
-                onClick={handleOpenEditMember}
+                onClick={handleOpenBankDetailsModal}
                 className="crm-btn-secondary px-3 py-1.5 text-xs flex items-center gap-1 cursor-pointer"
               >
                 <Edit2 className="w-3.5 h-3.5 text-[#ff3e00]" />
@@ -1397,10 +1449,10 @@ export default function TeamMemberWorkspacePage() {
             ) : (
               <div className="p-8 text-center text-[#88888e] space-y-2">
                 <CreditCard className="w-8 h-8 mx-auto text-[#4a4a52]" />
-                <p>No banking details currently configured for {member.name}.</p>
+                <p>Bank details not added for {member.name}.</p>
                 <button
-                  onClick={handleOpenEditMember}
-                  className="crm-btn-secondary px-3.5 py-1.5 text-xs text-[#ff3e00] cursor-pointer"
+                  onClick={handleOpenBankDetailsModal}
+                  className="crm-btn-secondary px-3.5 py-1.5 text-xs text-[#00D664] cursor-pointer"
                 >
                   + Add Bank Details
                 </button>
@@ -1591,98 +1643,6 @@ export default function TeamMemberWorkspacePage() {
                 </div>
               </div>
 
-              {/* Bank Details section */}
-              <div className="pt-2 border-t border-[#242428]">
-                <button
-                  type="button"
-                  onClick={() => setShowBankFields(!showBankFields)}
-                  className="text-xs text-[#ff3e00] hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  <CreditCard className="w-3.5 h-3.5" />
-                  <span>{showBankFields ? 'Hide Bank Details' : 'Configure Bank Details'}</span>
-                </button>
-
-                {showBankFields && (
-                  <div className="mt-3 space-y-3 p-3 bg-[#0a0a0a] border border-[#242428]">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[10px] uppercase text-[#88888e] mb-1">Account Holder Name</label>
-                        <input
-                          type="text"
-                          value={editMemberForm.bankDetails.accountHolderName}
-                          onChange={(e) =>
-                            setEditMemberForm({
-                              ...editMemberForm,
-                              bankDetails: { ...editMemberForm.bankDetails, accountHolderName: e.target.value },
-                            })
-                          }
-                          className="w-full bg-[#141416] border border-[#242428] px-3 py-1.5 text-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] uppercase text-[#88888e] mb-1">Bank Name</label>
-                        <input
-                          type="text"
-                          value={editMemberForm.bankDetails.bankName}
-                          onChange={(e) =>
-                            setEditMemberForm({
-                              ...editMemberForm,
-                              bankDetails: { ...editMemberForm.bankDetails, bankName: e.target.value },
-                            })
-                          }
-                          className="w-full bg-[#141416] border border-[#242428] px-3 py-1.5 text-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] uppercase text-[#88888e] mb-1">Account Number</label>
-                        <input
-                          type="password"
-                          placeholder={member.bankDetails?.accountNumberMasked || 'Enter to update'}
-                          value={editMemberForm.bankDetails.accountNumber}
-                          onChange={(e) =>
-                            setEditMemberForm({
-                              ...editMemberForm,
-                              bankDetails: { ...editMemberForm.bankDetails, accountNumber: e.target.value },
-                            })
-                          }
-                          className="w-full bg-[#141416] border border-[#242428] px-3 py-1.5 text-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] uppercase text-[#88888e] mb-1">IFSC Code</label>
-                        <input
-                          type="text"
-                          placeholder={member.bankDetails?.ifscMasked || 'e.g. HDFC0001234'}
-                          value={editMemberForm.bankDetails.ifsc}
-                          onChange={(e) =>
-                            setEditMemberForm({
-                              ...editMemberForm,
-                              bankDetails: { ...editMemberForm.bankDetails, ifsc: e.target.value },
-                            })
-                          }
-                          className="w-full bg-[#141416] border border-[#242428] px-3 py-1.5 text-white"
-                        />
-                      </div>
-                      <div className="sm:col-span-2">
-                        <label className="block text-[10px] uppercase text-[#88888e] mb-1">UPI ID</label>
-                        <input
-                          type="text"
-                          placeholder={member.bankDetails?.upiIdMasked || 'username@okhdfcbank'}
-                          value={editMemberForm.bankDetails.upiId}
-                          onChange={(e) =>
-                            setEditMemberForm({
-                              ...editMemberForm,
-                              bankDetails: { ...editMemberForm.bankDetails, upiId: e.target.value },
-                            })
-                          }
-                          className="w-full bg-[#141416] border border-[#242428] px-3 py-1.5 text-white"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
               <div className="flex justify-end space-x-3 pt-3 border-t border-[#242428]">
                 <button
                   type="button"
@@ -1696,7 +1656,179 @@ export default function TeamMemberWorkspacePage() {
                   disabled={updatingMember}
                   className="crm-btn-primary px-4 py-2 disabled:opacity-50"
                 >
-                  {updatingMember ? 'Saving...' : 'Save Changes'}
+                  {updatingMember ? 'Saving...' : 'Save Profile Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DEDICATED BANK DETAILS MODAL */}
+      {showBankDetailsModal && member && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-[#141416] border border-[#242428] rounded-none md:rounded-xs w-full max-w-lg p-6 space-y-4 my-8 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-[#242428]">
+              <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-white">
+                <CreditCard className="w-4 h-4 text-[#00D664]" />
+                <span>SYS::TEAM // UPDATE_BANK_DETAILS</span>
+              </div>
+              <button
+                onClick={() => setShowBankDetailsModal(false)}
+                className="p-1 text-[#88888e] hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="text-[11px] font-mono text-[#88888e]">
+              Update encrypted payout credentials for <span className="text-white font-bold">{member.name}</span>.
+              This operation strictly modifies banking details and never affects profile information.
+            </div>
+
+            {bankUpdateError && (
+              <div className="p-3 bg-[#2a0e0e] border border-[#EF4444]/40 text-[#EF4444] text-xs font-mono">
+                {bankUpdateError}
+              </div>
+            )}
+
+            <form onSubmit={handleBankDetailsSubmit} className="space-y-4 text-xs font-mono">
+              <div>
+                <label className="block text-[10px] uppercase text-[#88888e] mb-1">
+                  Account Holder Name
+                </label>
+                <input
+                  type="text"
+                  value={bankDetailsForm.accountHolderName}
+                  onChange={(e) => setBankDetailsForm({ ...bankDetailsForm, accountHolderName: e.target.value })}
+                  placeholder="Full name registered on bank account"
+                  className="w-full bg-[#0a0a0a] border border-[#242428] px-3 py-2 text-white focus:outline-none focus:border-[#00D664]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase text-[#88888e] mb-1">
+                  Bank Name
+                </label>
+                <input
+                  type="text"
+                  value={bankDetailsForm.bankName}
+                  onChange={(e) => setBankDetailsForm({ ...bankDetailsForm, bankName: e.target.value })}
+                  placeholder="e.g. HDFC Bank, ICICI Bank"
+                  className="w-full bg-[#0a0a0a] border border-[#242428] px-3 py-2 text-white focus:outline-none focus:border-[#00D664]"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[10px] uppercase text-[#88888e]">
+                    Account Number
+                  </label>
+                  {member.bankDetails?.accountNumberMasked && (
+                    <span className="text-[10px] text-[#00D664] font-mono">
+                      Current: {member.bankDetails.accountNumberMasked}
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  placeholder={member.bankDetails?.accountNumberMasked ? "Leave blank to keep current" : "Enter account number (digits only)"}
+                  value={bankDetailsForm.accountNumber}
+                  onChange={(e) => setBankDetailsForm({ ...bankDetailsForm, accountNumber: e.target.value })}
+                  className="w-full bg-[#0a0a0a] border border-[#242428] px-3 py-2 text-white focus:outline-none focus:border-[#00D664]"
+                />
+                {member.bankDetails?.accountNumberMasked && (
+                  <label className="flex items-center gap-2 mt-1.5 text-[10px] text-[#88888e] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={bankDetailsForm.clearAccountNumber}
+                      onChange={(e) => setBankDetailsForm({ ...bankDetailsForm, clearAccountNumber: e.target.checked })}
+                      className="rounded-none text-[#ff3e00]"
+                    />
+                    <span>Explicitly remove saved account number</span>
+                  </label>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] uppercase text-[#88888e]">
+                      IFSC Code
+                    </label>
+                    {member.bankDetails?.ifscMasked && (
+                      <span className="text-[10px] text-[#00D664] font-mono">
+                        {member.bankDetails.ifscMasked}
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="e.g. HDFC0001234"
+                    value={bankDetailsForm.ifsc}
+                    onChange={(e) => setBankDetailsForm({ ...bankDetailsForm, ifsc: e.target.value.toUpperCase() })}
+                    className="w-full bg-[#0a0a0a] border border-[#242428] px-3 py-2 text-white uppercase focus:outline-none focus:border-[#00D664]"
+                  />
+                  {member.bankDetails?.ifscMasked && (
+                    <label className="flex items-center gap-2 mt-1.5 text-[10px] text-[#88888e] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={bankDetailsForm.clearIfsc}
+                        onChange={(e) => setBankDetailsForm({ ...bankDetailsForm, clearIfsc: e.target.checked })}
+                        className="rounded-none text-[#ff3e00]"
+                      />
+                      <span>Remove IFSC</span>
+                    </label>
+                  )}
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] uppercase text-[#88888e]">
+                      UPI ID
+                    </label>
+                    {member.bankDetails?.upiIdMasked && (
+                      <span className="text-[10px] text-[#00D664] font-mono">
+                        {member.bankDetails.upiIdMasked}
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="e.g. username@okhdfcbank"
+                    value={bankDetailsForm.upiId}
+                    onChange={(e) => setBankDetailsForm({ ...bankDetailsForm, upiId: e.target.value })}
+                    className="w-full bg-[#0a0a0a] border border-[#242428] px-3 py-2 text-white focus:outline-none focus:border-[#00D664]"
+                  />
+                  {member.bankDetails?.upiIdMasked && (
+                    <label className="flex items-center gap-2 mt-1.5 text-[10px] text-[#88888e] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={bankDetailsForm.clearUpiId}
+                        onChange={(e) => setBankDetailsForm({ ...bankDetailsForm, clearUpiId: e.target.checked })}
+                        className="rounded-none text-[#ff3e00]"
+                      />
+                      <span>Remove UPI</span>
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-[#242428]">
+                <button
+                  type="button"
+                  onClick={() => setShowBankDetailsModal(false)}
+                  className="crm-btn-secondary px-4 py-2"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updatingBank}
+                  className="crm-btn-primary px-4 py-2 flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  <span>{updatingBank ? 'Saving...' : 'Save Bank Details'}</span>
                 </button>
               </div>
             </form>

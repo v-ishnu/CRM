@@ -127,28 +127,56 @@ const TeamMemberSchema = new Schema<ITeamMember>(
       default: false,
     },
     bankDetails: {
-      accountHolderName: { type: String, trim: true },
-      accountNumberEncrypted: {
-        ciphertext: { type: String },
-        iv: { type: String },
-        authTag: { type: String },
-      },
-      ifscEncrypted: {
-        ciphertext: { type: String },
-        iv: { type: String },
-        authTag: { type: String },
-      },
-      bankName: { type: String, trim: true },
-      upiIdEncrypted: {
-        ciphertext: { type: String },
-        iv: { type: String },
-        authTag: { type: String },
-      },
-      accountNumberMasked: { type: String },
-      ifscMasked: { type: String },
-      upiIdMasked: { type: String },
-      isComplete: { type: Boolean, default: false },
-      updatedAt: { type: Date },
+      type: new Schema(
+        {
+          accountHolderName: { type: String, trim: true },
+          accountNumberEncrypted: {
+            type: new Schema(
+              {
+                ciphertext: { type: String },
+                iv: { type: String },
+                authTag: { type: String },
+              },
+              { _id: false }
+            ),
+            required: false,
+            default: undefined,
+          },
+          ifscEncrypted: {
+            type: new Schema(
+              {
+                ciphertext: { type: String },
+                iv: { type: String },
+                authTag: { type: String },
+              },
+              { _id: false }
+            ),
+            required: false,
+            default: undefined,
+          },
+          bankName: { type: String, trim: true },
+          upiIdEncrypted: {
+            type: new Schema(
+              {
+                ciphertext: { type: String },
+                iv: { type: String },
+                authTag: { type: String },
+              },
+              { _id: false }
+            ),
+            required: false,
+            default: undefined,
+          },
+          accountNumberMasked: { type: String },
+          ifscMasked: { type: String },
+          upiIdMasked: { type: String },
+          isComplete: { type: Boolean, default: false },
+          updatedAt: { type: Date },
+        },
+        { _id: false }
+      ),
+      required: false,
+      default: undefined,
     },
   },
   {

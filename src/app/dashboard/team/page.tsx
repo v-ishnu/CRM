@@ -107,7 +107,31 @@ export default function TeamMembersPage() {
   const [revealedBankData, setRevealedBankData] = useState<any>(null);
   const [bankCopiedField, setBankCopiedField] = useState<string | null>(null);
 
-  // Add/Edit Form State
+  // Dedicated Bank Details Modal State
+  const [showBankModal, setShowBankModal] = useState(false);
+  const [bankFormData, setBankFormData] = useState<{
+    accountHolderName: string;
+    bankName: string;
+    accountNumber: string;
+    ifsc: string;
+    upiId: string;
+    clearAccountNumber: boolean;
+    clearIfsc: boolean;
+    clearUpiId: boolean;
+  }>({
+    accountHolderName: '',
+    bankName: '',
+    accountNumber: '',
+    ifsc: '',
+    upiId: '',
+    clearAccountNumber: false,
+    clearIfsc: false,
+    clearUpiId: false,
+  });
+  const [savingBank, setSavingBank] = useState(false);
+  const [bankError, setBankError] = useState('');
+
+  // Add/Edit Profile Form State
   const [showBankFields, setShowBankFields] = useState(false);
   const [formData, setFormData] = useState<{
     name: string;
@@ -226,14 +250,13 @@ export default function TeamMembersPage() {
       designation: member.designation || member.role || 'DEVELOPER',
       permissions: member.permissions || [],
       bankDetails: {
-        accountHolderName: member.bankDetails?.accountHolderName || '',
-        bankName: member.bankDetails?.bankName || '',
+        accountHolderName: '',
+        bankName: '',
         accountNumber: '',
         ifsc: '',
         upiId: '',
       },
     });
-    setShowBankFields(!!member.bankDetails?.isComplete);
     setShowEditModal(true);
   };
 
@@ -295,29 +318,15 @@ export default function TeamMembersPage() {
     e.preventDefault();
     if (!selectedMember) return;
     try {
+      // Profile updates strictly contain profile fields only
       const payload: any = {
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone || undefined,
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone?.trim() || undefined,
         role: formData.role || 'DEVELOPER',
-        designation: formData.designation,
+        designation: formData.designation?.trim(),
         permissions: formData.permissions,
       };
-
-      if (
-        formData.bankDetails.accountHolderName ||
-        formData.bankDetails.accountNumber ||
-        formData.bankDetails.ifsc ||
-        formData.bankDetails.upiId
-      ) {
-        payload.bankDetails = {
-          accountHolderName: formData.bankDetails.accountHolderName || undefined,
-          bankName: formData.bankDetails.bankName || undefined,
-          accountNumber: formData.bankDetails.accountNumber || undefined,
-          ifsc: formData.bankDetails.ifsc || undefined,
-          upiId: formData.bankDetails.upiId || undefined,
-        };
-      }
 
       const res = await fetch(`/api/team-members/${selectedMember._id}`, {
         method: 'PATCH',
@@ -333,6 +342,71 @@ export default function TeamMembersPage() {
       }
     } catch (err) {
       console.error('Error updating team member:', err);
+    }
+  };
+
+  const handleOpenBankModal = (member: any) => {
+    setSelectedMember(member);
+    setBankError('');
+    setBankFormData({
+      accountHolderName: member.bankDetails?.accountHolderName || '',
+      bankName: member.bankDetails?.bankName || '',
+      accountNumber: '',
+      ifsc: '',
+      upiId: '',
+      clearAccountNumber: false,
+      clearIfsc: false,
+      clearUpiId: false,
+    });
+    setShowBankModal(true);
+  };
+
+  const handleBankSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedMember) return;
+    try {
+      setSavingBank(true);
+      setBankError('');
+
+      const bankPayload: any = {
+        accountHolderName: bankFormData.accountHolderName.trim() || undefined,
+        bankName: bankFormData.bankName.trim() || undefined,
+      };
+
+      if (bankFormData.clearAccountNumber) {
+        bankPayload.clearAccountNumber = true;
+      } else if (bankFormData.accountNumber.trim()) {
+        bankPayload.accountNumber = bankFormData.accountNumber.trim();
+      }
+
+      if (bankFormData.clearIfsc) {
+        bankPayload.clearIfsc = true;
+      } else if (bankFormData.ifsc.trim()) {
+        bankPayload.ifsc = bankFormData.ifsc.trim().toUpperCase();
+      }
+
+      if (bankFormData.clearUpiId) {
+        bankPayload.clearUpiId = true;
+      } else if (bankFormData.upiId.trim()) {
+        bankPayload.upiId = bankFormData.upiId.trim();
+      }
+
+      const res = await fetch(`/api/team-members/${selectedMember._id}/bank-details`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bankPayload),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShowBankModal(false);
+        fetchMembers();
+      } else {
+        setBankError(data.error?.message || 'Failed to update bank details');
+      }
+    } catch (err: any) {
+      setBankError(err.message || 'Error updating bank details');
+    } finally {
+      setSavingBank(false);
     }
   };
 
@@ -731,11 +805,26 @@ export default function TeamMembersPage() {
                             >
                               <Eye className="w-3.5 h-3.5" />
                             </button>
+                            <button
+                              onClick={() => handleOpenBankModal(member)}
+                              title="Update Bank Details"
+                              className="text-[#8a8a93] hover:text-[#00d664] p-1 hover:bg-[#242428] cursor-pointer"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         ) : (
-                          <span className="text-[10px] font-mono text-[#f59e0b] bg-[#1c1408] border border-[#f59e0b]/30 px-2 py-0.5">
-                            PENDING REGISTRATION
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-mono text-[#f59e0b] bg-[#1c1408] border border-[#f59e0b]/30 px-2 py-0.5">
+                              {member.bankDetails ? 'INCOMPLETE' : 'NOT CONFIGURED'}
+                            </span>
+                            <button
+                              onClick={() => handleOpenBankModal(member)}
+                              className="text-[10px] font-mono text-[#00D664] hover:underline cursor-pointer"
+                            >
+                              + Configure
+                            </button>
+                          </div>
                         )}
                       </div>
 
@@ -806,9 +895,19 @@ export default function TeamMembersPage() {
                       <button
                         onClick={() => handleOpenEdit(member)}
                         className="text-[#88888e] hover:text-white inline-flex items-center gap-1 cursor-pointer transition-colors"
+                        title="Edit Profile"
                       >
                         <Edit2 className="w-3.5 h-3.5 text-[#a1a1aa]" />
                         <span>Edit</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleOpenBankModal(member)}
+                        className="text-[#88888e] hover:text-[#00D664] inline-flex items-center gap-1 cursor-pointer transition-colors"
+                        title="Manage Bank Details"
+                      >
+                        <CreditCard className="w-3.5 h-3.5 text-[#00D664]" />
+                        <span>Bank</span>
                       </button>
                     </div>
 
@@ -1497,104 +1596,6 @@ export default function TeamMembersPage() {
                 </div>
               </div>
 
-              {/* Collapsible Bank Details for Edit */}
-              <div className="border border-[#242428] rounded-none md:rounded-xs overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setShowBankFields(!showBankFields)}
-                  className="w-full p-3 bg-[#18181b] flex items-center justify-between text-xs font-mono text-[#88888e] hover:text-white cursor-pointer"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <CreditCard className="w-3.5 h-3.5 text-[#00D664]" />
-                    Update Bank & Payout Details (Encrypted)
-                  </span>
-                  {showBankFields ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </button>
-                {showBankFields && (
-                  <div className="p-3 bg-[#0a0a0a] space-y-3 text-xs border-t border-[#242428]">
-                    <div>
-                      <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Account Holder Name</label>
-                      <input
-                        type="text"
-                        value={formData.bankDetails.accountHolderName}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            bankDetails: { ...formData.bankDetails, accountHolderName: e.target.value },
-                          })
-                        }
-                        placeholder="Name on bank account"
-                        className="w-full bg-[#141416] border border-[#242428] rounded-none md:rounded-xs px-2.5 py-1.5 text-white focus:outline-none focus:border-[#ff3e00]"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Bank Name</label>
-                        <input
-                          type="text"
-                          value={formData.bankDetails.bankName}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              bankDetails: { ...formData.bankDetails, bankName: e.target.value },
-                            })
-                          }
-                          placeholder="e.g. HDFC Bank"
-                          className="w-full bg-[#141416] border border-[#242428] rounded-none md:rounded-xs px-2.5 py-1.5 text-white focus:outline-none focus:border-[#ff3e00]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">Account Number (Leave blank to keep unchanged)</label>
-                        <input
-                          type="text"
-                          value={formData.bankDetails.accountNumber}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              bankDetails: { ...formData.bankDetails, accountNumber: e.target.value },
-                            })
-                          }
-                          placeholder="New Account Number"
-                          className="w-full bg-[#141416] border border-[#242428] rounded-none md:rounded-xs px-2.5 py-1.5 text-white focus:outline-none focus:border-[#ff3e00]"
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">IFSC Code</label>
-                        <input
-                          type="text"
-                          value={formData.bankDetails.ifsc}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              bankDetails: { ...formData.bankDetails, ifsc: e.target.value.toUpperCase() },
-                            })
-                          }
-                          placeholder="e.g. HDFC0001234"
-                          className="w-full bg-[#141416] border border-[#242428] rounded-none md:rounded-xs px-2.5 py-1.5 text-white uppercase focus:outline-none focus:border-[#ff3e00]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">UPI ID</label>
-                        <input
-                          type="text"
-                          value={formData.bankDetails.upiId}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              bankDetails: { ...formData.bankDetails, upiId: e.target.value },
-                            })
-                          }
-                          placeholder="user@upi"
-                          className="w-full bg-[#141416] border border-[#242428] rounded-none md:rounded-xs px-2.5 py-1.5 text-white focus:outline-none focus:border-[#ff3e00]"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
               <div className="flex justify-end space-x-3 pt-3 border-t border-[#242428]">
                 <button
                   type="button"
@@ -1607,7 +1608,179 @@ export default function TeamMembersPage() {
                   type="submit"
                   className="crm-btn-primary px-4 py-2 text-xs"
                 >
-                  Save Changes
+                  Save Profile Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DEDICATED BANK DETAILS MODAL */}
+      {showBankModal && selectedMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-[#141416] border border-[#242428] rounded-none md:rounded-xs w-full max-w-lg p-6 space-y-5 my-8 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-[#242428]">
+              <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-white">
+                <span className="w-2 h-2 rounded-full bg-[#00D664]" />
+                <span>SYS::TEAM // BANK_DETAILS</span>
+              </div>
+              <button
+                onClick={() => setShowBankModal(false)}
+                className="p-1 text-[#88888e] hover:text-white hover:bg-[#18181b] rounded-none md:rounded-xs transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="text-[11px] font-mono text-[#88888e]">
+              Managing banking details for <span className="text-white font-bold">{selectedMember.name}</span>.
+              Protected with AES-256-GCM encryption. Updating bank details never touches profile information.
+            </div>
+
+            {bankError && (
+              <div className="p-3 bg-[#2a0e0e] border border-[#EF4444]/40 text-[#EF4444] text-xs font-mono">
+                {bankError}
+              </div>
+            )}
+
+            <form onSubmit={handleBankSubmit} className="space-y-4 text-xs font-mono">
+              <div>
+                <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">
+                  Account Holder Name
+                </label>
+                <input
+                  type="text"
+                  value={bankFormData.accountHolderName}
+                  onChange={(e) => setBankFormData({ ...bankFormData, accountHolderName: e.target.value })}
+                  placeholder="Name as registered with the bank"
+                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#00D664]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e] mb-1">
+                  Bank Name
+                </label>
+                <input
+                  type="text"
+                  value={bankFormData.bankName}
+                  onChange={(e) => setBankFormData({ ...bankFormData, bankName: e.target.value })}
+                  placeholder="e.g. HDFC Bank, State Bank of India"
+                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#00D664]"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e]">
+                    Account Number
+                  </label>
+                  {selectedMember.bankDetails?.accountNumberMasked && (
+                    <span className="text-[10px] text-[#00D664] font-mono">
+                      Current: {selectedMember.bankDetails.accountNumberMasked}
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={bankFormData.accountNumber}
+                  onChange={(e) => setBankFormData({ ...bankFormData, accountNumber: e.target.value })}
+                  placeholder={selectedMember.bankDetails?.accountNumberMasked ? "Leave blank to keep current" : "Enter account number (digits only)"}
+                  className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#00D664]"
+                />
+                {selectedMember.bankDetails?.accountNumberMasked && (
+                  <label className="flex items-center gap-2 mt-1.5 text-[10px] text-[#88888e] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={bankFormData.clearAccountNumber}
+                      onChange={(e) => setBankFormData({ ...bankFormData, clearAccountNumber: e.target.checked })}
+                      className="rounded-none text-[#ff3e00]"
+                    />
+                    <span>Explicitly remove saved account number</span>
+                  </label>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e]">
+                      IFSC Code
+                    </label>
+                    {selectedMember.bankDetails?.ifscMasked && (
+                      <span className="text-[10px] text-[#00D664] font-mono">
+                        {selectedMember.bankDetails.ifscMasked}
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={bankFormData.ifsc}
+                    onChange={(e) => setBankFormData({ ...bankFormData, ifsc: e.target.value.toUpperCase() })}
+                    placeholder="e.g. HDFC0001234"
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white uppercase focus:outline-none focus:border-[#00D664]"
+                  />
+                  {selectedMember.bankDetails?.ifscMasked && (
+                    <label className="flex items-center gap-2 mt-1.5 text-[10px] text-[#88888e] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={bankFormData.clearIfsc}
+                        onChange={(e) => setBankFormData({ ...bankFormData, clearIfsc: e.target.checked })}
+                        className="rounded-none text-[#ff3e00]"
+                      />
+                      <span>Remove IFSC</span>
+                    </label>
+                  )}
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] uppercase font-mono tracking-wider text-[#88888e]">
+                      UPI ID
+                    </label>
+                    {selectedMember.bankDetails?.upiIdMasked && (
+                      <span className="text-[10px] text-[#00D664] font-mono">
+                        {selectedMember.bankDetails.upiIdMasked}
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={bankFormData.upiId}
+                    onChange={(e) => setBankFormData({ ...bankFormData, upiId: e.target.value })}
+                    placeholder="e.g. user@okhdfcbank"
+                    className="w-full bg-[#0a0a0a] border border-[#242428] rounded-none md:rounded-xs px-3.5 py-2 text-white focus:outline-none focus:border-[#00D664]"
+                  />
+                  {selectedMember.bankDetails?.upiIdMasked && (
+                    <label className="flex items-center gap-2 mt-1.5 text-[10px] text-[#88888e] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={bankFormData.clearUpiId}
+                        onChange={(e) => setBankFormData({ ...bankFormData, clearUpiId: e.target.checked })}
+                        className="rounded-none text-[#ff3e00]"
+                      />
+                      <span>Remove UPI</span>
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-[#242428]">
+                <button
+                  type="button"
+                  onClick={() => setShowBankModal(false)}
+                  className="crm-btn-secondary px-4 py-2 text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingBank}
+                  className="crm-btn-primary px-4 py-2 text-xs flex items-center gap-1.5"
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  <span>{savingBank ? 'Saving...' : 'Save Bank Details'}</span>
                 </button>
               </div>
             </form>

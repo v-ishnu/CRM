@@ -382,9 +382,15 @@ describe('Team Member Telegram Bot Connection - Isolated Unit Tests', () => {
     fakeTeamMember.telegramChatId = mockChatId;
 
     vi.spyOn(TeamMember, 'findOne').mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        lean: vi.fn().mockResolvedValue(fakeTeamMember),
+      }),
       lean: vi.fn().mockResolvedValue(fakeTeamMember),
     } as any);
     vi.spyOn(Client, 'findOne').mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        lean: vi.fn().mockResolvedValue(null),
+      }),
       lean: vi.fn().mockResolvedValue(null),
     } as any);
 
@@ -417,9 +423,15 @@ describe('Team Member Telegram Bot Connection - Isolated Unit Tests', () => {
     fakeTeamMember.telegramChatId = mockChatId;
 
     vi.spyOn(TeamMember, 'findOne').mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        lean: vi.fn().mockResolvedValue(fakeTeamMember),
+      }),
       lean: vi.fn().mockResolvedValue(fakeTeamMember),
     } as any);
     vi.spyOn(Client, 'findOne').mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        lean: vi.fn().mockResolvedValue(null),
+      }),
       lean: vi.fn().mockResolvedValue(null),
     } as any);
     vi.spyOn(Task, 'find').mockReturnValue({

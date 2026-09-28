@@ -42,7 +42,19 @@ export interface UpdateTeamMemberDTO {
   telegramUsername?: string;
   permissions?: TeamPermission[];
   status?: 'ACTIVE' | 'INACTIVE' | 'DEACTIVATED';
-  bankDetails?: BankDetailsInputDTO;
+  // bankDetails deliberately omitted to enforce separation of profile from bank details
+}
+
+export interface UpdateBankDetailsDTO {
+  accountHolderName?: string;
+  bankName?: string;
+  accountNumber?: string;
+  ifsc?: string;
+  upiId?: string;
+  clearAccountNumber?: boolean;
+  clearIfsc?: boolean;
+  clearUpiId?: boolean;
+  clearAll?: boolean;
 }
 
 export class TeamMemberService {
@@ -75,7 +87,7 @@ export class TeamMemberService {
           ? ['VIEW_CREDENTIALS', 'REQUEST_CREDENTIALS', 'MANAGE_TASKS', 'VIEW_PROJECT', 'VIEW_CLIENT', 'MANAGE_PROJECT', 'VIEW_TASKS']
           : ['VIEW_PROJECT', 'VIEW_TASKS']);
 
-    const bankDetails = this.buildEncryptedBankDetails(data.bankDetails);
+    const bankDetails = data.bankDetails ? this.buildEncryptedBankDetails(data.bankDetails) : undefined;
 
     const teamMember = new TeamMember({
       name: data.name.trim(),
@@ -89,7 +101,7 @@ export class TeamMemberService {
       status: 'ACTIVE',
       permissions: defaultPermissions,
       isPrimaryAdmin: data.isPrimaryAdmin || false,
-      bankDetails,
+      bankDetails: bankDetails || undefined,
     });
 
     await teamMember.save();
@@ -113,15 +125,26 @@ export class TeamMemberService {
   }
 
   /**
-   * Update an existing team member
+   * Update an existing team member's PROFILE ONLY.
+   * Never touches or modifies bankDetails.
    */
-  static async updateTeamMember(id: string, data: UpdateTeamMemberDTO, actor: string = 'system'): Promise<ITeamMember> {
+  static async updateTeamMember(
+    id: string,
+    data: UpdateTeamMemberDTO,
+    actor: string = 'system'
+  ): Promise<any> {
     await dbConnect();
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw new Error('Invalid team member ID format');
+    }
 
     const teamMember = await TeamMember.findById(id);
     if (!teamMember) {
       throw new Error('Team member not found');
     }
+
+    const setFields: Record<string, any> = {};
 
     if (data.email && data.email.toLowerCase().trim() !== teamMember.email) {
       const email = data.email.toLowerCase().trim();
@@ -129,59 +152,241 @@ export class TeamMemberService {
       if (existing) {
         throw new Error(`Email ${email} is already in use by another team member`);
       }
-      teamMember.email = email;
+      setFields.email = email;
     }
 
-    if (data.name !== undefined) teamMember.name = data.name.trim();
-    if (data.phone !== undefined) teamMember.phone = data.phone?.trim();
+    if (data.name !== undefined) {
+      const trimmed = data.name.trim();
+      if (!trimmed) throw new Error('Name cannot be empty');
+      setFields.name = trimmed;
+    }
+    if (data.phone !== undefined) {
+      setFields.phone = data.phone?.trim() || undefined;
+    }
     if (data.designation !== undefined) {
-      teamMember.designation = data.designation ? data.designation.trim() : undefined;
+      setFields.designation = data.designation ? data.designation.trim() : undefined;
     }
     if (data.role !== undefined) {
       const validRoles: TeamRole[] = ['ADMIN', 'MANAGER', 'DEVELOPER', 'DESIGNER', 'SEO', 'OTHER'];
       if (validRoles.includes(data.role as TeamRole)) {
-        teamMember.role = data.role as TeamRole;
-      } else if (!teamMember.designation) {
-        teamMember.designation = String(data.role).trim();
+        setFields.role = data.role as TeamRole;
+      } else if (!data.designation && !teamMember.designation) {
+        setFields.designation = String(data.role).trim();
       }
     }
+    let oldTelegramUserId = teamMember.telegramUserId;
+    let telegramUserIdChanged = false;
     if (data.telegramUserId !== undefined) {
-      teamMember.telegramUserId = data.telegramUserId.trim() || undefined;
-      teamMember.telegramConnected = !!teamMember.telegramUserId;
+      const trimmed = data.telegramUserId.trim() || undefined;
+      setFields.telegramUserId = trimmed;
+      setFields.telegramConnected = !!trimmed;
+      if (trimmed !== oldTelegramUserId) {
+        telegramUserIdChanged = true;
+      }
     }
-    if (data.telegramUsername !== undefined) teamMember.telegramUsername = data.telegramUsername.trim() || undefined;
-    if (data.permissions !== undefined) teamMember.permissions = data.permissions;
-    if (data.status !== undefined) teamMember.status = data.status;
-
-    if (data.bankDetails !== undefined) {
-      teamMember.bankDetails = this.buildEncryptedBankDetails(data.bankDetails, teamMember.bankDetails);
-      await AuditService.log({
-        actor,
-        action: 'BANK_DETAILS_UPDATED',
-        entityType: 'TeamMember',
-        entityId: teamMember._id,
-        metadata: {
-          isComplete: teamMember.bankDetails?.isComplete,
-        },
-      });
+    if (data.telegramUsername !== undefined) {
+      setFields.telegramUsername = data.telegramUsername.trim() || undefined;
+    }
+    if (data.permissions !== undefined) {
+      setFields.permissions = data.permissions;
+    }
+    if (data.status !== undefined) {
+      setFields.status = data.status;
     }
 
-    await teamMember.save();
+    // CRITICAL: NEVER touch or validate bankDetails here!
+    const updated = await TeamMember.findByIdAndUpdate(
+      id,
+      { $set: setFields },
+      { new: true, runValidators: true }
+    );
+
+    if (telegramUserIdChanged && oldTelegramUserId) {
+      await CacheService.invalidateTelegramIdentity(oldTelegramUserId);
+    }
 
     await AuditService.log({
       actor,
-      action: 'TEAM_MEMBER_UPDATED',
+      action: 'TEAM_MEMBER_PROFILE_UPDATED',
       entityType: 'TeamMember',
       entityId: teamMember._id,
       metadata: {
-        name: teamMember.name,
-        role: teamMember.role,
-        status: teamMember.status,
-        permissions: teamMember.permissions,
+        name: updated?.name || teamMember.name,
+        role: updated?.role || teamMember.role,
+        status: updated?.status || teamMember.status,
+        permissions: updated?.permissions || teamMember.permissions,
       },
     });
 
-    return teamMember;
+    return updated ? this.sanitizeBankDetails(updated.toObject ? updated.toObject() : updated) : teamMember;
+  }
+
+  /**
+   * Dedicated update for team member BANK DETAILS ONLY.
+   * Supports partial updates, explicit field clearing, format validations, and encryption.
+   */
+  static async updateBankDetails(
+    id: string,
+    data: UpdateBankDetailsDTO,
+    actor: string = 'system'
+  ): Promise<any> {
+    await dbConnect();
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw new Error('Invalid team member ID format');
+    }
+
+    const teamMember = await TeamMember.findById(id);
+    if (!teamMember) {
+      throw new Error('Team member not found');
+    }
+
+    if (teamMember.status === 'DEACTIVATED') {
+      throw new Error('Cannot update bank details for a deactivated team member');
+    }
+
+    // Explicit Clear All
+    if (data.clearAll) {
+      const updated = await TeamMember.findByIdAndUpdate(
+        id,
+        { $unset: { bankDetails: 1 } },
+        { new: true }
+      );
+
+      await AuditService.log({
+        actor,
+        action: 'TEAM_MEMBER_BANK_DETAILS_UPDATED',
+        entityType: 'TeamMember',
+        entityId: teamMember._id,
+        metadata: {
+          memberEmail: teamMember.email,
+          clearedAll: true,
+          isComplete: false,
+        },
+      });
+
+      return updated ? this.sanitizeBankDetails(updated.toObject ? updated.toObject() : updated) : teamMember;
+    }
+
+    const setOps: Record<string, any> = {};
+    const unsetOps: Record<string, any> = {};
+
+    // 1. Account Holder Name
+    if (data.accountHolderName !== undefined) {
+      const trimmed = data.accountHolderName.trim();
+      if (trimmed) {
+        setOps['bankDetails.accountHolderName'] = trimmed;
+      } else {
+        unsetOps['bankDetails.accountHolderName'] = 1;
+      }
+    }
+
+    // 2. Bank Name
+    if (data.bankName !== undefined) {
+      const trimmed = data.bankName.trim();
+      if (trimmed) {
+        setOps['bankDetails.bankName'] = trimmed;
+      } else {
+        unsetOps['bankDetails.bankName'] = 1;
+      }
+    }
+
+    // 3. Account Number
+    if (data.clearAccountNumber) {
+      unsetOps['bankDetails.accountNumberEncrypted'] = 1;
+      unsetOps['bankDetails.accountNumberMasked'] = 1;
+    } else if (data.accountNumber !== undefined) {
+      const acc = data.accountNumber.trim().replace(/\s+/g, '');
+      if (acc) {
+        if (!/^\d{8,24}$/.test(acc)) {
+          throw new Error('Invalid account number format. Must contain 8 to 24 numeric digits.');
+        }
+        setOps['bankDetails.accountNumberEncrypted'] = encrypt(acc, 'accountNumber');
+        const last4 = acc.slice(-4);
+        setOps['bankDetails.accountNumberMasked'] = `•••• •••• ${last4}`;
+      }
+    }
+
+    // 4. IFSC Code
+    if (data.clearIfsc) {
+      unsetOps['bankDetails.ifscEncrypted'] = 1;
+      unsetOps['bankDetails.ifscMasked'] = 1;
+    } else if (data.ifsc !== undefined) {
+      const ifsc = data.ifsc.trim().toUpperCase();
+      if (ifsc) {
+        if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) {
+          throw new Error('Invalid IFSC format. Must be 11 characters (e.g., HDFC0001234).');
+        }
+        setOps['bankDetails.ifscEncrypted'] = encrypt(ifsc, 'ifsc');
+        const first4 = ifsc.slice(0, 4);
+        setOps['bankDetails.ifscMasked'] = `${first4}•••••••`;
+      }
+    }
+
+    // 5. UPI ID
+    if (data.clearUpiId) {
+      unsetOps['bankDetails.upiIdEncrypted'] = 1;
+      unsetOps['bankDetails.upiIdMasked'] = 1;
+    } else if (data.upiId !== undefined) {
+      const upi = data.upiId.trim();
+      if (upi) {
+        if (!/^[a-zA-Z0-9.\-_]{2,64}@[a-zA-Z]{2,64}$/.test(upi)) {
+          throw new Error('Invalid UPI ID format. Expected format: username@bank');
+        }
+        setOps['bankDetails.upiIdEncrypted'] = encrypt(upi, 'upiId');
+        if (upi.includes('@')) {
+          const [handle, domain] = upi.split('@');
+          const prefix = handle.length > 2 ? handle.slice(0, 2) : handle.slice(0, 1);
+          setOps['bankDetails.upiIdMasked'] = `${prefix}••••@${domain}`;
+        } else {
+          setOps['bankDetails.upiIdMasked'] = `${upi.slice(0, 2)}••••`;
+        }
+      }
+    }
+
+    // Compute isComplete
+    const existingBank = (teamMember.bankDetails && typeof (teamMember.bankDetails as any).toObject === 'function')
+      ? (teamMember.bankDetails as any).toObject()
+      : (teamMember.bankDetails || {});
+
+    const effectiveHolder = unsetOps['bankDetails.accountHolderName']
+      ? undefined
+      : (setOps['bankDetails.accountHolderName'] !== undefined ? setOps['bankDetails.accountHolderName'] : existingBank.accountHolderName);
+
+    const effectiveAcc = unsetOps['bankDetails.accountNumberMasked']
+      ? undefined
+      : (setOps['bankDetails.accountNumberMasked'] !== undefined ? setOps['bankDetails.accountNumberMasked'] : existingBank.accountNumberMasked);
+
+    const effectiveIfsc = unsetOps['bankDetails.ifscMasked']
+      ? undefined
+      : (setOps['bankDetails.ifscMasked'] !== undefined ? setOps['bankDetails.ifscMasked'] : existingBank.ifscMasked);
+
+    const isComplete = !!(effectiveHolder && effectiveAcc && effectiveIfsc);
+    setOps['bankDetails.isComplete'] = isComplete;
+    setOps['bankDetails.updatedAt'] = new Date();
+
+    const updateOps: any = {};
+    if (Object.keys(setOps).length > 0) updateOps.$set = setOps;
+    if (Object.keys(unsetOps).length > 0) updateOps.$unset = unsetOps;
+
+    const updated = await TeamMember.findByIdAndUpdate(id, updateOps, { new: true });
+
+    await AuditService.log({
+      actor,
+      action: 'TEAM_MEMBER_BANK_DETAILS_UPDATED',
+      entityType: 'TeamMember',
+      entityId: teamMember._id,
+      metadata: {
+        memberEmail: teamMember.email,
+        isComplete,
+        hasAccountHolderName: !!effectiveHolder,
+        hasAccountNumber: !!effectiveAcc,
+        hasIfsc: !!effectiveIfsc,
+        hasUpiId: !unsetOps['bankDetails.upiIdMasked'] && !!(setOps['bankDetails.upiIdMasked'] || existingBank.upiIdMasked),
+      },
+    });
+
+    return updated ? this.sanitizeBankDetails(updated.toObject ? updated.toObject() : updated) : teamMember;
   }
 
   /**
@@ -524,17 +729,65 @@ export class TeamMemberService {
     input?: BankDetailsInputDTO,
     existing?: IBankDetails
   ): IBankDetails | undefined {
-    if (!input) return existing;
+    if (!input && !existing) return undefined;
+    if (!input) {
+      if (existing) {
+        return typeof (existing as any).toObject === 'function'
+          ? (existing as any).toObject()
+          : { ...existing };
+      }
+      return undefined;
+    }
 
-    const result: IBankDetails = existing
-      ? { ...existing }
-      : { isComplete: false };
+    let base: Partial<IBankDetails> = {};
+    if (existing) {
+      if (typeof (existing as any).toObject === 'function') {
+        base = (existing as any).toObject();
+      } else {
+        base = { ...existing };
+      }
+    }
+
+    const hasAnyInput = !!(
+      (input.accountHolderName && input.accountHolderName.trim()) ||
+      (input.bankName && input.bankName.trim()) ||
+      (input.accountNumber && input.accountNumber.trim()) ||
+      (input.ifsc && input.ifsc.trim()) ||
+      (input.upiId && input.upiId.trim())
+    );
+
+    if (!existing && !hasAnyInput) {
+      return undefined;
+    }
+
+    const result: IBankDetails = {
+      isComplete: base.isComplete || false,
+      ...(base.accountHolderName ? { accountHolderName: base.accountHolderName } : {}),
+      ...(base.bankName ? { bankName: base.bankName } : {}),
+      ...(base.accountNumberEncrypted ? { accountNumberEncrypted: base.accountNumberEncrypted } : {}),
+      ...(base.ifscEncrypted ? { ifscEncrypted: base.ifscEncrypted } : {}),
+      ...(base.upiIdEncrypted ? { upiIdEncrypted: base.upiIdEncrypted } : {}),
+      ...(base.accountNumberMasked ? { accountNumberMasked: base.accountNumberMasked } : {}),
+      ...(base.ifscMasked ? { ifscMasked: base.ifscMasked } : {}),
+      ...(base.upiIdMasked ? { upiIdMasked: base.upiIdMasked } : {}),
+    };
 
     if (input.accountHolderName !== undefined) {
-      result.accountHolderName = input.accountHolderName.trim();
+      const val = input.accountHolderName.trim();
+      if (val) {
+        result.accountHolderName = val;
+      } else {
+        delete result.accountHolderName;
+      }
     }
+
     if (input.bankName !== undefined) {
-      result.bankName = input.bankName.trim();
+      const val = input.bankName.trim();
+      if (val) {
+        result.bankName = val;
+      } else {
+        delete result.bankName;
+      }
     }
 
     if (input.accountNumber !== undefined) {
@@ -544,8 +797,8 @@ export class TeamMemberService {
         const last4 = acc.length >= 4 ? acc.slice(-4) : acc;
         result.accountNumberMasked = `•••• •••• ${last4}`;
       } else {
-        result.accountNumberEncrypted = undefined;
-        result.accountNumberMasked = undefined;
+        delete result.accountNumberEncrypted;
+        delete result.accountNumberMasked;
       }
     }
 
@@ -556,8 +809,8 @@ export class TeamMemberService {
         const first4 = ifsc.length >= 4 ? ifsc.slice(0, 4) : ifsc;
         result.ifscMasked = `${first4}•••••••`;
       } else {
-        result.ifscEncrypted = undefined;
-        result.ifscMasked = undefined;
+        delete result.ifscEncrypted;
+        delete result.ifscMasked;
       }
     }
 
@@ -573,8 +826,8 @@ export class TeamMemberService {
           result.upiIdMasked = `${upi.slice(0, 2)}••••`;
         }
       } else {
-        result.upiIdEncrypted = undefined;
-        result.upiIdMasked = undefined;
+        delete result.upiIdEncrypted;
+        delete result.upiIdMasked;
       }
     }
 

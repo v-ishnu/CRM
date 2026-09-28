@@ -39,6 +39,13 @@ vi.mock('@/services/inquiry.service', () => ({
   },
 }));
 
+function mockChainable(doc: any) {
+  return {
+    select: vi.fn().mockReturnThis(),
+    lean: vi.fn().mockResolvedValue(doc),
+  } as any;
+}
+
 describe('Hosting Module - Project/Client Relationship & Telegram Hosting View (Isolated Unit Tests)', () => {
   // Test Entities
   const fakeClientAId = new mongoose.Types.ObjectId();
@@ -193,9 +200,10 @@ describe('Hosting Module - Project/Client Relationship & Telegram Hosting View (
       save: vi.fn().mockResolvedValue(true),
     };
 
-    // Default mock for User & TeamMember to avoid collision in identity resolver
-    vi.spyOn(User, 'findOne').mockReturnValue({ lean: vi.fn().mockResolvedValue(null) } as any);
-    vi.spyOn(TeamMember, 'findOne').mockReturnValue({ lean: vi.fn().mockResolvedValue(null) } as any);
+    // Default mock for User, TeamMember & Client to avoid collision in identity resolver
+    vi.spyOn(User, 'findOne').mockReturnValue(mockChainable(null));
+    vi.spyOn(TeamMember, 'findOne').mockReturnValue(mockChainable(null));
+    vi.spyOn(Client, 'findOne').mockReturnValue(mockChainable(null));
 
     // Mock TelegramService send helpers so NO external HTTP calls happen
     vi.spyOn(TelegramService, 'sendMessage').mockResolvedValue(undefined as any);
@@ -353,9 +361,7 @@ describe('Hosting Module - Project/Client Relationship & Telegram Hosting View (
 
   // 6. Client A sees Hosting A
   it('6. Client A querying Telegram /hosting receives Hosting A records', async () => {
-    vi.spyOn(Client, 'findOne').mockReturnValue({
-      lean: vi.fn().mockResolvedValue(fakeClientA),
-    } as any);
+    vi.spyOn(Client, 'findOne').mockReturnValue(mockChainable(fakeClientA));
 
     const populatedListA = [
       {
@@ -395,9 +401,7 @@ describe('Hosting Module - Project/Client Relationship & Telegram Hosting View (
 
   // 7. Client A cannot see Hosting B
   it('7. Client A cannot see Hosting B (strict tenant isolation)', async () => {
-    vi.spyOn(Client, 'findOne').mockReturnValue({
-      lean: vi.fn().mockResolvedValue(fakeClientA),
-    } as any);
+    vi.spyOn(Client, 'findOne').mockReturnValue(mockChainable(fakeClientA));
 
     const hostingFindSpy = vi.spyOn(Hosting, 'find').mockReturnValue({
       populate: vi.fn().mockReturnThis(),
@@ -422,9 +426,7 @@ describe('Hosting Module - Project/Client Relationship & Telegram Hosting View (
 
   // 8. Client with multiple projects sees hosting across all authorized projects
   it('8. Client with multiple projects sees all hosting records across authorized projects', async () => {
-    vi.spyOn(Client, 'findOne').mockReturnValue({
-      lean: vi.fn().mockResolvedValue(fakeClientA),
-    } as any);
+    vi.spyOn(Client, 'findOne').mockReturnValue(mockChainable(fakeClientA));
 
     const populatedMultiple = [
       {
@@ -473,9 +475,7 @@ describe('Hosting Module - Project/Client Relationship & Telegram Hosting View (
 
   // 9. Client with no hosting gets empty response
   it('9. Client with no hosting records receives clean, user-friendly empty state', async () => {
-    vi.spyOn(Client, 'findOne').mockReturnValue({
-      lean: vi.fn().mockResolvedValue(fakeClientB),
-    } as any);
+    vi.spyOn(Client, 'findOne').mockReturnValue(mockChainable(fakeClientB));
 
     vi.spyOn(Hosting, 'find').mockReturnValue({
       populate: vi.fn().mockReturnThis(),
@@ -503,9 +503,7 @@ describe('Hosting Module - Project/Client Relationship & Telegram Hosting View (
 
   // 10. /hosting Telegram command works via reply button as well
   it('10. Telegram reply keyboard button "🖥️ Hosting" triggers /hosting command', async () => {
-    vi.spyOn(Client, 'findOne').mockReturnValue({
-      lean: vi.fn().mockResolvedValue(fakeClientA),
-    } as any);
+    vi.spyOn(Client, 'findOne').mockReturnValue(mockChainable(fakeClientA));
 
     const populatedListA = [
       {
@@ -544,9 +542,7 @@ describe('Hosting Module - Project/Client Relationship & Telegram Hosting View (
 
   // 11. Unlinked Telegram user cannot access client hosting
   it('11. Unlinked Telegram user cannot access hosting and receives unlinked prompt', async () => {
-    vi.spyOn(Client, 'findOne').mockReturnValue({
-      lean: vi.fn().mockResolvedValue(null),
-    } as any);
+    vi.spyOn(Client, 'findOne').mockReturnValue(mockChainable(null));
 
     const hostingFindSpy = vi.spyOn(Hosting, 'find');
     const { InquiryService } = await import('@/services/inquiry.service');
@@ -568,9 +564,7 @@ describe('Hosting Module - Project/Client Relationship & Telegram Hosting View (
 
   // 12. Invalid Telegram identity cannot access hosting
   it('12. Telegram user passing spoofed parameter (/hosting CL-0002) is not permitted to view other clients', async () => {
-    vi.spyOn(Client, 'findOne').mockReturnValue({
-      lean: vi.fn().mockResolvedValue(fakeClientA),
-    } as any);
+    vi.spyOn(Client, 'findOne').mockReturnValue(mockChainable(fakeClientA));
 
     const hostingFindSpy = vi.spyOn(Hosting, 'find').mockReturnValue({
       populate: vi.fn().mockReturnThis(),
@@ -596,9 +590,7 @@ describe('Hosting Module - Project/Client Relationship & Telegram Hosting View (
 
   // 13. Hosting credentials are not returned by /hosting
   it('13. Hosting credentials (passwords, SSH keys, API tokens) are strictly excluded from Telegram output', async () => {
-    vi.spyOn(Client, 'findOne').mockReturnValue({
-      lean: vi.fn().mockResolvedValue(fakeClientA),
-    } as any);
+    vi.spyOn(Client, 'findOne').mockReturnValue(mockChainable(fakeClientA));
 
     const populatedListA = [
       {
@@ -689,9 +681,7 @@ describe('Hosting Module - Project/Client Relationship & Telegram Hosting View (
 
   // 16. Existing /start remains functional
   it('16. Existing /start command remains functional for authenticated client', async () => {
-    vi.spyOn(Client, 'findOne').mockReturnValue({
-      lean: vi.fn().mockResolvedValue(fakeClientA),
-    } as any);
+    vi.spyOn(Client, 'findOne').mockReturnValue(mockChainable(fakeClientA));
 
     const sendMessageRawSpy = vi.spyOn(TelegramService, 'sendMessageRaw');
 
@@ -713,9 +703,7 @@ describe('Hosting Module - Project/Client Relationship & Telegram Hosting View (
 
   // 17. Existing /status remains functional
   it('17. Existing /status command remains functional for authenticated client', async () => {
-    vi.spyOn(Client, 'findOne').mockReturnValue({
-      lean: vi.fn().mockResolvedValue(fakeClientA),
-    } as any);
+    vi.spyOn(Client, 'findOne').mockReturnValue(mockChainable(fakeClientA));
 
     vi.spyOn(Project, 'find').mockReturnValue({
       select: vi.fn().mockReturnThis(),
@@ -747,9 +735,7 @@ describe('Hosting Module - Project/Client Relationship & Telegram Hosting View (
 
   // 18. Existing /payments remains functional
   it('18. Existing /payments command remains functional for authenticated client', async () => {
-    vi.spyOn(Client, 'findOne').mockReturnValue({
-      lean: vi.fn().mockResolvedValue(fakeClientA),
-    } as any);
+    vi.spyOn(Client, 'findOne').mockReturnValue(mockChainable(fakeClientA));
 
     vi.spyOn(Project, 'find').mockReturnValue({
       select: vi.fn().mockReturnThis(),
@@ -791,9 +777,7 @@ describe('Hosting Module - Project/Client Relationship & Telegram Hosting View (
 
   // 19. Existing /project remains functional
   it('19. Existing /project command remains functional for authenticated client', async () => {
-    vi.spyOn(Client, 'findOne').mockReturnValue({
-      lean: vi.fn().mockResolvedValue(fakeClientA),
-    } as any);
+    vi.spyOn(Client, 'findOne').mockReturnValue(mockChainable(fakeClientA));
 
     vi.spyOn(Project, 'find').mockReturnValue({
       select: vi.fn().mockReturnThis(),
@@ -835,13 +819,9 @@ describe('Hosting Module - Project/Client Relationship & Telegram Hosting View (
       telegramConnected: true,
     };
 
-    vi.spyOn(User, 'findOne').mockReturnValue({ lean: vi.fn().mockResolvedValue(null) } as any);
-    vi.spyOn(TeamMember, 'findOne').mockReturnValue({
-      lean: vi.fn().mockResolvedValue(fakeTeamMemberUser),
-    } as any);
-    vi.spyOn(Client, 'findOne').mockReturnValue({
-      lean: vi.fn().mockResolvedValue(null),
-    } as any);
+    vi.spyOn(User, 'findOne').mockReturnValue(mockChainable(null));
+    vi.spyOn(TeamMember, 'findOne').mockReturnValue(mockChainable(fakeTeamMemberUser));
+    vi.spyOn(Client, 'findOne').mockReturnValue(mockChainable(null));
 
     vi.spyOn(Task, 'find').mockReturnValue({
       populate: vi.fn().mockReturnThis(),
