@@ -73,20 +73,34 @@ export function TeamMemberChatPanel({
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
 
+  const [unseenCount, setUnseenCount] = useState(0);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
+  const lastMessageAtRef = useRef<string | null>(null);
+  const pollingRef = useRef(false);
 
   // Monitor scroll position
   const handleScroll = () => {
     const container = messagesContainerRef.current;
     if (!container) return;
     const threshold = 100;
-    isNearBottomRef.current =
+    const near =
       container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
+    isNearBottomRef.current = near;
+    if (near) {
+      setUnseenCount(0);
+    }
   };
 
-  // Fetch messages and conversation details
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    setUnseenCount(0);
+    isNearBottomRef.current = true;
+  };
+
+  // Fetch messages and conversation details (Initial or pagination)
   const fetchMessages = useCallback(
     async (targetPage = 1, isSilent = false) => {
       if (!teamMemberId) return;
@@ -97,11 +111,14 @@ export function TeamMemberChatPanel({
         const json = await res.json();
 
         if (json.success && json.data) {
-          const newMessages = json.data.messages || [];
+          const newMessages: ChatMessage[] = json.data.messages || [];
           if (targetPage === 1) {
             setMessages(newMessages);
+            if (newMessages.length > 0) {
+              lastMessageAtRef.current = newMessages[newMessages.length - 1].sentAt;
+            }
           } else {
-            // Prepend older messages
+            // Prepend older messages without disturbing lastMessageAtRef
             setMessages((prev) => [...newMessages, ...prev]);
           }
 
@@ -126,15 +143,85 @@ export function TeamMemberChatPanel({
     [teamMemberId, onConversationUpdated]
   );
 
-  // Initial load and periodic 5-second polling
+  // Incremental poll for newly arrived messages (?after=)
+  const pollNewMessages = useCallback(async () => {
+    if (!teamMemberId || pollingRef.current || !lastMessageAtRef.current) return;
+    pollingRef.current = true;
+
+    try {
+      const res = await fetch(
+        `/api/team-members/${teamMemberId}/chat?after=${encodeURIComponent(lastMessageAtRef.current)}`
+      );
+      const json = await res.json();
+
+      if (json.success && json.data) {
+        const freshList: ChatMessage[] = json.data.messages || [];
+        if (freshList.length > 0) {
+          setMessages((prev) => {
+            const existingIds = new Set(prev.map((m) => m._id));
+            const uniqueIncoming = freshList.filter((m) => !existingIds.has(m._id));
+            if (uniqueIncoming.length === 0) return prev;
+            return [...prev, ...uniqueIncoming];
+          });
+
+          lastMessageAtRef.current = freshList[freshList.length - 1].sentAt;
+
+          if (isNearBottomRef.current) {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          } else {
+            setUnseenCount((prev) => prev + freshList.length);
+          }
+
+          if (json.data.unreadAdminCount !== undefined) {
+            setConversation((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    unreadAdminCount: json.data.unreadAdminCount,
+                    lastMessageAt: json.data.lastMessageAt || prev.lastMessageAt,
+                  }
+                : prev
+            );
+          }
+        }
+      }
+    } catch {
+      // Background poll fail silently to prevent UI disruption
+    } finally {
+      pollingRef.current = false;
+    }
+  }, [teamMemberId]);
+
+  // Adaptive polling: 3s when focused, 20s when backgrounded, immediate fetch on refocus
   useEffect(() => {
     fetchMessages(1);
-    const interval = setInterval(() => {
-      fetchMessages(1, true);
-    }, 5000);
 
-    return () => clearInterval(interval);
-  }, [fetchMessages]);
+    let timer: NodeJS.Timeout;
+    const scheduleNextPoll = () => {
+      const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+      const delay = isHidden ? 20000 : 3000;
+      timer = setTimeout(async () => {
+        await pollNewMessages();
+        scheduleNextPoll();
+      }, delay);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        clearTimeout(timer);
+        pollNewMessages();
+        scheduleNextPoll();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    scheduleNextPoll();
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchMessages, pollNewMessages]);
 
   // Auto-scroll to bottom on new messages if near bottom
   useEffect(() => {
@@ -150,17 +237,21 @@ export function TeamMemberChatPanel({
     await fetchMessages(page + 1);
   };
 
-  // Send message
-  const handleSendMessage = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const text = replyText.trim();
+  // Send message with optimistic UI and reconciliation
+  const handleSendMessage = async (textToSend?: string | React.FormEvent) => {
+    if (typeof textToSend === 'object' && textToSend !== null && 'preventDefault' in textToSend) {
+      textToSend.preventDefault();
+      textToSend = undefined;
+    }
+
+    const text = (typeof textToSend === 'string' ? textToSend : replyText).trim();
     if (!text || sending || !telegramConnected) return;
 
     setSending(true);
     setSendError(null);
 
-    // Optimistic message entry
-    const tempId = `temp-${Date.now()}`;
+    // Optimistic message entry with unique client-side key
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const optimisticMsg: ChatMessage = {
       _id: tempId,
       conversationId: conversation?._id || '',
@@ -174,7 +265,11 @@ export function TeamMemberChatPanel({
     };
 
     setMessages((prev) => [...prev, optimisticMsg]);
-    setReplyText('');
+    if (!textToSend) setReplyText('');
+
+    if (isNearBottomRef.current) {
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+    }
 
     try {
       const res = await fetch(`/api/team-members/${teamMemberId}/chat`, {
@@ -189,16 +284,19 @@ export function TeamMemberChatPanel({
         throw new Error(json.error?.message || 'Failed to dispatch message');
       }
 
-      // Update message with real delivered record
+      // Reconcile optimistic message with server delivered message
+      const serverMessage: ChatMessage = json.data.message;
       setMessages((prev) =>
-        prev.map((m) => (m._id === tempId ? json.data.message : m))
+        prev.map((m) => (m._id === tempId ? serverMessage : m))
       );
+      lastMessageAtRef.current = serverMessage.sentAt || new Date().toISOString();
+
       if (json.data.conversation) {
         setConversation(json.data.conversation);
       }
       if (onConversationUpdated) onConversationUpdated();
     } catch (err: any) {
-      // Mark as failed
+      // Mark optimistic message as FAILED for retry
       setMessages((prev) =>
         prev.map((m) => (m._id === tempId ? { ...m, status: 'FAILED' } : m))
       );
@@ -206,6 +304,12 @@ export function TeamMemberChatPanel({
     } finally {
       setSending(false);
     }
+  };
+
+  // Retry sending a failed message
+  const handleRetry = (failedMsg: ChatMessage) => {
+    setMessages((prev) => prev.filter((m) => m._id !== failedMsg._id));
+    handleSendMessage(failedMsg.text);
   };
 
   // Toggle conversation status (OPEN / CLOSED)
@@ -462,9 +566,17 @@ export function TeamMemberChatPanel({
                           </span>
                         )}
                         {msg.status === 'FAILED' && (
-                          <span className="text-[#ff3e00] flex items-center gap-0.5 font-bold" title="Delivery Failed">
-                            <AlertCircle className="w-2.5 h-2.5" />
+                          <span className="text-[#ff3e00] flex items-center gap-1 font-bold" title="Delivery Failed">
+                            <AlertCircle className="w-2.5 h-2.5 shrink-0" />
                             <span>FAILED</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRetry(msg)}
+                              className="underline hover:text-white cursor-pointer ml-1 text-[9px]"
+                              title="Click to retry sending"
+                            >
+                              [RETRY]
+                            </button>
                           </span>
                         )}
                       </span>
@@ -476,6 +588,20 @@ export function TeamMemberChatPanel({
 
           <div ref={messagesEndRef} />
         </div>
+
+        {/* Floating New Messages Pill */}
+        {unseenCount > 0 && (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={scrollToBottom}
+              className="absolute bottom-2 right-4 bg-[#ff3e00] hover:bg-[#ff5500] text-white text-[10px] font-mono font-bold px-3 py-1.5 shadow-2xl flex items-center gap-1.5 animate-bounce z-20 cursor-pointer border border-white/20"
+            >
+              <span>↓</span>
+              <span>{unseenCount} new message{unseenCount > 1 ? 's' : ''}</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Error alert if send failed */}

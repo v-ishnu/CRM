@@ -8,6 +8,7 @@ import AuditLog from '@/models/AuditLog';
 import TeamMemberConversation from '@/models/TeamMemberConversation';
 import { encrypt, decrypt } from '@/lib/security/encryption';
 import { AuditService } from './audit.service';
+import { CacheService } from './cache.service';
 import { dbConnect } from '@/lib/db/connect';
 
 export interface BankDetailsInputDTO {
@@ -201,6 +202,10 @@ export class TeamMemberService {
     teamMember.status = 'DEACTIVATED';
     await teamMember.save();
 
+    if (teamMember.telegramUserId) {
+      await CacheService.invalidateTelegramIdentity(teamMember.telegramUserId);
+    }
+
     await AuditService.log({
       actor,
       action: 'TEAM_MEMBER_DEACTIVATED',
@@ -360,6 +365,8 @@ export class TeamMemberService {
     member.telegramTokenExpiresAt = undefined;
 
     await member.save();
+
+    await CacheService.invalidateTelegramIdentity(normalizedUserId);
 
     await AuditService.log({
       actor: member.name,

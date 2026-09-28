@@ -19,6 +19,7 @@ import { StorageService } from './storage.service';
 import { TeamMemberService } from './team-member.service';
 import { TaskService } from './task.service';
 import { HostingService } from './hosting.service';
+import { CacheService } from './cache.service';
 import { dbConnect } from '@/lib/db/connect';
 
 export type TelegramIdentityType = 'ADMIN' | 'TEAM_MEMBER' | 'CLIENT' | 'CONFLICT' | 'UNLINKED';
@@ -541,21 +542,20 @@ export class TelegramService {
     const strUserId = String(telegramUserId);
     const strChatId = chatId ? String(chatId) : undefined;
 
-    // 1. Admin Verification
+    // 1. Admin Verification (Fast environment check)
     const adminTelegramId = process.env.ADMIN_TELEGRAM_ID;
     if (adminTelegramId && (strUserId === String(adminTelegramId) || strChatId === String(adminTelegramId))) {
       return { type: 'ADMIN', user: { telegramUserId: strUserId, role: 'ADMIN' } };
     }
 
-    // Also check User model for Admin with matching Telegram ID
-    const adminUser = await User.findOne({
-      role: 'ADMIN',
-      $or: [
-        { email: 'admin@drdebuggers.com' }, // Default admin fallback
-      ],
-    }).lean();
+    // 2. Check Redis cache-aside for ultra-low latency (<1ms)
+    const cacheKey = CacheService.telegramIdentityKey(strUserId, strChatId);
+    const cached = await CacheService.get<TelegramIdentity>(cacheKey);
+    if (cached) {
+      return cached;
+    }
 
-    // 2. Lookup TeamMember & Client concurrently
+    // 3. Lookup TeamMember & Client concurrently using lean projections (excluding heavy/encrypted fields)
     const [teamMember, client] = await Promise.all([
       TeamMember.findOne({
         telegramConnected: true,
@@ -563,33 +563,49 @@ export class TelegramService {
           { telegramUserId: strUserId },
           ...(strChatId ? [{ telegramChatId: strChatId }] : []),
         ],
-      }).lean(),
+      })
+        .select('_id name email role designation status telegramConnected telegramUserId telegramChatId')
+        .lean(),
       Client.findOne({
         telegramConnected: true,
         $or: [
           { telegramUserId: strUserId },
           ...(strChatId ? [{ telegramChatId: strChatId }] : []),
         ],
-      }).lean(),
+      })
+        .select('_id name email company status telegramConnected telegramUserId telegramChatId')
+        .lean(),
     ]);
 
-    // 3. Conflict Detection: Account linked as both TeamMember and Client
+    // 4. Conflict Detection: Account linked as both TeamMember and Client
     if (teamMember && client) {
+      const adminUser = await User.findOne({
+        role: 'ADMIN',
+        $or: [{ email: 'admin@drdebuggers.com' }],
+      })
+        .select('_id email name role')
+        .lean();
       return { type: 'CONFLICT', teamMember, client, user: adminUser };
     }
 
-    // 4. Team Member
+    // 5. Team Member (Cache safe routing metadata with 180s TTL)
     if (teamMember) {
-      return { type: 'TEAM_MEMBER', teamMember };
+      const identity: TelegramIdentity = { type: 'TEAM_MEMBER', teamMember };
+      await CacheService.set(cacheKey, identity, 180);
+      return identity;
     }
 
-    // 5. Client
+    // 6. Client (Cache safe routing metadata with 180s TTL)
     if (client) {
-      return { type: 'CLIENT', client };
+      const identity: TelegramIdentity = { type: 'CLIENT', client };
+      await CacheService.set(cacheKey, identity, 180);
+      return identity;
     }
 
-    // 6. Unlinked
-    return { type: 'UNLINKED' };
+    // 7. Unlinked
+    const unlinkedIdentity: TelegramIdentity = { type: 'UNLINKED' };
+    await CacheService.set(cacheKey, unlinkedIdentity, 60);
+    return unlinkedIdentity;
   }
 
   /**

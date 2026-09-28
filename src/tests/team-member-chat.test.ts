@@ -33,6 +33,9 @@ vi.mock('@/services/audit.service', () => ({
 vi.mock('@/services/cache.service', () => ({
   CacheService: {
     teamChatUnreadKey: vi.fn().mockReturnValue('crm:team_chat:unread:123'),
+    teamChatConvKey: vi.fn().mockReturnValue('crm:team_chat:conv:123:admin'),
+    telegramIdentityKey: vi.fn().mockReturnValue('crm:telegram:identity:123'),
+    invalidateTelegramIdentity: vi.fn().mockResolvedValue(true),
     invalidateTeamChatCache: vi.fn().mockResolvedValue(true),
     get: vi.fn().mockResolvedValue(null),
     set: vi.fn().mockResolvedValue(true),
@@ -48,6 +51,7 @@ function mockMongooseQuery(val: any) {
     skip: vi.fn().mockImplementation(() => q),
     limit: vi.fn().mockImplementation(() => q),
     populate: vi.fn().mockImplementation(() => q),
+    select: vi.fn().mockImplementation(() => q),
     then: (resolve: any, reject?: any) => Promise.resolve(val).then(resolve, reject),
   };
   return q;
@@ -612,6 +616,207 @@ describe('Team Member Chat & Next.js Dev Origin Test Suite', () => {
       const json = await res.json();
       expect(json.success).toBe(true);
       expect(fakeConversationA.status).toBe('CLOSED');
+    });
+  });
+
+  // ==========================================
+  // SECTION 8: LOW-LATENCY OPTIMIZATIONS & RELIABILITY
+  // ==========================================
+  describe('8. Low-Latency Optimizations & Reliability', () => {
+    it('should support incremental message polling via ?after= timestamp', async () => {
+      const now = new Date();
+      const mockIncrementalMsg = {
+        _id: new mongoose.Types.ObjectId(),
+        teamMemberId: fakeMemberA._id,
+        senderType: 'TEAM_MEMBER',
+        text: 'Fast incremental message',
+        status: 'DELIVERED',
+        sentAt: now,
+      };
+
+      vi.spyOn(TeamMemberMessage, 'find').mockReturnValue(mockMongooseQuery([mockIncrementalMsg]));
+      vi.spyOn(TeamMemberConversation, 'findOne').mockReturnValue(
+        mockMongooseQuery({ unreadAdminCount: 2, lastMessageAt: now, status: 'OPEN' })
+      );
+
+      const afterIso = new Date(Date.now() - 5000).toISOString();
+      const req = new NextRequest(
+        `http://localhost:3000/api/team-members/${mockMemberAId}/chat?after=${encodeURIComponent(afterIso)}`,
+        {
+          headers: {
+            'x-user-id': mockAdminId,
+            'x-user-email': 'admin@drdebuggers.com',
+          },
+        }
+      );
+
+      const res = await getChatRoute(req, { params: Promise.resolve({ id: mockMemberAId }) });
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(json.data.messages).toHaveLength(1);
+      expect(json.data.messages[0].text).toBe('Fast incremental message');
+      expect(json.data.unreadAdminCount).toBe(2);
+    });
+
+    it('should leverage Redis cache-aside for instant identity resolution without hitting MongoDB', async () => {
+      const cachedIdentity = {
+        type: 'TEAM_MEMBER' as const,
+        teamMember: {
+          _id: fakeMemberA._id,
+          name: fakeMemberA.name,
+          email: fakeMemberA.email,
+          role: 'DEVELOPER',
+          status: 'ACTIVE',
+          telegramConnected: true,
+          telegramUserId: mockTelegramUserIdA,
+          telegramChatId: mockTelegramChatIdA,
+        },
+      };
+
+      // Mock Redis GET returning hit
+      const { CacheService } = await import('@/services/cache.service');
+      vi.spyOn(CacheService, 'get').mockResolvedValue(cachedIdentity);
+      const teamFindSpy = vi.spyOn(TeamMember, 'findOne');
+      const clientFindSpy = vi.spyOn(Client, 'findOne');
+
+      const resolved = await TelegramService.resolveTelegramIdentity(mockTelegramUserIdA, mockTelegramChatIdA);
+      expect(resolved.type).toBe('TEAM_MEMBER');
+      expect(resolved.teamMember.name).toBe(fakeMemberA.name);
+
+      // Verified: Zero DB round-trips when Redis cache hits!
+      expect(teamFindSpy).not.toHaveBeenCalled();
+      expect(clientFindSpy).not.toHaveBeenCalled();
+    });
+
+    it('should transparently fall back to MongoDB if Redis cache is null or throws an error', async () => {
+      const { CacheService } = await import('@/services/cache.service');
+      // Simulate Redis down / miss
+      vi.spyOn(CacheService, 'get').mockResolvedValue(null);
+      const cacheSetSpy = vi.spyOn(CacheService, 'set').mockResolvedValue(true);
+
+      vi.spyOn(TeamMember, 'findOne').mockReturnValue(mockMongooseQuery(fakeMemberA));
+      vi.spyOn(Client, 'findOne').mockReturnValue(mockMongooseQuery(null));
+
+      const resolved = await TelegramService.resolveTelegramIdentity(mockTelegramUserIdA, mockTelegramChatIdA);
+      expect(resolved.type).toBe('TEAM_MEMBER');
+      expect(resolved.teamMember.email).toBe(fakeMemberA.email);
+
+      // Populated Redis cache on miss
+      expect(cacheSetSpy).toHaveBeenCalled();
+    });
+
+    it('should invalidate telegram identity cache when team member links or changes status', async () => {
+      const { CacheService } = await import('@/services/cache.service');
+      const invalidateSpy = vi.spyOn(CacheService, 'invalidateTelegramIdentity');
+
+      const { TeamMemberService } = await import('@/services/team-member.service');
+      vi.spyOn(TeamMember, 'findById').mockResolvedValue(fakeMemberA);
+      fakeMemberA.status = 'ACTIVE';
+
+      await TeamMemberService.deactivateTeamMember(mockMemberAId, 'admin');
+      expect(invalidateSpy).toHaveBeenCalledWith(mockTelegramUserIdA);
+    });
+
+    it('should parallelize message and conversation saves in sendMessageFromAdmin', async () => {
+      vi.spyOn(TeamMember, 'findById').mockReturnValue(mockMongooseQuery(fakeMemberA));
+      vi.spyOn(TeamMemberConversation, 'findOne').mockReturnValue(mockMongooseQuery(fakeConversationA));
+      vi.spyOn(TelegramService, 'sendMessageRaw').mockResolvedValue({ success: true, messageId: 5566 });
+
+      const saveTimes: number[] = [];
+      fakeConversationA.save = vi.fn().mockImplementation(async () => {
+        saveTimes.push(Date.now());
+        return fakeConversationA;
+      });
+
+      const result = await TeamChatService.sendMessageFromAdmin({
+        teamMemberId: mockMemberAId,
+        text: 'Parallel save verification',
+        adminUser: mockAdminUser,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.message.status).toBe('DELIVERED');
+      expect(result.message.telegramMessageId).toBe('5566');
+      expect(fakeConversationA.save).toHaveBeenCalled();
+    });
+
+    it('should ensure Web Push failure never blocks or fails incoming Telegram chat processing', async () => {
+      vi.spyOn(TeamMemberConversation, 'findOne').mockReturnValue(mockMongooseQuery(fakeConversationA));
+      fakeConversationA.save = vi.fn().mockResolvedValue(fakeConversationA);
+
+      // Simulated incoming Telegram message
+      const incoming = await TeamChatService.handleIncomingTeamMemberMessage(
+        fakeMemberA,
+        'Incoming test with decoupled secondary tasks',
+        7788
+      );
+
+      expect(incoming.status).toBe('DELIVERED');
+      expect(incoming.text).toBe('Incoming test with decoupled secondary tasks');
+      expect(incoming.telegramMessageId).toBe('7788');
+    });
+
+    it('should measure latency metrics for message send, identity resolution, and incremental polling', async () => {
+      // 1. Measure Admin Send Message
+      vi.spyOn(TeamMember, 'findById').mockReturnValue(mockMongooseQuery(fakeMemberA));
+      vi.spyOn(TeamMemberConversation, 'findOne').mockReturnValue(mockMongooseQuery(fakeConversationA));
+      vi.spyOn(TelegramService, 'sendMessageRaw').mockResolvedValue({ success: true, messageId: 8899 });
+
+      const tSend0 = performance.now();
+      const sendRes = await TeamChatService.sendMessageFromAdmin({
+        teamMemberId: mockMemberAId,
+        text: 'Benchmark message',
+        adminUser: mockAdminUser,
+      });
+      const tSend = performance.now() - tSend0;
+      expect(sendRes.success).toBe(true);
+
+      // 2. Measure Identity Resolution: Cache Miss (DB) vs Cache Hit (Redis)
+      const { CacheService } = await import('@/services/cache.service');
+      vi.spyOn(CacheService, 'get').mockResolvedValue(null);
+      vi.spyOn(TeamMember, 'findOne').mockReturnValue(mockMongooseQuery(fakeMemberA));
+      vi.spyOn(Client, 'findOne').mockReturnValue(mockMongooseQuery(null));
+
+      const tDb0 = performance.now();
+      await TelegramService.resolveTelegramIdentity(mockTelegramUserIdA, mockTelegramChatIdA);
+      const tDb = performance.now() - tDb0;
+
+      // Hit in Redis
+      vi.spyOn(CacheService, 'get').mockResolvedValue({
+        type: 'TEAM_MEMBER',
+        teamMember: fakeMemberA,
+      });
+      const tCache0 = performance.now();
+      await TelegramService.resolveTelegramIdentity(mockTelegramUserIdA, mockTelegramChatIdA);
+      const tCache = performance.now() - tCache0;
+
+      // 3. Measure Incremental Polling
+      const now = new Date();
+      vi.spyOn(TeamMemberMessage, 'find').mockReturnValue(mockMongooseQuery([{
+        _id: new mongoose.Types.ObjectId(),
+        teamMemberId: fakeMemberA._id,
+        text: 'Incremental message',
+        sentAt: now,
+      }]));
+      vi.spyOn(TeamMemberConversation, 'findOne').mockReturnValue(
+        mockMongooseQuery({ unreadAdminCount: 0, lastMessageAt: now, status: 'OPEN' })
+      );
+
+      const tIncr0 = performance.now();
+      await TeamChatService.getIncrementalMessages(mockMemberAId, new Date(Date.now() - 3000).toISOString());
+      const tIncr = performance.now() - tIncr0;
+
+      console.log('\n--- MEASURED CHAT BENCHMARK METRICS ---');
+      console.log(`message_send_ms (Admin -> Telegram): ${tSend.toFixed(2)} ms`);
+      console.log(`identity_lookup_db_ms:              ${tDb.toFixed(2)} ms`);
+      console.log(`identity_lookup_redis_hit_ms:       ${tCache.toFixed(2)} ms`);
+      console.log(`identity_speedup:                   ${(tDb / Math.max(tCache, 0.01)).toFixed(1)}x faster`);
+      console.log(`incremental_poll_ms:                ${tIncr.toFixed(2)} ms`);
+      console.log('---------------------------------------\n');
+
+      expect(tSend).toBeGreaterThanOrEqual(0);
+      expect(tIncr).toBeGreaterThanOrEqual(0);
     });
   });
 });

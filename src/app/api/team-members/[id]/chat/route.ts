@@ -46,6 +46,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const adminUser = await getAdminUser(req);
 
     const { searchParams } = new URL(req.url);
+    const after = searchParams.get('after');
+
+    if (after) {
+      const incremental = await TeamChatService.getIncrementalMessages(id, after);
+      return NextResponse.json({ success: true, data: incremental });
+    }
+
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '50', 10);
 

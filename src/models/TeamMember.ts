@@ -156,6 +156,10 @@ const TeamMemberSchema = new Schema<ITeamMember>(
   }
 );
 
+// Compound indexes for Telegram identity resolution
+TeamMemberSchema.index({ telegramConnected: 1, telegramUserId: 1 });
+TeamMemberSchema.index({ telegramConnected: 1, telegramChatId: 1 });
+
 const TeamMember: Model<ITeamMember> = 
   mongoose.models.TeamMember || mongoose.model<ITeamMember>('TeamMember', TeamMemberSchema);
 

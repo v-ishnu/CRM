@@ -141,6 +141,39 @@ export class CacheService {
     return `crm:team_chat:unread:${teamMemberId}`;
   }
 
+  static teamChatConvKey(teamMemberId: string, adminId?: string): string {
+    return `crm:team_chat:conv:${teamMemberId}:${adminId || 'default'}`;
+  }
+
+  static telegramIdentityKey(telegramUserId: string, chatId?: string): string {
+    return `crm:telegram:identity:${telegramUserId}:${chatId || ''}`;
+  }
+
+  static async invalidateTelegramIdentity(telegramUserId?: string): Promise<void> {
+    try {
+      const redis = getRedisClient();
+      if (!redis) return;
+
+      const pattern = telegramUserId ? `crm:telegram:identity:${telegramUserId}*` : 'crm:telegram:identity:*';
+      const stream = redis.scanStream({ match: pattern, count: 100 });
+      const keysToDelete: string[] = [];
+      stream.on('data', (keys: string[]) => {
+        if (keys.length) keysToDelete.push(...keys);
+      });
+      await new Promise<void>((resolve) => {
+        stream.on('end', async () => {
+          if (keysToDelete.length > 0) {
+            await redis.del(...keysToDelete).catch(() => {});
+          }
+          resolve();
+        });
+        stream.on('error', () => resolve());
+      });
+    } catch {
+      // Ignore
+    }
+  }
+
   static async invalidateTeamChatCache(teamMemberId?: string): Promise<void> {
     try {
       const redis = getRedisClient();

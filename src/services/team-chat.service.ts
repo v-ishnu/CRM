@@ -47,7 +47,8 @@ export class TeamChatService {
    */
   static async getOrCreateConversation(
     teamMemberId: string,
-    adminUser: AdminUserContext
+    adminUser: AdminUserContext,
+    preloadedMember?: any
   ): Promise<{ conversation: ITeamMemberConversation; teamMember: any }> {
     await dbConnect();
 
@@ -55,7 +56,14 @@ export class TeamChatService {
       throw new Error('Invalid team member ID format');
     }
 
-    const member = await TeamMember.findById(teamMemberId);
+    // Reuse preloaded member if available to avoid duplicate database round-trip
+    let member = preloadedMember;
+    if (!member) {
+      member = await TeamMember.findById(teamMemberId).select(
+        '_id name email designation role telegramConnected telegramUsername telegramChatId status'
+      );
+    }
+
     if (!member) {
       throw new Error('Team member not found');
     }
@@ -66,44 +74,59 @@ export class TeamChatService {
 
     const adminObjectId = new mongoose.Types.ObjectId(adminUser.id);
     const memberObjectId = member._id as mongoose.Types.ObjectId;
+    const memberIdStr = memberObjectId.toString();
 
-    // Look for an existing conversation between this team member and admin, or any open conversation
-    let conversation = await TeamMemberConversation.findOne({
-      teamMemberId: memberObjectId,
-      adminId: adminObjectId,
-    });
+    // Check Redis routing cache first
+    const convCacheKey = CacheService.teamChatConvKey(memberIdStr, adminUser.id);
+    let conversation: ITeamMemberConversation | null = null;
+    const cachedConvId = await CacheService.get<string>(convCacheKey);
 
-    if (!conversation) {
-      // Check if there is an open conversation owned by another admin or create a new dedicated one
-      conversation = await TeamMemberConversation.findOne({
-        teamMemberId: memberObjectId,
-        status: 'OPEN',
-      });
+    if (cachedConvId && mongoose.Types.ObjectId.isValid(cachedConvId)) {
+      conversation = await TeamMemberConversation.findById(cachedConvId);
     }
 
     if (!conversation) {
-      conversation = new TeamMemberConversation({
-        adminId: adminObjectId,
+      // Look for an existing conversation between this team member and admin, or any open conversation
+      conversation = await TeamMemberConversation.findOne({
         teamMemberId: memberObjectId,
-        type: 'TEAM_MEMBER',
-        status: 'OPEN',
-        lastMessageAt: new Date(),
-        unreadAdminCount: 0,
-        unreadTeamMemberCount: 0,
+        adminId: adminObjectId,
       });
-      await conversation.save();
 
-      await AuditService.logAction(
-        adminUser.email,
-        'TEAM_MEMBER_CHAT_CREATED',
-        'TeamMember',
-        memberObjectId.toString(),
-        {
-          conversationId: conversation._id.toString(),
-          adminId: adminUser.id,
-          teamMemberName: member.name,
-        }
-      );
+      if (!conversation) {
+        // Check if there is an open conversation owned by another admin or create a new dedicated one
+        conversation = await TeamMemberConversation.findOne({
+          teamMemberId: memberObjectId,
+          status: 'OPEN',
+        });
+      }
+
+      if (!conversation) {
+        conversation = new TeamMemberConversation({
+          adminId: adminObjectId,
+          teamMemberId: memberObjectId,
+          type: 'TEAM_MEMBER',
+          status: 'OPEN',
+          lastMessageAt: new Date(),
+          unreadAdminCount: 0,
+          unreadTeamMemberCount: 0,
+        });
+        await conversation.save();
+
+        await AuditService.logAction(
+          adminUser.email,
+          'TEAM_MEMBER_CHAT_CREATED',
+          'TeamMember',
+          memberObjectId.toString(),
+          {
+            conversationId: conversation._id.toString(),
+            adminId: adminUser.id,
+            teamMemberName: member.name,
+          }
+        );
+      }
+
+      // Populate Redis routing cache with 10-minute TTL
+      await CacheService.set(convCacheKey, conversation._id.toString(), 600);
     }
 
     return {
@@ -140,7 +163,10 @@ export class TeamChatService {
       throw new Error('Invalid team member ID format');
     }
 
-    const member = await TeamMember.findById(teamMemberId);
+    // Single query with projected fields (excluding heavy encrypted bank details)
+    const member = await TeamMember.findById(teamMemberId).select(
+      '_id name email role designation telegramConnected telegramChatId status'
+    );
     if (!member) {
       throw new Error('Team member not found');
     }
@@ -153,8 +179,8 @@ export class TeamChatService {
       throw new Error('Telegram not connected for this team member');
     }
 
-    // Retrieve or create conversation
-    const { conversation } = await this.getOrCreateConversation(teamMemberId, adminUser);
+    // Retrieve or create conversation, passing already-loaded member
+    const { conversation } = await this.getOrCreateConversation(teamMemberId, adminUser, member);
 
     // If conversation was closed, automatically reopen
     if (conversation.status === 'CLOSED') {
@@ -175,7 +201,7 @@ export class TeamChatService {
     });
     await message.save();
 
-    // 2. Dispatch via TelegramService
+    // 2. Dispatch via TelegramService directly to chatId
     const formattedTelegramMessage = `💬 <b>Dr. Debuggers Admin (${adminUser.name || 'Admin'}):</b>\n\n${trimmedText}`;
     
     let sendResult: { success: boolean; messageId?: number; error?: string };
@@ -191,25 +217,28 @@ export class TeamChatService {
         message.telegramMessageId = String(sendResult.messageId);
       }
       message.deliveredAt = new Date();
-      await message.save();
 
       conversation.lastMessageAt = new Date();
       conversation.lastMessageText = trimmedText;
-      await conversation.save();
 
-      await AuditService.logAction(
-        adminUser.email,
-        'TEAM_MEMBER_MESSAGE_SENT',
-        'TeamMember',
-        member._id.toString(),
-        {
-          conversationId: conversation._id.toString(),
-          messageId: message._id.toString(),
-          telegramMessageId: message.telegramMessageId,
-        }
-      );
+      // Parallelize MongoDB updates across independent collections
+      await Promise.all([message.save(), conversation.save()]);
 
-      await CacheService.invalidateTeamChatCache(teamMemberId);
+      // Parallelize secondary tasks concurrently
+      await Promise.all([
+        AuditService.logAction(
+          adminUser.email,
+          'TEAM_MEMBER_MESSAGE_SENT',
+          'TeamMember',
+          member._id.toString(),
+          {
+            conversationId: conversation._id.toString(),
+            messageId: message._id.toString(),
+            telegramMessageId: message.telegramMessageId,
+          }
+        ),
+        CacheService.invalidateTeamChatCache(teamMemberId),
+      ]);
 
       return { success: true, message, conversation };
     } else {
@@ -254,23 +283,14 @@ export class TeamChatService {
 
     const memberId = teamMember._id as mongoose.Types.ObjectId;
 
-    // Resolve target conversation:
-    // 1. Most recent OPEN conversation
-    // 2. Or most recent conversation regardless of status
+    // Resolve target conversation using a single query sorting OPEN ('O') before CLOSED ('C')
     let conversation = await TeamMemberConversation.findOne({
       teamMemberId: memberId,
-      status: 'OPEN',
-    }).sort({ lastMessageAt: -1 });
+    }).sort({ status: -1, lastMessageAt: -1 });
 
     if (!conversation) {
-      conversation = await TeamMemberConversation.findOne({
-        teamMemberId: memberId,
-      }).sort({ lastMessageAt: -1 });
-    }
-
-    if (!conversation) {
-      // Find primary or default admin user to establish explicit conversation ownership
-      const defaultAdmin = await User.findOne({ role: 'ADMIN' });
+      // Find primary admin with projection
+      const defaultAdmin = await User.findOne({ role: 'ADMIN' }).select('_id').lean();
       const adminId = defaultAdmin ? (defaultAdmin._id as mongoose.Types.ObjectId) : memberId;
 
       conversation = new TeamMemberConversation({
@@ -285,7 +305,7 @@ export class TeamChatService {
       });
       await conversation.save();
 
-      await AuditService.logAction(
+      AuditService.logAction(
         teamMember.email || 'system',
         'TEAM_MEMBER_CHAT_CREATED',
         'TeamMember',
@@ -294,7 +314,7 @@ export class TeamChatService {
           conversationId: conversation._id.toString(),
           initiatedBy: 'TEAM_MEMBER_REPLY',
         }
-      );
+      ).catch(() => {});
     } else {
       conversation.unreadAdminCount = (conversation.unreadAdminCount || 0) + 1;
       conversation.lastMessageAt = new Date();
@@ -302,7 +322,6 @@ export class TeamChatService {
       if (conversation.status === 'CLOSED') {
         conversation.status = 'OPEN';
       }
-      await conversation.save();
     }
 
     // Persist incoming message
@@ -319,24 +338,71 @@ export class TeamChatService {
       sentAt: new Date(),
       deliveredAt: new Date(),
     });
-    await incomingMessage.save();
 
-    await AuditService.logAction(
-      teamMember.email,
-      'TEAM_MEMBER_COMMAND',
-      'TeamMember',
-      memberId.toString(),
-      {
-        command: 'chat_reply',
-        conversationId: conversation._id.toString(),
-        messageId: incomingMessage._id.toString(),
-        telegramMessageId: incomingMessage.telegramMessageId,
-      }
-    );
+    // Parallelize conversation metadata update and message persistence
+    await Promise.all([conversation.save(), incomingMessage.save()]);
 
-    await CacheService.invalidateTeamChatCache(memberId.toString());
+    // Parallelize secondary tasks
+    await Promise.all([
+      AuditService.logAction(
+        teamMember.email,
+        'TEAM_MEMBER_COMMAND',
+        'TeamMember',
+        memberId.toString(),
+        {
+          command: 'chat_reply',
+          conversationId: conversation._id.toString(),
+          messageId: incomingMessage._id.toString(),
+          telegramMessageId: incomingMessage.telegramMessageId,
+        }
+      ),
+      CacheService.invalidateTeamChatCache(memberId.toString()),
+    ]);
 
     return incomingMessage;
+  }
+
+  /**
+   * Fast incremental fetch for messages newer than a given ISO timestamp
+   */
+  static async getIncrementalMessages(
+    teamMemberId: string,
+    afterIsoDate: string
+  ): Promise<{ messages: ITeamMemberMessage[]; unreadAdminCount?: number; lastMessageAt?: Date }> {
+    await dbConnect();
+
+    if (!mongoose.Types.ObjectId.isValid(teamMemberId)) {
+      throw new Error('Invalid team member ID format');
+    }
+
+    const afterDate = new Date(afterIsoDate);
+    if (isNaN(afterDate.getTime())) {
+      throw new Error('Invalid after timestamp');
+    }
+
+    const memberObjectId = new mongoose.Types.ObjectId(teamMemberId);
+
+    // Concurrently fetch newly arrived messages and latest conversation metadata
+    const [messages, conversation] = await Promise.all([
+      TeamMemberMessage.find({
+        teamMemberId: memberObjectId,
+        sentAt: { $gt: afterDate },
+      })
+        .sort({ sentAt: 1 })
+        .limit(100)
+        .lean(),
+      TeamMemberConversation.findOne({
+        teamMemberId: memberObjectId,
+      })
+        .select('unreadAdminCount lastMessageAt status')
+        .lean(),
+    ]);
+
+    return {
+      messages: messages as any,
+      unreadAdminCount: conversation?.unreadAdminCount || 0,
+      lastMessageAt: conversation?.lastMessageAt,
+    };
   }
 
   /**
@@ -355,16 +421,17 @@ export class TeamChatService {
     const limit = Math.min(100, Math.max(1, Number(options.limit) || 50));
     const skip = (page - 1) * limit;
 
-    const total = await TeamMemberMessage.countDocuments({ conversationId: conversation._id });
+    // Parallelize message count and messages fetch
+    const [total, rawMessages] = await Promise.all([
+      TeamMemberMessage.countDocuments({ conversationId: conversation._id }),
+      TeamMemberMessage.find({ conversationId: conversation._id })
+        .sort({ sentAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+    ]);
+
     const totalPages = Math.ceil(total / limit) || 1;
-
-    // Fetch messages sorted newest first, then reverse to display chronologically
-    const rawMessages = await TeamMemberMessage.find({ conversationId: conversation._id })
-      .sort({ sentAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
-
     const messages = rawMessages.reverse();
 
     return {
@@ -450,7 +517,9 @@ export class TeamChatService {
   static async getTeamChatSummary(): Promise<Record<string, { unreadCount: number; lastMessageText?: string; lastMessageAt?: Date; status: string }>> {
     await dbConnect();
 
-    const conversations = await TeamMemberConversation.find({}).lean();
+    const conversations = await TeamMemberConversation.find({})
+      .select('teamMemberId unreadAdminCount lastMessageText lastMessageAt status')
+      .lean();
     const summary: Record<string, { unreadCount: number; lastMessageText?: string; lastMessageAt?: Date; status: string }> = {};
 
     for (const c of conversations) {

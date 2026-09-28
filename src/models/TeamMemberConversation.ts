@@ -70,6 +70,7 @@ const TeamMemberConversationSchema = new Schema<ITeamMemberConversation>(
 // Compound indexes for optimal queries
 TeamMemberConversationSchema.index({ teamMemberId: 1, status: 1 });
 TeamMemberConversationSchema.index({ teamMemberId: 1, adminId: 1 });
+TeamMemberConversationSchema.index({ adminId: 1, lastMessageAt: -1 });
 TeamMemberConversationSchema.index({ lastMessageAt: -1 });
 
 const TeamMemberConversation: Model<ITeamMemberConversation> =
