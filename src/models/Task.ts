@@ -198,6 +198,9 @@ const TaskSchema = new Schema<ITask>(
   }
 );
 
+TaskSchema.index({ assignedTo: 1, status: 1, createdAt: -1 });
+TaskSchema.index({ requiredCredentialIds: 1 });
+
 const Task: Model<ITask> = 
   mongoose.models.Task || mongoose.model<ITask>('Task', TaskSchema);
 

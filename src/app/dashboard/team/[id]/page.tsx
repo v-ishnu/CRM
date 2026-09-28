@@ -47,6 +47,7 @@ export default function TeamMemberWorkspacePage() {
   const memberId = params.id as string;
 
   const { items: masterDesignations, refresh: refreshDesignations } = useMasterData('TEAM_DESIGNATION');
+  const { items: masterCredTypes } = useMasterData('CREDENTIAL_TYPE');
 
   const defaultDesignations = [
     'Full Stack Developer',
@@ -62,6 +63,20 @@ export default function TeamMemberWorkspacePage() {
   const renderedDesignations = masterDesignations.length > 0
     ? masterDesignations.map((d) => d.label)
     : defaultDesignations;
+
+  const defaultCredentialTypes = [
+    { id: 'WORDPRESS', label: 'WordPress' },
+    { id: 'HOSTING', label: 'Hosting / Server' },
+    { id: 'CPANEL', label: 'cPanel' },
+    { id: 'DATABASE', label: 'Database' },
+    { id: 'FTP', label: 'FTP / SFTP' },
+    { id: 'GITHUB', label: 'GitHub / Git' },
+    { id: 'CLOUDFLARE', label: 'Cloudflare' },
+    { id: 'CUSTOM', label: 'Custom Credential' },
+  ];
+  const availableCredentialTypes = masterCredTypes && masterCredTypes.length > 0
+    ? masterCredTypes.map((m) => ({ id: m.key, label: m.label }))
+    : defaultCredentialTypes;
 
   const activeTab = searchParams.get('tab') || 'overview';
 
@@ -108,6 +123,7 @@ export default function TeamMemberWorkspacePage() {
     role: 'DEVELOPER',
     designation: '',
     permissions: [] as string[],
+    allowedCredentialTypes: [] as string[],
   });
   const [updatingMember, setUpdatingMember] = useState(false);
 
@@ -245,7 +261,7 @@ export default function TeamMemberWorkspacePage() {
       return;
     }
     try {
-      const res = await fetch(`/api/projects/${projId}/credentials`);
+      const res = await fetch(`/api/projects/${projId}/credentials?teamMemberId=${memberId}`);
       const data = await res.json();
       if (data.success) {
         setProjectCredentials(data.data || []);
@@ -268,6 +284,7 @@ export default function TeamMemberWorkspacePage() {
       role: member.role || 'DEVELOPER',
       designation: member.designation || member.role || 'DEVELOPER',
       permissions: member.permissions || [],
+      allowedCredentialTypes: member.allowedCredentialTypes || [],
     });
     setShowEditMemberModal(true);
   };
@@ -284,6 +301,7 @@ export default function TeamMemberWorkspacePage() {
         role: editMemberForm.role || 'DEVELOPER',
         designation: editMemberForm.designation?.trim(),
         permissions: editMemberForm.permissions,
+        allowedCredentialTypes: editMemberForm.allowedCredentialTypes,
       };
 
       const res = await fetch(`/api/team-members/${memberId}`, {
@@ -1642,6 +1660,39 @@ export default function TeamMemberWorkspacePage() {
                   ))}
                 </div>
               </div>
+
+              {editMemberForm.permissions.includes('VIEW_CREDENTIALS') && (
+                <div className="p-3 bg-[#0a0a0a] border border-[#f59e0b]/30 space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs text-[#f59e0b] font-semibold">
+                    <Shield className="w-3.5 h-3.5" />
+                    <span>Authorized Credential Types</span>
+                  </div>
+                  <p className="text-[10px] text-[#88888e]">
+                    Select which credential types this member can access. Leave empty for all.
+                  </p>
+                  <div className="grid grid-cols-2 gap-1.5 pt-1">
+                    {availableCredentialTypes.map((type) => {
+                      const isChecked = (editMemberForm.allowedCredentialTypes || []).includes(type.id);
+                      return (
+                        <label key={type.id} className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const next = e.target.checked
+                                ? [...(editMemberForm.allowedCredentialTypes || []), type.id]
+                                : (editMemberForm.allowedCredentialTypes || []).filter((t: string) => t !== type.id);
+                              setEditMemberForm({ ...editMemberForm, allowedCredentialTypes: next });
+                            }}
+                            className="accent-[#ff3e00]"
+                          />
+                          <span className="text-[11px] text-white">{type.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div className="flex justify-end space-x-3 pt-3 border-t border-[#242428]">
                 <button

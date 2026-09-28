@@ -55,6 +55,12 @@ describe('Team Member ↔ Task Management Workspace & Security Tests', () => {
       name: 'Mock Client',
       status: 'ACTIVE',
     } as any);
+    vi.spyOn(TeamMember, 'findById').mockResolvedValue({
+      _id: mockMemberAId,
+      name: 'Mock Member',
+      status: 'ACTIVE',
+      permissions: ['VIEW_PROJECT', 'VIEW_TASKS', 'VIEW_CREDENTIALS'],
+    } as any);
   });
 
   // ==========================================

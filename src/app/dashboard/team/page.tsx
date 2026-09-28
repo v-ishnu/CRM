@@ -54,6 +54,7 @@ export default function TeamMembersPage() {
   const [activeTab, setActiveTab] = useState<'members' | 'invitations'>('members');
 
   const { items: masterDesignations, refresh: refreshDesignations } = useMasterData('TEAM_DESIGNATION');
+  const { items: masterCredTypes } = useMasterData('CREDENTIAL_TYPE');
 
   const defaultDesignations = [
     'Full Stack Developer',
@@ -69,6 +70,20 @@ export default function TeamMembersPage() {
   const renderedDesignations = masterDesignations.length > 0
     ? masterDesignations.map((d) => d.label)
     : defaultDesignations;
+
+  const defaultCredentialTypes = [
+    { id: 'WORDPRESS', label: 'WordPress' },
+    { id: 'HOSTING', label: 'Hosting / Server' },
+    { id: 'CPANEL', label: 'cPanel' },
+    { id: 'DATABASE', label: 'Database' },
+    { id: 'FTP', label: 'FTP / SFTP' },
+    { id: 'GITHUB', label: 'GitHub / Git' },
+    { id: 'CLOUDFLARE', label: 'Cloudflare' },
+    { id: 'CUSTOM', label: 'Custom Credential' },
+  ];
+  const availableCredentialTypes = masterCredTypes && masterCredTypes.length > 0
+    ? masterCredTypes.map((m) => ({ id: m.key, label: m.label }))
+    : defaultCredentialTypes;
 
   const [members, setMembers] = useState<any[]>([]);
   const [invitations, setInvitations] = useState<any[]>([]);
@@ -140,6 +155,7 @@ export default function TeamMembersPage() {
     role: string;
     designation: string;
     permissions: string[];
+    allowedCredentialTypes: string[];
     bankDetails: {
       accountHolderName: string;
       bankName: string;
@@ -154,6 +170,7 @@ export default function TeamMembersPage() {
     role: 'DEVELOPER',
     designation: '',
     permissions: ['VIEW_PROJECT', 'VIEW_TASKS'],
+    allowedCredentialTypes: [],
     bankDetails: {
       accountHolderName: '',
       bankName: '',
@@ -162,6 +179,17 @@ export default function TeamMembersPage() {
       upiId: '',
     },
   });
+
+  const toggleCredentialType = (typeId: string) => {
+    setFormData((prev) => {
+      const current = prev.allowedCredentialTypes || [];
+      const exists = current.includes(typeId);
+      return {
+        ...prev,
+        allowedCredentialTypes: exists ? current.filter((t) => t !== typeId) : [...current, typeId],
+      };
+    });
+  };
 
   const availablePermissions = [
     { id: 'VIEW_PROJECT', label: 'View Project Details' },
@@ -227,6 +255,7 @@ export default function TeamMembersPage() {
       role: 'DEVELOPER',
       designation: renderedDesignations[0] || 'Full Stack Developer',
       permissions: ['VIEW_PROJECT', 'VIEW_TASKS'],
+      allowedCredentialTypes: [],
       bankDetails: {
         accountHolderName: '',
         bankName: '',
@@ -249,6 +278,7 @@ export default function TeamMembersPage() {
       role: member.role || 'DEVELOPER',
       designation: member.designation || member.role || 'DEVELOPER',
       permissions: member.permissions || [],
+      allowedCredentialTypes: member.allowedCredentialTypes || [],
       bankDetails: {
         accountHolderName: '',
         bankName: '',
@@ -280,6 +310,7 @@ export default function TeamMembersPage() {
         role: formData.role || 'DEVELOPER',
         designation: formData.designation,
         permissions: formData.permissions,
+        allowedCredentialTypes: formData.allowedCredentialTypes,
       };
 
       if (
@@ -326,6 +357,7 @@ export default function TeamMembersPage() {
         role: formData.role || 'DEVELOPER',
         designation: formData.designation?.trim(),
         permissions: formData.permissions,
+        allowedCredentialTypes: formData.allowedCredentialTypes,
       };
 
       const res = await fetch(`/api/team-members/${selectedMember._id}`, {
@@ -1389,6 +1421,36 @@ export default function TeamMembersPage() {
                     </label>
                   ))}
                 </div>
+
+                {formData.permissions.includes('VIEW_CREDENTIALS') && (
+                  <div className="mt-2.5 p-3 bg-[#141416] border border-[#f59e0b]/30 rounded-none md:rounded-xs space-y-2">
+                    <div className="flex items-center gap-1.5 text-xs text-[#f59e0b] font-mono font-semibold">
+                      <Shield className="w-3.5 h-3.5" />
+                      <span>Authorized Credential Types</span>
+                    </div>
+                    <p className="text-[10px] text-[#88888e] font-mono">
+                      Select which project credential types this member is authorized to access. Leave empty to allow all types.
+                    </p>
+                    <div className="grid grid-cols-2 gap-1.5 pt-1">
+                      {availableCredentialTypes.map((type) => {
+                        const isChecked = (formData.allowedCredentialTypes || []).includes(type.id);
+                        return (
+                          <label key={type.id} className="flex items-center space-x-2 cursor-pointer text-xs font-mono">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => toggleCredentialType(type.id)}
+                              className="rounded-none text-[#ff3e00] focus:ring-0 cursor-pointer"
+                            />
+                            <span className={isChecked ? 'text-white font-medium' : 'text-[#88888e]'}>
+                              {type.label}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Collapsible Bank Details */}
@@ -1594,6 +1656,36 @@ export default function TeamMembersPage() {
                     </label>
                   ))}
                 </div>
+
+                {formData.permissions.includes('VIEW_CREDENTIALS') && (
+                  <div className="mt-2.5 p-3 bg-[#141416] border border-[#f59e0b]/30 rounded-none md:rounded-xs space-y-2">
+                    <div className="flex items-center gap-1.5 text-xs text-[#f59e0b] font-mono font-semibold">
+                      <Shield className="w-3.5 h-3.5" />
+                      <span>Authorized Credential Types</span>
+                    </div>
+                    <p className="text-[10px] text-[#88888e] font-mono">
+                      Select which project credential types this member is authorized to access. Leave empty to allow all types.
+                    </p>
+                    <div className="grid grid-cols-2 gap-1.5 pt-1">
+                      {availableCredentialTypes.map((type) => {
+                        const isChecked = (formData.allowedCredentialTypes || []).includes(type.id);
+                        return (
+                          <label key={type.id} className="flex items-center space-x-2 cursor-pointer text-xs font-mono">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => toggleCredentialType(type.id)}
+                              className="rounded-none text-[#ff3e00] focus:ring-0 cursor-pointer"
+                            />
+                            <span className={isChecked ? 'text-white font-medium' : 'text-[#88888e]'}>
+                              {type.label}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end space-x-3 pt-3 border-t border-[#242428]">

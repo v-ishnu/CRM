@@ -38,6 +38,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (body.telegramUserId !== undefined) profilePayload.telegramUserId = body.telegramUserId;
     if (body.telegramUsername !== undefined) profilePayload.telegramUsername = body.telegramUsername;
     if (body.permissions !== undefined) profilePayload.permissions = body.permissions;
+    if (body.allowedCredentialTypes !== undefined) profilePayload.allowedCredentialTypes = body.allowedCredentialTypes;
 
     const updated = await TeamMemberService.updateTeamMember(id, profilePayload, actor);
     return NextResponse.json({ success: true, data: updated });

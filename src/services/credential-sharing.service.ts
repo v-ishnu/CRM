@@ -128,14 +128,34 @@ export class CredentialSharingService {
     }
 
     // 10. Load ONLY required credentials belonging to this project (Strict Least Privilege)
-    const credentials = await Credential.find({
+    const rawCredentials = await Credential.find({
       _id: { $in: task.requiredCredentialIds },
       projectId: project._id,
       isRevoked: { $ne: true },
     });
 
-    if (credentials.length === 0) {
+    if (rawCredentials.length === 0) {
       throw new Error('None of the required credentials for this task were found or active in the project');
+    }
+
+    // Filter by team member authorized credential types
+    const credentials = rawCredentials.filter((cred) =>
+      TeamMemberService.isAuthorizedForCredentialType(teamMember, cred.credentialType)
+    );
+
+    if (credentials.length === 0) {
+      await AuditService.log({
+        actor,
+        action: 'CREDENTIAL_ACCESS_DENIED',
+        entityType: 'Task',
+        entityId: task._id,
+        metadata: {
+          taskId: task._id,
+          teamMemberId: teamMember._id,
+          reason: 'Team member is not authorized for any of the required credential types',
+        },
+      });
+      throw new Error('None of the required credentials for this task are authorized for this team member');
     }
 
     // 11. Decrypt ONLY the required credentials right before dispatch

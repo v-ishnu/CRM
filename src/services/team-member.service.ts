@@ -28,6 +28,7 @@ export interface CreateTeamMemberDTO {
   telegramUserId?: string;
   telegramUsername?: string;
   permissions?: TeamPermission[];
+  allowedCredentialTypes?: string[];
   isPrimaryAdmin?: boolean;
   bankDetails?: BankDetailsInputDTO;
 }
@@ -41,6 +42,7 @@ export interface UpdateTeamMemberDTO {
   telegramUserId?: string;
   telegramUsername?: string;
   permissions?: TeamPermission[];
+  allowedCredentialTypes?: string[];
   status?: 'ACTIVE' | 'INACTIVE' | 'DEACTIVATED';
   // bankDetails deliberately omitted to enforce separation of profile from bank details
 }
@@ -100,6 +102,7 @@ export class TeamMemberService {
       telegramConnected: !!data.telegramUserId,
       status: 'ACTIVE',
       permissions: defaultPermissions,
+      allowedCredentialTypes: data.allowedCredentialTypes,
       isPrimaryAdmin: data.isPrimaryAdmin || false,
       bankDetails: bankDetails || undefined,
     });
@@ -190,6 +193,9 @@ export class TeamMemberService {
     if (data.permissions !== undefined) {
       setFields.permissions = data.permissions;
     }
+    if (data.allowedCredentialTypes !== undefined) {
+      setFields.allowedCredentialTypes = data.allowedCredentialTypes;
+    }
     if (data.status !== undefined) {
       setFields.status = data.status;
     }
@@ -215,6 +221,7 @@ export class TeamMemberService {
         role: updated?.role || teamMember.role,
         status: updated?.status || teamMember.status,
         permissions: updated?.permissions || teamMember.permissions,
+        allowedCredentialTypes: updated?.allowedCredentialTypes || teamMember.allowedCredentialTypes,
       },
     });
 
@@ -919,5 +926,27 @@ export class TeamMemberService {
   static hasPermission(member: ITeamMember, permission: TeamPermission): boolean {
     if (member.role === 'ADMIN' || member.isPrimaryAdmin) return true;
     return member.permissions && member.permissions.includes(permission);
+  }
+
+  /**
+   * Helper to check if a team member is authorized for a specific credential type.
+   * - ADMIN / isPrimaryAdmin: always authorized.
+   * - Lacks VIEW_CREDENTIALS permission: always denied.
+   * - allowedCredentialTypes configured: must be included in allowedCredentialTypes array.
+   * - allowedCredentialTypes is undefined: allowed by default for backward compatibility.
+   */
+  static isAuthorizedForCredentialType(member: ITeamMember, credentialType?: string): boolean {
+    if (member.role === 'ADMIN' || member.isPrimaryAdmin) return true;
+    if (!this.hasPermission(member, 'VIEW_CREDENTIALS')) return false;
+
+    if (member.allowedCredentialTypes && Array.isArray(member.allowedCredentialTypes)) {
+      if (member.allowedCredentialTypes.length === 0) return false;
+      const normalizedReq = (credentialType || 'CUSTOM').toUpperCase().trim();
+      return member.allowedCredentialTypes.some(
+        (t) => t.toUpperCase().trim() === normalizedReq
+      );
+    }
+
+    return true;
   }
 }

@@ -10,35 +10,6 @@ export async function GET(req: NextRequest) {
   try {
     await dbConnect();
 
-    // 1. Total Clients
-    const totalClients = await Client.countDocuments();
-
-    // 2. Active Projects (PLANNED, ONBOARDING, IN_PROGRESS, REVIEW, ON_HOLD)
-    const activeProjects = await Project.countDocuments({
-      status: { $in: ['PLANNED', 'ONBOARDING', 'IN_PROGRESS', 'REVIEW', 'ON_HOLD'] },
-    });
-
-    // 3. Financial calculations
-    const projects = await Project.find({ status: { $ne: 'CANCELLED' } });
-    const totalRevenue = projects.reduce((sum, p) => sum + p.totalAmount, 0);
-
-    // Regular project payments (exclude CLIENT_BONUS so outstanding balance is never distorted)
-    const completedRegularPayments = await Payment.find({
-      status: 'COMPLETED',
-      paymentType: { $ne: 'CLIENT_BONUS' },
-    });
-    const totalPaid = completedRegularPayments.reduce((sum, p) => sum + p.amount, 0);
-    const outstandingAmount = Math.max(0, totalRevenue - totalPaid);
-
-    // Client bonus payments (internal accounting)
-    const completedBonusPayments = await Payment.find({
-      status: 'COMPLETED',
-      paymentType: 'CLIENT_BONUS',
-    });
-    const totalBonus = completedBonusPayments.reduce((sum, p) => sum + p.amount, 0);
-    const totalCashReceived = totalPaid + totalBonus;
-
-    // 4. Payments this month
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
@@ -47,29 +18,54 @@ export async function GET(req: NextRequest) {
     endOfMonth.setDate(0);
     endOfMonth.setHours(23, 59, 59, 999);
 
-    const thisMonthRegularPayments = await Payment.find({
-      status: 'COMPLETED',
-      paymentType: { $ne: 'CLIENT_BONUS' },
-      paymentDate: { $gte: startOfMonth, $lte: endOfMonth },
-    });
-    const paymentsThisMonth = thisMonthRegularPayments.reduce((sum, p) => sum + p.amount, 0);
+    // Parallelize all dashboard queries to eliminate serial round-trip latency
+    const [
+      totalClients,
+      activeProjects,
+      projects,
+      completedRegularPayments,
+      completedBonusPayments,
+      thisMonthRegularPayments,
+      thisMonthBonusPayments,
+      pendingInvoices,
+      recentActivity,
+    ] = await Promise.all([
+      Client.countDocuments(),
+      Project.countDocuments({
+        status: { $in: ['PLANNED', 'ONBOARDING', 'IN_PROGRESS', 'REVIEW', 'ON_HOLD'] },
+      }),
+      Project.find({ status: { $ne: 'CANCELLED' } }).select('totalAmount').lean(),
+      Payment.find({
+        status: 'COMPLETED',
+        paymentType: { $ne: 'CLIENT_BONUS' },
+      }).select('amount').lean(),
+      Payment.find({
+        status: 'COMPLETED',
+        paymentType: 'CLIENT_BONUS',
+      }).select('amount').lean(),
+      Payment.find({
+        status: 'COMPLETED',
+        paymentType: { $ne: 'CLIENT_BONUS' },
+        paymentDate: { $gte: startOfMonth, $lte: endOfMonth },
+      }).select('amount').lean(),
+      Payment.find({
+        status: 'COMPLETED',
+        paymentType: 'CLIENT_BONUS',
+        paymentDate: { $gte: startOfMonth, $lte: endOfMonth },
+      }).select('amount').lean(),
+      Invoice.countDocuments({
+        status: { $in: ['DRAFT', 'ISSUED', 'PARTIALLY_PAID', 'OVERDUE'] },
+      }),
+      AuditLog.find().sort({ timestamp: -1 }).limit(10).lean(),
+    ]);
 
-    const thisMonthBonusPayments = await Payment.find({
-      status: 'COMPLETED',
-      paymentType: 'CLIENT_BONUS',
-      paymentDate: { $gte: startOfMonth, $lte: endOfMonth },
-    });
-    const bonusThisMonth = thisMonthBonusPayments.reduce((sum, p) => sum + p.amount, 0);
-
-    // 5. Pending Invoices count
-    const pendingInvoices = await Invoice.countDocuments({
-      status: { $in: ['DRAFT', 'ISSUED', 'PARTIALLY_PAID', 'OVERDUE'] },
-    });
-
-    // 6. Recent activities (Audit Logs)
-    const recentActivity = await AuditLog.find()
-      .sort({ timestamp: -1 })
-      .limit(10);
+    const totalRevenue = projects.reduce((sum: number, p: any) => sum + (p.totalAmount || 0), 0);
+    const totalPaid = completedRegularPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+    const outstandingAmount = Math.max(0, totalRevenue - totalPaid);
+    const totalBonus = completedBonusPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+    const totalCashReceived = totalPaid + totalBonus;
+    const paymentsThisMonth = thisMonthRegularPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+    const bonusThisMonth = thisMonthBonusPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
 
     return NextResponse.json({
       success: true,

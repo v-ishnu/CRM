@@ -25,8 +25,14 @@ if (!cached) {
 }
 
 export async function dbConnect(): Promise<typeof mongoose> {
-  if (cached.conn) {
+  if (cached.conn && mongoose.connection.readyState === 1) {
     return cached.conn;
+  }
+
+  // If connection dropped in serverless container, reset cache
+  if (cached.conn && mongoose.connection.readyState !== 1) {
+    cached.conn = null;
+    cached.promise = null;
   }
 
   const isTestEnv = process.env.NODE_ENV === 'test' || process.env.VITEST === 'true';
@@ -63,6 +69,9 @@ export async function dbConnect(): Promise<typeof mongoose> {
   if (!cached.promise) {
     const opts = {
       bufferCommands: false,
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
     };
 
     cached.promise = mongoose.connect(uri, opts).then((mongooseInstance) => {

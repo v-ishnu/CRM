@@ -106,6 +106,8 @@ const CredentialSchema = new Schema<ICredential>(
   }
 );
 
+CredentialSchema.index({ projectId: 1, isRevoked: 1 });
+
 const Credential: Model<ICredential> = mongoose.models.Credential || mongoose.model<ICredential>('Credential', CredentialSchema);
 
 export default Credential;

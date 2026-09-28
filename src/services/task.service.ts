@@ -3,9 +3,12 @@ import Task, { ITask, TaskPriority, TaskStatus, SubmissionType } from '@/models/
 import Project from '@/models/Project';
 import Client from '@/models/Client';
 import TeamMember from '@/models/TeamMember';
+import Credential from '@/models/Credential';
+import { TeamMemberService } from './team-member.service';
 import { AuditService } from './audit.service';
 import { TelegramService } from './telegram.service';
 import { CredentialSharingService } from './credential-sharing.service';
+import { decrypt } from '@/lib/security/encryption';
 import { dbConnect } from '@/lib/db/connect';
 
 export interface CreateTaskDTO {
@@ -90,14 +93,19 @@ export class TaskService {
       throw new Error('Project is required');
     }
 
-    const project = await Project.findById(data.projectId);
+    // Parallelize validation lookups to eliminate serial round trips
+    const [project, client, assignedMember] = await Promise.all([
+      Project.findById(data.projectId),
+      data.clientId ? Client.findById(data.clientId) : Promise.resolve(null),
+      data.assignedTo ? TeamMember.findById(data.assignedTo) : Promise.resolve(null),
+    ]);
+
     if (!project) {
       throw new Error('Project not found');
     }
 
     // Validate Client -> Project relationship
     if (data.clientId) {
-      const client = await Client.findById(data.clientId);
       if (!client) {
         throw new Error('Client not found');
       }
@@ -109,9 +117,7 @@ export class TaskService {
       }
     }
 
-    let assignedMember: any = null;
     if (data.assignedTo) {
-      assignedMember = await TeamMember.findById(data.assignedTo);
       if (!assignedMember) {
         throw new Error('Assigned team member not found');
       }
@@ -129,6 +135,14 @@ export class TaskService {
         project.teamMemberIds.push(assignedMember._id as any);
         await project.save();
       }
+    }
+
+    // Server-side strict credential validation:
+    // 1. Must belong to this project
+    // 2. Must not be revoked
+    // 3. Assigned team member must have VIEW_CREDENTIALS and permission for this credential type
+    if (data.requiredCredentialIds && data.requiredCredentialIds.length > 0) {
+      await this.validateTaskCredentials(data.requiredCredentialIds, project._id, assignedMember);
     }
 
     const taskCode = await this.generateNextTaskCode();
@@ -255,9 +269,6 @@ export class TaskService {
     if (data.attachments !== undefined) {
       task.attachments = data.attachments as any;
     }
-    if (data.requiredCredentialIds !== undefined) {
-      task.requiredCredentialIds = data.requiredCredentialIds as any;
-    }
     if (data.agreedAmount !== undefined) {
       task.agreedAmount = Number(data.agreedAmount);
     }
@@ -286,6 +297,12 @@ export class TaskService {
         if (!member) throw new Error('Assigned team member not found');
         if (member.status === 'DEACTIVATED') throw new Error('Cannot assign task to a deactivated team member');
 
+        // Check if existing task credentials are valid for new member
+        const credIdsToCheck = data.requiredCredentialIds !== undefined ? data.requiredCredentialIds : task.requiredCredentialIds;
+        if (credIdsToCheck && credIdsToCheck.length > 0) {
+          await this.validateTaskCredentials(credIdsToCheck, task.projectId, member);
+        }
+
         // Check project team
         const project = await Project.findById(task.projectId);
         if (project && (!project.teamMemberIds || !project.teamMemberIds.some(mId => mId.toString() === member._id.toString()))) {
@@ -306,6 +323,39 @@ export class TaskService {
         }
       } else {
         task.assignedTo = undefined;
+      }
+    }
+
+    if (data.requiredCredentialIds !== undefined) {
+      const targetMember = task.assignedTo ? await TeamMember.findById(task.assignedTo) : null;
+      await this.validateTaskCredentials(data.requiredCredentialIds, task.projectId, targetMember);
+
+      const oldCredIds = (task.requiredCredentialIds || []).map((id: any) => id.toString());
+      const newCredIds = data.requiredCredentialIds.map((id: any) => id.toString());
+
+      const added = newCredIds.filter((id: string) => !oldCredIds.includes(id));
+      const removed = oldCredIds.filter((id: string) => !newCredIds.includes(id));
+
+      task.requiredCredentialIds = data.requiredCredentialIds as any;
+
+      for (const credId of added) {
+        await AuditService.log({
+          actor,
+          action: 'CREDENTIAL_SHARED_WITH_TASK',
+          entityType: 'Task',
+          entityId: task._id,
+          metadata: { taskId: task._id, taskCode: task.taskCode, credentialId: credId, projectId: task.projectId },
+        });
+      }
+
+      for (const credId of removed) {
+        await AuditService.log({
+          actor,
+          action: 'CREDENTIAL_REMOVED_FROM_TASK',
+          entityType: 'Task',
+          entityId: task._id,
+          metadata: { taskId: task._id, taskCode: task.taskCode, credentialId: credId, projectId: task.projectId },
+        });
       }
     }
 
@@ -475,7 +525,7 @@ export class TaskService {
       throw new Error('Invalid task ID format');
     }
 
-    const task = await Task.findById(id)
+    const task: any = await Task.findById(id)
       .populate('projectId', 'name projectCode serviceType status totalAmount')
       .populate('clientId', 'name clientCode company email')
       .populate('assignedTo', 'name email phone role status permissions telegramConnected')
@@ -483,6 +533,30 @@ export class TaskService {
 
     if (!task) {
       throw new Error('Task not found');
+    }
+
+    if (task.requiredCredentialIds && task.requiredCredentialIds.length > 0) {
+      const creds = await Credential.find({
+        _id: { $in: task.requiredCredentialIds },
+      }).select('service credentialType isRevoked projectId').lean();
+
+      task.requiredCredentials = creds.map((c: any) => {
+        let serviceName = 'Credential';
+        try {
+          if (c.service) serviceName = decrypt(c.service);
+        } catch {
+          serviceName = 'Encrypted Service';
+        }
+        return {
+          _id: c._id,
+          service: serviceName,
+          credentialType: c.credentialType,
+          isRevoked: !!c.isRevoked,
+          projectId: c.projectId,
+        };
+      });
+    } else {
+      task.requiredCredentials = [];
     }
 
     return task;
@@ -625,5 +699,90 @@ export class TaskService {
     actorTeamMemberId?: string
   ): Promise<ITask> {
     return this.submitAndCompleteTask(id, data, actor, actorRole, actorTeamMemberId);
+  }
+
+  /**
+   * Validate credentials to ensure:
+   * 1. They exist and are active (not revoked).
+   * 2. They belong to the specified project (Strict Project Isolation).
+   * 3. The assigned team member has VIEW_CREDENTIALS permission and is authorized for the credential type.
+   */
+  static async validateTaskCredentials(
+    credentialIds: Array<string | mongoose.Types.ObjectId>,
+    projectId: string | mongoose.Types.ObjectId,
+    assignedMember?: any
+  ): Promise<any[]> {
+    if (!credentialIds || credentialIds.length === 0) return [];
+
+    const projectStr = projectId.toString();
+    const validatedCredentials: any[] = [];
+
+    for (const credId of credentialIds) {
+      if (!mongoose.Types.ObjectId.isValid(credId.toString())) {
+        throw new Error(`Invalid credential ID format: ${credId}`);
+      }
+
+      const cred = await Credential.findById(credId);
+      if (!cred) {
+        throw new Error(`Credential not found: ${credId}`);
+      }
+
+      if (cred.isRevoked) {
+        throw new Error(`Credential is no longer active or has been revoked: ${credId}`);
+      }
+
+      if (!cred.projectId || cred.projectId.toString() !== projectStr) {
+        throw new Error(`Security Violation: Credential "${credId}" does not belong to this project.`);
+      }
+
+      if (assignedMember) {
+        if (!TeamMemberService.hasPermission(assignedMember, 'VIEW_CREDENTIALS')) {
+          throw new Error(`Security Violation: Assigned team member "${assignedMember.name}" lacks VIEW_CREDENTIALS permission.`);
+        }
+
+        if (!TeamMemberService.isAuthorizedForCredentialType(assignedMember, cred.credentialType)) {
+          throw new Error(
+            `Security Violation: Assigned team member "${assignedMember.name}" is not authorized for "${cred.credentialType || 'CUSTOM'}" credentials.`
+          );
+        }
+      }
+
+      validatedCredentials.push(cred);
+    }
+
+    return validatedCredentials;
+  }
+
+  /**
+   * Safe asynchronous task notification dispatcher
+   */
+  static async dispatchTaskNotifications(task: ITask, data: any, actor: string = 'system'): Promise<void> {
+    try {
+      if (!task.assignedTo) return;
+      const [project, assignedMember] = await Promise.all([
+        Project.findById(task.projectId),
+        TeamMember.findById(task.assignedTo),
+      ]);
+
+      if (assignedMember && (assignedMember.telegramUserId || assignedMember.telegramChatId)) {
+        if (project) {
+          try {
+            await TelegramService.sendTaskAssignedNotification(task, project, assignedMember, actor);
+          } catch (err) {
+            console.error('Failed to send task Telegram notification:', err);
+          }
+        }
+
+        if (data.autoShareCredentials && task.requiredCredentialIds && task.requiredCredentialIds.length > 0) {
+          try {
+            await CredentialSharingService.shareTaskCredentials(task._id.toString(), actor, { oneTime: true });
+          } catch (credErr) {
+            console.warn('Auto credential sharing on task creation skipped or failed:', credErr);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error dispatching task notifications:', err);
+    }
   }
 }

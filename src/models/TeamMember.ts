@@ -50,6 +50,7 @@ export interface ITeamMember extends Document {
   telegramTokenExpiresAt?: Date;
   status: 'ACTIVE' | 'INACTIVE' | 'DEACTIVATED';
   permissions: TeamPermission[];
+  allowedCredentialTypes?: string[];
   isPrimaryAdmin?: boolean;
   bankDetails?: IBankDetails;
   createdAt: Date;
@@ -121,6 +122,10 @@ const TeamMemberSchema = new Schema<ITeamMember>(
       type: [String],
       default: ['VIEW_PROJECT', 'VIEW_TASKS'],
       required: true,
+    },
+    allowedCredentialTypes: {
+      type: [String],
+      default: undefined,
     },
     isPrimaryAdmin: {
       type: Boolean,
