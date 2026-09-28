@@ -1215,18 +1215,41 @@ export class TelegramService {
     chatId: string,
     text: string,
     teamMember: any,
-    timings?: any
+    timings?: any,
+    messageId?: number | string
   ): Promise<void> {
     const raw = text.trim();
+    const isCommand = raw.startsWith('/');
     let cmd = raw.toLowerCase().split(' ')[0];
     if (cmd.includes('@')) cmd = cmd.split('@')[0];
 
     // Normalize reply keyboard button text
+    const isMenuButton = [
+      '📋 My Tasks', 'My Tasks',
+      '💰 My Payments', 'My Payments',
+      '📁 My Projects', 'My Projects',
+      '👤 My Profile', 'My Profile',
+      '❓ Help', 'Help'
+    ].includes(raw);
+
     if (raw === '📋 My Tasks' || raw === 'My Tasks') cmd = '/tasks';
     else if (raw === '💰 My Payments' || raw === 'My Payments') cmd = '/mypayments';
     else if (raw === '📁 My Projects' || raw === 'My Projects') cmd = '/myprojects';
     else if (raw === '👤 My Profile' || raw === 'My Profile') cmd = '/myprofile';
     else if (raw === '❓ Help' || raw === 'Help') cmd = '/help';
+
+    // If it is not a slash command and not a menu keyboard button, route to Admin <-> Team Member Chat!
+    if (!isCommand && !isMenuButton) {
+      const { TeamChatService } = await import('./team-chat.service');
+      await TeamChatService.handleIncomingTeamMemberMessage(teamMember, raw, messageId);
+
+      await this.sendMessageRaw(
+        chatId,
+        `<i>✓ Message received by Admin.</i>`,
+        { reply_markup: this.getTeamMemberReplyKeyboard() }
+      );
+      return;
+    }
 
     // Log team command
     await AuditService.logAction(
@@ -1838,13 +1861,13 @@ export class TelegramService {
       }
 
       const handlerStart = performance.now();
-      await this.handleTeamMemberCommand(chatId, text, teamMember, timings);
+      await this.handleTeamMemberCommand(chatId, text, teamMember, timings, message?.message_id);
       const handlerTime = performance.now() - handlerStart;
       timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
       const total = Math.round(performance.now() - startTotal);
 
       const raw = text.trim();
-      let cmdName = isCommand ? text.split(' ')[0] : 'text';
+      let cmdName = isCommand ? text.split(' ')[0] : 'team_chat_reply';
       if (raw === '📋 My Tasks' || raw === 'My Tasks') cmdName = '/tasks';
       else if (raw === '💰 My Payments' || raw === 'My Payments') cmdName = '/mypayments';
       else if (raw === '📁 My Projects' || raw === 'My Projects') cmdName = '/myprojects';

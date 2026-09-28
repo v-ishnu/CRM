@@ -36,7 +36,9 @@ import {
   ChevronRight,
   User,
   Wallet,
+  MessageSquare,
 } from 'lucide-react';
+import { TeamMemberChatPanel } from '@/components/team/TeamMemberChatPanel';
 
 export default function TeamMemberWorkspacePage() {
   const params = useParams();
@@ -811,6 +813,15 @@ export default function TeamMemberWorkspacePage() {
             </button>
 
             <button
+              onClick={() => setTab('chat')}
+              className="crm-btn-secondary px-3 py-1.5 text-xs flex items-center gap-1.5 cursor-pointer"
+              title="Open Chat with Team Member"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-[#ff3e00]" />
+              <span>Chat</span>
+            </button>
+
+            <button
               onClick={handleGenerateTelegramLink}
               disabled={generatingTelegramLink}
               className="crm-btn-secondary px-3 py-1.5 text-xs flex items-center gap-1.5 cursor-pointer"
@@ -840,6 +851,7 @@ export default function TeamMemberWorkspacePage() {
         {[
           { id: 'overview', label: 'Overview' },
           { id: 'tasks', label: `Tasks (${stats.total})` },
+          { id: 'chat', label: 'Chat' },
           { id: 'payments', label: `Payments (${payments.length})` },
           { id: 'bank', label: 'Bank Details' },
           { id: 'telegram', label: 'Telegram' },
@@ -1224,6 +1236,21 @@ export default function TeamMemberWorkspacePage() {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* TAB CHAT: ADMIN <-> TEAM MEMBER CHAT */}
+      {activeTab === 'chat' && (
+        <div className="space-y-4">
+          <TeamMemberChatPanel
+            teamMemberId={memberId}
+            teamMemberName={member.name}
+            teamMemberRole={member.role}
+            telegramConnected={member.telegramConnected}
+            telegramUsername={member.telegramUsername}
+            onGenerateLink={handleGenerateTelegramLink}
+            onConversationUpdated={fetchMemberWorkspace}
+          />
         </div>
       )}
 

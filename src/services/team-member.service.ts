@@ -5,6 +5,7 @@ import Project from '@/models/Project';
 import Task from '@/models/Task';
 import TeamPayment from '@/models/TeamPayment';
 import AuditLog from '@/models/AuditLog';
+import TeamMemberConversation from '@/models/TeamMemberConversation';
 import { encrypt, decrypt } from '@/lib/security/encryption';
 import { AuditService } from './audit.service';
 import { dbConnect } from '@/lib/db/connect';
@@ -391,12 +392,23 @@ export class TeamMemberService {
         { name: { $regex: filter.search, $options: 'i' } },
         { email: { $regex: filter.search, $options: 'i' } },
         { phone: { $regex: filter.search, $options: 'i' } },
+        { designation: { $regex: filter.search, $options: 'i' } },
       ];
     }
 
     const members = await TeamMember.find(query).sort({ createdAt: -1 }).lean();
 
-    // Enrich with active tasks count and assigned projects count
+    // Batch query conversations to enrich chat metadata efficiently
+    const memberIds = members.map((m) => m._id);
+    const conversations = await TeamMemberConversation.find({
+      teamMemberId: { $in: memberIds },
+    }).lean();
+    const convMap = new Map<string, any>();
+    for (const c of conversations) {
+      convMap.set(c.teamMemberId.toString(), c);
+    }
+
+    // Enrich with active tasks count, assigned projects count, and chat summary
     const enriched = await Promise.all(
       members.map(async (m) => {
         const [projectsCount, activeTasksCount] = await Promise.all([
@@ -404,10 +416,19 @@ export class TeamMemberService {
           Task.countDocuments({ assignedTo: m._id, status: { $nin: ['COMPLETED', 'CANCELLED'] } }),
         ]);
 
+        const conv = convMap.get(m._id.toString());
+
         return {
           ...m,
           projectsCount,
           activeTasksCount,
+          chat: conv ? {
+            conversationId: conv._id.toString(),
+            unreadCount: conv.unreadAdminCount || 0,
+            lastMessageText: conv.lastMessageText || '',
+            lastMessageAt: conv.lastMessageAt || null,
+            status: conv.status || 'OPEN',
+          } : null,
         };
       })
     );

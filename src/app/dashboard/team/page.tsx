@@ -25,7 +25,9 @@ import {
   ChevronDown,
   ChevronUp,
   ExternalLink,
+  MessageSquare,
 } from 'lucide-react';
+import { TeamMemberChatModal } from '@/components/team/TeamMemberChatModal';
 
 export default function TeamMembersPage() {
   const [activeTab, setActiveTab] = useState<'members' | 'invitations'>('members');
@@ -61,6 +63,7 @@ export default function TeamMembersPage() {
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showRevealBankModal, setShowRevealBankModal] = useState(false);
+  const [chatMember, setChatMember] = useState<any | null>(null);
 
   const [selectedMember, setSelectedMember] = useState<any>(null);
   const [generatedLink, setGeneratedLink] = useState('');
@@ -727,6 +730,18 @@ export default function TeamMembersPage() {
                         </span>
                       )}
                     </div>
+
+                    {/* Chat Last Message Preview */}
+                    {member.chat?.lastMessageText && (
+                      <div className="mt-2 text-[11px] font-mono text-[#8a8a93] bg-[#101012] border border-[#242428] px-2 py-1 rounded-none md:rounded-xs flex items-center justify-between gap-2">
+                        <span className="truncate">💬 &ldquo;{member.chat.lastMessageText}&rdquo;</span>
+                        {member.chat.lastMessageAt && (
+                          <span className="shrink-0 text-[10px] text-[#71717a]">
+                            {new Date(member.chat.lastMessageAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Action Buttons */}
@@ -740,6 +755,20 @@ export default function TeamMembersPage() {
                         <span>Workspace</span>
                         <ExternalLink className="w-3 h-3" />
                       </Link>
+
+                      <button
+                        onClick={() => setChatMember(member)}
+                        className="relative text-[#88888e] hover:text-[#ff3e00] inline-flex items-center gap-1 cursor-pointer transition-colors"
+                        title="Open Chat"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 text-[#ff3e00]" />
+                        <span>Chat</span>
+                        {member.chat?.unreadCount > 0 && (
+                          <span className="bg-[#ff3e00] text-white text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-full">
+                            {member.chat.unreadCount}
+                          </span>
+                        )}
+                      </button>
 
                       <button
                         onClick={() => handleOpenEdit(member)}
@@ -1618,6 +1647,17 @@ export default function TeamMembersPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Team Member Chat Modal */}
+      {chatMember && (
+        <TeamMemberChatModal
+          isOpen={!!chatMember}
+          onClose={() => setChatMember(null)}
+          teamMember={chatMember}
+          onGenerateLink={handleGenerateLink}
+          onConversationUpdated={fetchMembers}
+        />
       )}
     </div>
   );

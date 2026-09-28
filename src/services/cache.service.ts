@@ -137,6 +137,35 @@ export class CacheService {
     return `crm:master_data:${type}:${scope}`;
   }
 
+  static teamChatUnreadKey(teamMemberId: string): string {
+    return `crm:team_chat:unread:${teamMemberId}`;
+  }
+
+  static async invalidateTeamChatCache(teamMemberId?: string): Promise<void> {
+    try {
+      const redis = getRedisClient();
+      if (!redis) return;
+
+      const pattern = teamMemberId ? `crm:team_chat:*:${teamMemberId}*` : 'crm:team_chat:*';
+      const stream = redis.scanStream({ match: pattern, count: 100 });
+      const keysToDelete: string[] = [];
+      stream.on('data', (keys: string[]) => {
+        if (keys.length) keysToDelete.push(...keys);
+      });
+      await new Promise<void>((resolve) => {
+        stream.on('end', async () => {
+          if (keysToDelete.length > 0) {
+            await redis.del(...keysToDelete).catch(() => {});
+          }
+          resolve();
+        });
+        stream.on('error', () => resolve());
+      });
+    } catch {
+      // Ignore
+    }
+  }
+
   static async invalidateMasterDataCache(type?: string): Promise<void> {
     try {
       const redis = getRedisClient();
