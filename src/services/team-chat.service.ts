@@ -6,6 +6,7 @@ import User from '@/models/User';
 import { TelegramService } from './telegram.service';
 import { AuditService } from './audit.service';
 import { CacheService } from './cache.service';
+import { PushNotificationService } from './push-notification.service';
 import { dbConnect } from '@/lib/db/connect';
 
 export interface AdminUserContext {
@@ -202,8 +203,8 @@ export class TeamChatService {
     await message.save();
 
     // 2. Dispatch via TelegramService directly to chatId
-    const formattedTelegramMessage = `💬 <b>Dr. Debuggers Admin (${adminUser.name || 'Admin'}):</b>\n\n${trimmedText}`;
-    
+    const formattedTelegramMessage = `⌯⌲<b>Dr. Debuggers (${adminUser.name || 'Admin'}):</b>\n\n${trimmedText}`;
+
     let sendResult: { success: boolean; messageId?: number; error?: string };
     try {
       sendResult = await TelegramService.sendMessageRaw(member.telegramChatId, formattedTelegramMessage);
@@ -314,7 +315,7 @@ export class TeamChatService {
           conversationId: conversation._id.toString(),
           initiatedBy: 'TEAM_MEMBER_REPLY',
         }
-      ).catch(() => {});
+      ).catch(() => { });
     } else {
       conversation.unreadAdminCount = (conversation.unreadAdminCount || 0) + 1;
       conversation.lastMessageAt = new Date();
@@ -341,6 +342,25 @@ export class TeamChatService {
 
     // Parallelize conversation metadata update and message persistence
     await Promise.all([conversation.save(), incomingMessage.save()]);
+
+    // Non-blocking Chrome Web Push notification to the specific conversation's Admin owner
+    const targetAdminId = conversation.adminId ? conversation.adminId.toString() : null;
+    if (targetAdminId) {
+      console.log(`[PUSH] incoming team member message for admin: ${targetAdminId}`);
+      PushNotificationService.sendPushToAdmin(targetAdminId, {
+        title: `💬 ${teamMember.name}`,
+        body: trimmedText.length > 80 ? trimmedText.slice(0, 77) + '...' : trimmedText,
+        icon: '/globe.svg',
+        badge: '/globe.svg',
+        data: {
+          url: `/dashboard/team?chat=${memberId.toString()}`,
+          teamMemberId: memberId.toString(),
+          conversationId: conversation._id.toString(),
+        },
+      }).catch((err: any) => {
+        console.error('[PUSH] Web Push dispatch failed non-blockingly:', err.message);
+      });
+    }
 
     // Parallelize secondary tasks
     await Promise.all([

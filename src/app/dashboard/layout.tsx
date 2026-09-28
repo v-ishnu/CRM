@@ -24,6 +24,7 @@ import {
   Database,
 } from 'lucide-react';
 import { StatusBeacon } from '@/components/ui/StatusBeacon';
+import { NotificationStatusWidget } from '@/components/notifications/NotificationStatusWidget';
 
 interface NavSection {
   title: string;
@@ -253,7 +254,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </span>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <NotificationStatusWidget />
+
             <div className="flex items-center gap-2 px-2.5 py-1 bg-[#141416] border border-[#242428] rounded-xs">
               <span className="w-2 h-2 rounded-full bg-[#00d664] status-beacon" />
               <span className="font-mono text-[10px] uppercase font-bold text-[#00d664] tracking-widest">
