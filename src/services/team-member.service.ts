@@ -630,9 +630,10 @@ export class TeamMemberService {
     // Enrich with active tasks count, assigned projects count, and chat summary
     const enriched = await Promise.all(
       members.map(async (m) => {
-        const [projectsCount, activeTasksCount] = await Promise.all([
+        const [projectsCount, activeTasksCount, completedProjectsCount] = await Promise.all([
           Project.countDocuments({ teamMemberIds: m._id }),
           Task.countDocuments({ assignedTo: m._id, status: { $nin: ['COMPLETED', 'CANCELLED'] } }),
+          Project.countDocuments({ teamMemberIds: m._id, status: 'COMPLETED' }),
         ]);
 
         const conv = convMap.get(m._id.toString());
@@ -641,6 +642,7 @@ export class TeamMemberService {
           ...m,
           projectsCount,
           activeTasksCount,
+          completedProjectsCount: completedProjectsCount || 0,
           chat: conv ? {
             conversationId: conv._id.toString(),
             unreadCount: conv.unreadAdminCount || 0,

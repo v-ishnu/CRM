@@ -51,6 +51,7 @@ function TeamChatQueryRedirect() {
 }
 
 export default function TeamMembersPage() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<'members' | 'invitations'>('members');
 
   const { items: masterDesignations, refresh: refreshDesignations } = useMasterData('TEAM_DESIGNATION');
@@ -754,216 +755,128 @@ export default function TeamMembersPage() {
               {members.map((member) => (
                 <div
                   key={member._id}
-                  className={`bg-[#141416] border p-5 flex flex-col justify-between transition-colors rounded-none md:rounded-xs ${
-                    member.status === 'DEACTIVATED' ? 'border-[#1c1110] opacity-60' : 'border-[#242428] hover:border-[#ff3e00]/50'
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`View profile for ${member.name}`}
+                  onClick={() => router.push(`/dashboard/team/${member._id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      router.push(`/dashboard/team/${member._id}`);
+                    }
+                  }}
+                  className={`group relative bg-[#141416] border p-5 flex flex-col justify-between transition-all duration-200 rounded-none md:rounded-xs cursor-pointer select-none focus:outline-hidden focus:ring-1 focus:ring-[#ff3e00] ${
+                    member.status === 'DEACTIVATED'
+                      ? 'border-[#1c1110] opacity-60 hover:opacity-100 hover:border-[#ff3e00]/40'
+                      : 'border-[#242428] hover:border-[#ff3e00]/60 hover:bg-[#18181b]'
                   }`}
                 >
                   <div>
                     {/* Header info */}
-                    <div className="flex items-start justify-between gap-3 mb-3">
-                      <div>
-                        <h3 className="font-semibold text-white text-sm leading-tight flex items-center gap-2">
-                          {member.name}
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-semibold text-white text-sm leading-tight flex items-center gap-2 truncate group-hover:text-[#ff3e00] transition-colors">
+                          <span className="truncate">{member.name}</span>
                           {member.isPrimaryAdmin && (
-                            <span className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 bg-[#ff3e00]/10 text-[#ff3e00] border border-[#ff3e00]/30">
+                            <span className="shrink-0 text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 bg-[#ff3e00]/10 text-[#ff3e00] border border-[#ff3e00]/30">
                               PRIMARY ADMIN
                             </span>
                           )}
                         </h3>
                         <p className="text-xs font-mono text-[#8a8a93] mt-1 truncate">{member.email}</p>
                       </div>
-                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 border bg-[#0a0a0a] border-[#242428] text-white">
+                      <span className="shrink-0 text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 border bg-[#0a0a0a] border-[#242428] text-white">
                         {member.designation || member.role}
                       </span>
                     </div>
 
-                    {/* Status and Details */}
+                    {/* Operational Status (Telegram & Account Status) */}
                     <div className="space-y-2 py-3 border-y border-[#242428] my-3">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-[#8a8a93] font-mono text-[11px]">TELEGRAM BOT:</span>
+                        <span className="text-[#8a8a93] font-mono text-[11px]">TELEGRAM:</span>
                         {member.telegramConnected ? (
-                          <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center gap-1.5 text-[#00d664] font-mono text-[11px] font-medium">
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>CONNECTED</span>
-                            </span>
-                            <button
-                              onClick={() => handleGenerateLink(member)}
-                              disabled={generatingLinkId === member._id}
-                              className="text-[10px] text-[#8a8a93] hover:text-[#ff3e00] font-mono underline ml-1 cursor-pointer disabled:opacity-50"
-                              title="Generate new connection link"
-                            >
-                              {generatingLinkId === member._id ? 'GENERATING...' : 'NEW LINK'}
-                            </button>
-                          </div>
+                          <span className="inline-flex items-center gap-1.5 text-[#00d664] font-mono text-[11px] font-medium">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#00d664]" />
+                            <span>CONNECTED</span>
+                          </span>
                         ) : (
-                          <button
-                            onClick={() => handleGenerateLink(member)}
-                            disabled={generatingLinkId === member._id}
-                            className="inline-flex items-center gap-1 text-[#ff3e00] hover:underline font-mono text-[11px] cursor-pointer disabled:opacity-50"
-                          >
-                            <Send className="w-3 h-3" />
-                            <span>{generatingLinkId === member._id ? 'GENERATING...' : 'GENERATE LINK'}</span>
-                          </button>
+                          <span className="inline-flex items-center gap-1.5 text-[#71717a] font-mono text-[11px]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#52525b]" />
+                            <span>NOT CONNECTED</span>
+                          </span>
                         )}
                       </div>
 
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-[#8a8a93] font-mono text-[11px]">STATUS:</span>
                         <span
-                          className={`font-mono text-[11px] font-bold ${
-                            member.status === 'ACTIVE' ? 'text-[#00d664]' : 'text-[#ff3e00]'
+                          className={`font-mono text-[11px] font-bold inline-flex items-center gap-1.5 ${
+                            member.status === 'ACTIVE'
+                              ? 'text-[#00d664]'
+                              : member.status === 'DEACTIVATED'
+                              ? 'text-[#ff3e00]'
+                              : 'text-[#f59e0b]'
                           }`}
                         >
-                          {member.status}
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              member.status === 'ACTIVE'
+                                ? 'bg-[#00d664]'
+                                : member.status === 'DEACTIVATED'
+                                ? 'bg-[#ff3e00]'
+                                : 'bg-[#f59e0b]'
+                            }`}
+                          />
+                          <span>{member.status === 'DEACTIVATED' ? 'DEACTIVATED' : (member.status || 'INACTIVE')}</span>
                         </span>
-                      </div>
-
-                      {/* Bank Details Status Row */}
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-[#8a8a93] font-mono text-[11px] flex items-center gap-1">
-                          <CreditCard className="w-3.5 h-3.5 text-[#6b6b76]" />
-                          BANK DETAILS:
-                        </span>
-                        {member.bankDetails?.isComplete ? (
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] font-mono text-[#00d664] bg-[#0e1f15] border border-[#00d664]/30 px-2 py-0.5">
-                              {member.bankDetails.accountNumberMasked || '•••• CONFIGURED'}
-                            </span>
-                            <button
-                              onClick={() => handleOpenRevealBank(member)}
-                              title="Reveal Decrypted Bank Details"
-                              className="text-[#8a8a93] hover:text-white p-1 hover:bg-[#242428] cursor-pointer"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleOpenBankModal(member)}
-                              title="Update Bank Details"
-                              className="text-[#8a8a93] hover:text-[#00d664] p-1 hover:bg-[#242428] cursor-pointer"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] font-mono text-[#f59e0b] bg-[#1c1408] border border-[#f59e0b]/30 px-2 py-0.5">
-                              {member.bankDetails ? 'INCOMPLETE' : 'NOT CONFIGURED'}
-                            </span>
-                            <button
-                              onClick={() => handleOpenBankModal(member)}
-                              className="text-[10px] font-mono text-[#00D664] hover:underline cursor-pointer"
-                            >
-                              + Configure
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-[#8a8a93] font-mono text-[11px]">ASSIGNED PROJECTS:</span>
-                        <span className="text-white font-mono font-medium">{member.projectsCount || 0}</span>
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-[#8a8a93] font-mono text-[11px]">ACTIVE TASKS:</span>
-                        <span className="text-white font-mono font-medium">{member.activeTasksCount || 0}</span>
                       </div>
                     </div>
 
-                    {/* Permissions summary */}
-                    <div className="flex flex-wrap gap-1 mb-4">
-                      {member.permissions && member.permissions.includes('VIEW_CREDENTIALS') && (
-                        <span className="text-[10px] font-mono uppercase tracking-wider bg-[#18181b] text-[#f59e0b] border border-[#f59e0b]/30 px-2 py-0.5 rounded-none md:rounded-xs flex items-center gap-1">
-                          <Shield className="w-2.5 h-2.5" /> Credentials
-                        </span>
-                      )}
-                      {member.permissions && member.permissions.includes('MANAGE_TASKS') && (
-                        <span className="text-[10px] font-mono uppercase tracking-wider bg-[#18181b] text-white border border-[#242428] px-2 py-0.5 rounded-none md:rounded-xs flex items-center gap-1">
-                          <CheckSquare className="w-2.5 h-2.5 text-[#ff3e00]" /> Tasks
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Chat Last Message Preview */}
-                    {member.chat?.lastMessageText && (
-                      <div className="mt-2 text-[11px] font-mono text-[#8a8a93] bg-[#101012] border border-[#242428] px-2 py-1 rounded-none md:rounded-xs flex items-center justify-between gap-2">
-                        <span className="truncate">💬 &ldquo;{member.chat.lastMessageText}&rdquo;</span>
-                        {member.chat.lastMessageAt && (
-                          <span className="shrink-0 text-[10px] text-[#71717a]">
-                            {new Date(member.chat.lastMessageAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                          </span>
-                        )}
+                    {/* Project Statistics */}
+                    <div className="grid grid-cols-2 gap-2 my-2">
+                      <div className="bg-[#0e0e10] border border-[#242428] p-2.5 text-center">
+                        <div className="text-[10px] font-mono uppercase tracking-wider text-[#8a8a93]">
+                          Assigned Projects
+                        </div>
+                        <div className="text-lg font-mono font-bold text-white mt-0.5">
+                          {member.projectsCount || 0}
+                        </div>
                       </div>
-                    )}
+                      <div className="bg-[#0e0e10] border border-[#242428] p-2.5 text-center">
+                        <div className="text-[10px] font-mono uppercase tracking-wider text-[#8a8a93]">
+                          Completed Projects
+                        </div>
+                        <div className="text-lg font-mono font-bold text-[#00d664] mt-0.5">
+                          {member.completedProjectsCount || 0}
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Action Buttons */}
-                  <div className="flex items-center justify-between pt-2 border-t border-[#242428] text-xs font-mono">
-                    <div className="flex items-center gap-3">
-                      <Link
-                        href={`/dashboard/team/${member._id}`}
-                        className="text-[#ff3e00] hover:text-white inline-flex items-center gap-1 cursor-pointer transition-colors font-semibold"
-                        title="Open Team Member Workspace"
-                      >
-                        <span>Workspace</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </Link>
-
-                      <button
-                        onClick={() => setChatMember(member)}
-                        className="relative text-[#88888e] hover:text-[#ff3e00] inline-flex items-center gap-1 cursor-pointer transition-colors"
-                        title="Open Chat"
-                      >
-                        <MessageSquare className="w-3.5 h-3.5 text-[#ff3e00]" />
-                        <span>Chat</span>
-                        {member.chat?.unreadCount > 0 && (
-                          <span className="bg-[#ff3e00] text-white text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-full">
-                            {member.chat.unreadCount}
-                          </span>
-                        )}
-                      </button>
-
-                      <button
-                        onClick={() => handleOpenEdit(member)}
-                        className="text-[#88888e] hover:text-white inline-flex items-center gap-1 cursor-pointer transition-colors"
-                        title="Edit Profile"
-                      >
-                        <Edit2 className="w-3.5 h-3.5 text-[#a1a1aa]" />
-                        <span>Edit</span>
-                      </button>
-
-                      <button
-                        onClick={() => handleOpenBankModal(member)}
-                        className="text-[#88888e] hover:text-[#00D664] inline-flex items-center gap-1 cursor-pointer transition-colors"
-                        title="Manage Bank Details"
-                      >
-                        <CreditCard className="w-3.5 h-3.5 text-[#00D664]" />
-                        <span>Bank</span>
-                      </button>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      {!member.isPrimaryAdmin && (
-                        <button
-                          onClick={() => handleToggleDeactivate(member)}
-                          className={`inline-flex items-center gap-1 font-mono cursor-pointer transition-colors ${
-                            member.status === 'ACTIVE' ? 'text-[#f59e0b] hover:text-[#f59e0b]/80' : 'text-[#00D664] hover:text-[#00D664]/80'
-                          }`}
-                        >
-                          <span>{member.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}</span>
-                        </button>
+                  {/* Footer / Chat Action */}
+                  <div className="pt-3 mt-3 border-t border-[#242428] flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setChatMember(member);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#18181b] hover:bg-[#ff3e00]/10 border border-[#242428] hover:border-[#ff3e00]/40 text-xs font-mono text-white hover:text-[#ff3e00] transition-colors cursor-pointer"
+                      title={`Chat with ${member.name}`}
+                    >
+                      <MessageSquare className="w-3.5 h-3.5 text-[#ff3e00]" />
+                      <span>Chat</span>
+                      {member.chat?.unreadCount > 0 && (
+                        <span className="ml-1 bg-[#ff3e00] text-white text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-full">
+                          {member.chat.unreadCount}
+                        </span>
                       )}
+                    </button>
 
-                      {!member.isPrimaryAdmin && (
-                        <button
-                          onClick={() => handleDeleteMember(member)}
-                          className="text-[#88888e] hover:text-[#EF4444] inline-flex items-center gap-1 cursor-pointer transition-colors"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
+                    <span className="text-[10px] font-mono text-[#8a8a93] group-hover:text-white flex items-center gap-1 transition-colors">
+                      <span>View Profile</span>
+                      <ExternalLink className="w-3 h-3 group-hover:translate-x-0.5 transition-transform text-[#8a8a93] group-hover:text-white" />
+                    </span>
                   </div>
                 </div>
               ))}
