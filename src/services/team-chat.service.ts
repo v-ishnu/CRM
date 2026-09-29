@@ -203,7 +203,22 @@ export class TeamChatService {
     await message.save();
 
     // 2. Dispatch via TelegramService directly to chatId
-    const formattedTelegramMessage = `⌯⌲<b>Dr. Debuggers (${adminUser.name || 'Admin'}):</b>\n\n${trimmedText}`;
+    let formattedTelegramMessage = `⌯⌲<b>Dr. Debuggers (${adminUser.name || 'Admin'}):</b>\n\n${trimmedText}`;
+    try {
+      const { MessageTemplateService } = await import('./message-template.service');
+      const rendered = await MessageTemplateService.renderTemplate(
+        'TEAM_MEMBER_CHAT_MESSAGE',
+        'TELEGRAM',
+        {
+          adminName: adminUser.name || 'Admin',
+          messageText: trimmedText,
+          teamMemberName: member.name,
+        }
+      );
+      formattedTelegramMessage = rendered.body;
+    } catch {
+      // Safe fallback to default string
+    }
 
     let sendResult: { success: boolean; messageId?: number; error?: string };
     try {
@@ -359,9 +374,34 @@ export class TeamChatService {
     const targetAdminId = conversation.adminId ? conversation.adminId.toString() : null;
     if (targetAdminId) {
       console.log(`[PUSH] incoming team member message for admin: ${targetAdminId}`);
+      let pushTitle = `💬 ${teamMember.name}`;
+      let pushBody = trimmedText.length > 80 ? trimmedText.slice(0, 77) + '...' : trimmedText;
+
+      try {
+        const { MessageTemplateService } = await import('./message-template.service');
+        const defaultDef = MessageTemplateService.getDefaultTemplateByKey('ADMIN_TEAM_MESSAGE_PUSH');
+        if (defaultDef) {
+          const interpolatedBody = MessageTemplateService.interpolate(
+            defaultDef.body,
+            { teamMemberName: teamMember.name, messageText: trimmedText },
+            'WEB_PUSH'
+          );
+          if (interpolatedBody) pushBody = interpolatedBody;
+          if (defaultDef.subject) {
+            pushTitle = MessageTemplateService.interpolate(
+              defaultDef.subject,
+              { teamMemberName: teamMember.name, messageText: trimmedText },
+              'WEB_PUSH'
+            );
+          }
+        }
+      } catch {
+        // Safe fallback
+      }
+
       PushNotificationService.sendPushToAdmin(targetAdminId, {
-        title: `💬 ${teamMember.name}`,
-        body: trimmedText.length > 80 ? trimmedText.slice(0, 77) + '...' : trimmedText,
+        title: pushTitle,
+        body: pushBody,
         icon: '/globe.svg',
         badge: '/globe.svg',
         data: {

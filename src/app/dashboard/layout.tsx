@@ -22,6 +22,7 @@ import {
   Terminal,
   Shield,
   Database,
+  Mail,
 } from 'lucide-react';
 import { StatusBeacon } from '@/components/ui/StatusBeacon';
 import { NotificationStatusWidget } from '@/components/notifications/NotificationStatusWidget';
@@ -71,6 +72,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       title: 'SYSTEM',
       items: [
         { name: 'Master Data', href: '/dashboard/settings/master-data', icon: Database },
+        { name: 'Message Templates', href: '/dashboard/settings/templates', icon: Mail },
         { name: 'Telegram Bot', href: '/dashboard/settings/telegram', icon: Send },
         { name: 'Audit Logs', href: '/dashboard/audit-logs', icon: History },
       ],

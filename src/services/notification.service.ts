@@ -50,7 +50,7 @@ export class NotificationService {
       }
     }
 
-    const messageText = 
+    let messageText = 
       `<b>🎉 Welcome!</b>\n\n` +
       `Hello ${client.name},\n\n` +
       `Thank you for choosing us for your <b>${project.name}</b> project.\n\n` +
@@ -62,6 +62,26 @@ export class NotificationService {
       `<b>Onboarding Date:</b>\n${new Date(client.onboardingDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}\n\n` +
       `Your project has been successfully onboarded.\n\n` +
       `Thank you.`;
+
+    try {
+      const { MessageTemplateService } = await import('./message-template.service');
+      const rendered = await MessageTemplateService.renderTemplate(
+        'CLIENT_ONBOARDED',
+        'TELEGRAM',
+        {
+          clientName: client.name,
+          projectName: project.name,
+          totalAmount: `${project.currency} ${project.totalAmount.toLocaleString('en-IN')}`,
+          paymentInfo: paymentInfoText,
+          balanceInfo: balanceText,
+          invoiceNumber: invoiceNoText,
+          onboardingDate: new Date(client.onboardingDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' }),
+        }
+      );
+      messageText = rendered.body;
+    } catch {
+      // Safe fallback
+    }
 
     const notification = new Notification({
       clientId: client._id,
@@ -126,7 +146,7 @@ export class NotificationService {
 
     const currencySymbol = project.currency === 'INR' ? '₹' : (project.currency === 'USD' ? '$' : project.currency);
 
-    const messageText = 
+    let messageText = 
       `💰 <b>Payment Received</b>\n\n` +
       `Hello ${client.name},\n\n` +
       `We received your payment of:\n\n` +
@@ -138,6 +158,27 @@ export class NotificationService {
       `<b>Payment Status:</b>\n${paymentStatus}\n\n` +
       `<b>Receipt:</b>\n${payment.paymentNumber}\n\n` +
       `Thank you.`;
+
+    try {
+      const { MessageTemplateService } = await import('./message-template.service');
+      const rendered = await MessageTemplateService.renderTemplate(
+        'CLIENT_PAYMENT_RECEIVED',
+        'TELEGRAM',
+        {
+          clientName: client.name,
+          amount: `${currencySymbol}${payment.amount.toLocaleString('en-IN')}`,
+          projectName: project.name,
+          projectTotal: `${currencySymbol}${balances.totalAmount.toLocaleString('en-IN')}`,
+          paidAmount: `${currencySymbol}${balances.paidAmount.toLocaleString('en-IN')}`,
+          outstandingAmount: `${currencySymbol}${balances.outstandingAmount.toLocaleString('en-IN')}`,
+          paymentStatus: paymentStatus,
+          paymentNumber: payment.paymentNumber,
+        }
+      );
+      messageText = rendered.body;
+    } catch {
+      // Safe fallback
+    }
 
     const notification = new Notification({
       clientId: client._id,
@@ -170,12 +211,28 @@ export class NotificationService {
     const project = await Project.findById(projectId);
     if (!project) throw new Error('Project not found');
 
-    const messageText = 
+    let messageText = 
       `<b>📢 Project Update</b>\n\n` +
       `Your <b>${project.name}</b> project has moved to:\n\n` +
       `<b>${newStatus}</b>\n\n` +
       `We are currently reviewing the completed implementation.\n\n` +
       `You will be notified about the next stage.`;
+
+    try {
+      const { MessageTemplateService } = await import('./message-template.service');
+      const rendered = await MessageTemplateService.renderTemplate(
+        'CLIENT_PROJECT_STATUS_UPDATE',
+        'TELEGRAM',
+        {
+          projectName: project.name,
+          status: newStatus,
+          reviewMessage: 'We are currently reviewing the completed implementation.\n\nYou will be notified about the next stage.',
+        }
+      );
+      messageText = rendered.body;
+    } catch {
+      // Safe fallback
+    }
 
     const notification = new Notification({
       clientId: client._id,

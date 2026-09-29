@@ -649,7 +649,7 @@ export class TelegramService {
     };
 
     const [teamMember, client] = await Promise.all([
-      safeExec(tmQuery, '_id name email role designation status telegramConnected telegramUserId telegramChatId'),
+      safeExec(tmQuery, '_id name email role designation status telegramConnected telegramUserId telegramChatId permissions allowedCredentialTypes isPrimaryAdmin'),
       safeExec(clQuery, '_id name email company status telegramConnected telegramUserId telegramChatId'),
     ]);
 
@@ -710,7 +710,7 @@ export class TelegramService {
       ? new Date(task.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
       : 'No due date';
 
-    const text = `🆕 <b>New Task Assigned</b>\n\n` +
+    let text = `🆕 <b>New Task Assigned</b>\n\n` +
       `<b>Project:</b>\n${project.name || 'Project'}\n\n` +
       `<b>Project Code:</b>\n<code>${project.projectCode || 'N/A'}</code>\n\n` +
       `<b>Task:</b>\n${task.title}\n\n` +
@@ -720,6 +720,29 @@ export class TelegramService {
       `<b>Due:</b>\n${dueDateStr}\n\n` +
       `<b>Description:</b>\n${task.description || 'No detailed description.'}\n\n` +
       `<b>Assigned by:</b>\n${assignedBy}`;
+
+    try {
+      const { MessageTemplateService } = await import('./message-template.service');
+      const rendered = await MessageTemplateService.renderTemplate(
+        'TEAM_MEMBER_TASK_ASSIGNED',
+        'TELEGRAM',
+        {
+          teamMemberName: teamMember.name,
+          projectName: project.name || 'Project',
+          projectCode: project.projectCode || 'N/A',
+          taskTitle: task.title,
+          taskCode: task.taskCode,
+          priority: task.priority,
+          status: task.status,
+          dueDate: dueDateStr,
+          description: task.description || 'No detailed description.',
+          assignedBy: assignedBy,
+        }
+      );
+      text = rendered.body;
+    } catch {
+      // Safe fallback to default string
+    }
 
     const inlineKeyboard = {
       inline_keyboard: [
@@ -745,10 +768,28 @@ export class TelegramService {
     const adminChatId = process.env.ADMIN_TELEGRAM_ID;
     if (!adminChatId) return false;
 
-    const text = `🔔 <b>Task Status Updated</b>\n\n` +
+    let text = `🔔 <b>Task Status Updated</b>\n\n` +
       `<b>Task:</b> ${task.title} (<code>${task.taskCode}</code>)\n` +
       `<b>Status:</b> <code>${oldStatus}</code> ➔ <b>${newStatus}</b>\n` +
       `<b>Updated by:</b> ${changedBy}`;
+
+    try {
+      const { MessageTemplateService } = await import('./message-template.service');
+      const rendered = await MessageTemplateService.renderTemplate(
+        'ADMIN_TASK_STATUS_UPDATED',
+        'TELEGRAM',
+        {
+          taskTitle: task.title,
+          taskCode: task.taskCode,
+          oldStatus,
+          newStatus,
+          updatedBy: changedBy,
+        }
+      );
+      text = rendered.body;
+    } catch {
+      // Safe fallback
+    }
 
     const res = await this.sendMessageRaw(String(adminChatId), text);
     return res.success;
@@ -787,7 +828,7 @@ export class TelegramService {
       notesSummary = `\n<b>Notes:</b> ${submission.submissionNotes}\n`;
     }
 
-    const text = `📋 <b>Task Completed with Submission</b>\n\n` +
+    let text = `📋 <b>Task Completed with Submission</b>\n\n` +
       `<b>Task:</b> ${task.title} (<code>${task.taskCode}</code>)\n` +
       (projectName ? `<b>Project:</b> ${projectName}\n` : '') +
       `<b>Submitted by:</b> ${submitterName}\n` +
@@ -795,6 +836,24 @@ export class TelegramService {
       urlsSummary +
       filesSummary +
       `\n\n<a href="${taskLink}">View Task in Dashboard</a>`;
+
+    try {
+      const { MessageTemplateService } = await import('./message-template.service');
+      const rendered = await MessageTemplateService.renderTemplate(
+        'ADMIN_TASK_SUBMISSION_RECEIVED',
+        'TELEGRAM',
+        {
+          taskTitle: task.title,
+          taskCode: task.taskCode,
+          submitterName,
+          projectName: projectName || 'Project',
+          notes: submission.submissionNotes || submission.notes || 'None',
+        }
+      );
+      text = rendered.body;
+    } catch {
+      // Safe fallback
+    }
 
     const res = await this.sendMessageRaw(String(adminChatId), text);
     return res.success;
@@ -817,23 +876,57 @@ export class TelegramService {
       : new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
     let text = '';
-    if (eventType === 'CANCELLED') {
-      text = `⚠️ <b>Payment Cancelled</b>\n\n` +
-        `Hello <b>${teamMember.name}</b>,\n` +
-        `Payment <code>${payment.paymentNumber}</code> for <b>₹${payment.amount.toLocaleString('en-IN')}</b> ` +
-        `(Project: <b>${project.name}</b>) has been marked as <b>CANCELLED</b>.`;
-    } else {
-      text = `💰 <b>Payment Received</b>\n\n` +
-        `Hello <b>${teamMember.name}</b>,\n` +
-        `A payment has been recorded for your work.\n\n` +
-        `<b>Project:</b> ${project.name} (<code>${project.projectCode}</code>)\n` +
-        (task ? `<b>Task:</b> ${task.title} (<code>${task.taskCode}</code>)\n` : '') +
-        `<b>Amount:</b> <b>₹${payment.amount.toLocaleString('en-IN')}</b>\n` +
-        `<b>Payment Method:</b> ${payment.paymentMethod}\n` +
-        `<b>Payment Date:</b> ${dateStr}\n` +
-        (payment.reference ? `<b>Reference:</b> <code>${payment.reference}</code>\n` : '') +
-        `<b>Status:</b> <b>PAID</b>\n\n` +
-        `Thank you for your contributions!`;
+    try {
+      const { MessageTemplateService } = await import('./message-template.service');
+      if (eventType === 'CANCELLED') {
+        const rendered = await MessageTemplateService.renderTemplate(
+          'TEAM_MEMBER_PAYMENT_CANCELLED',
+          'TELEGRAM',
+          {
+            teamMemberName: teamMember.name,
+            projectName: project.name,
+            paymentNumber: payment.paymentNumber,
+            amount: `₹${payment.amount.toLocaleString('en-IN')}`,
+          }
+        );
+        text = rendered.body;
+      } else {
+        const rendered = await MessageTemplateService.renderTemplate(
+          'TEAM_MEMBER_PAYMENT_RECEIVED',
+          'TELEGRAM',
+          {
+            teamMemberName: teamMember.name,
+            projectName: project.name,
+            projectCode: project.projectCode,
+            amount: `₹${payment.amount.toLocaleString('en-IN')}`,
+            paymentMethod: payment.paymentMethod,
+            paymentDate: dateStr,
+            reference: payment.reference || '',
+            taskTitle: task ? task.title : '',
+            taskCode: task ? task.taskCode : '',
+          }
+        );
+        text = rendered.body;
+      }
+    } catch {
+      if (eventType === 'CANCELLED') {
+        text = `⚠️ <b>Payment Cancelled</b>\n\n` +
+          `Hello <b>${teamMember.name}</b>,\n` +
+          `Payment <code>${payment.paymentNumber}</code> for <b>₹${payment.amount.toLocaleString('en-IN')}</b> ` +
+          `(Project: <b>${project.name}</b>) has been marked as <b>CANCELLED</b>.`;
+      } else {
+        text = `💰 <b>Payment Received</b>\n\n` +
+          `Hello <b>${teamMember.name}</b>,\n` +
+          `A payment has been recorded for your work.\n\n` +
+          `<b>Project:</b> ${project.name} (<code>${project.projectCode}</code>)\n` +
+          (task ? `<b>Task:</b> ${task.title} (<code>${task.taskCode}</code>)\n` : '') +
+          `<b>Amount:</b> <b>₹${payment.amount.toLocaleString('en-IN')}</b>\n` +
+          `<b>Payment Method:</b> ${payment.paymentMethod}\n` +
+          `<b>Payment Date:</b> ${dateStr}\n` +
+          (payment.reference ? `<b>Reference:</b> <code>${payment.reference}</code>\n` : '') +
+          `<b>Status:</b> <b>PAID</b>\n\n` +
+          `Thank you for your contributions!`;
+      }
     }
 
     const res = await this.sendMessageRaw(teamMember.telegramChatId, text);
@@ -1282,7 +1375,16 @@ export class TelegramService {
       case 'credentials': {
         await this.answerCallbackQuery(cbId, 'Checking credential access...');
 
-        if (!identity.teamMember?.permissions?.includes('VIEW_CREDENTIALS') && identity.type !== 'ADMIN') {
+        const { TeamMemberService } = await import('./team-member.service');
+        const freshMember = identity.teamMember?._id
+          ? await TeamMember.findById(identity.teamMember._id)
+          : null;
+
+        const isAuthorizedMember = freshMember && freshMember.status === 'ACTIVE' && (
+          TeamMemberService.hasPermission(freshMember, 'VIEW_CREDENTIALS') || identity.type === 'ADMIN'
+        );
+
+        if (!isAuthorizedMember && identity.type !== 'ADMIN') {
           await this.sendMessageRaw(chatId, '❌ <b>You are not authorized to access these credentials.</b>');
           await AuditService.logAction(
             memberEmail,
@@ -1306,7 +1408,7 @@ export class TelegramService {
 
         try {
           const { CredentialSharingService } = await import('./credential-sharing.service');
-          await CredentialSharingService.shareTaskCredentials(task._id.toString(), memberEmail);
+          await CredentialSharingService.shareTaskCredentials(task._id.toString(), memberEmail, { chatId });
 
           await AuditService.logAction(
             memberEmail,
@@ -1319,7 +1421,10 @@ export class TelegramService {
           return { action, success: true };
         } catch (err: any) {
           console.error('Task credential retrieval failed:', err);
-          await this.sendMessageRaw(chatId, '❌ <b>Credentials could not be retrieved securely.</b>');
+          const errorMsg = err?.message?.includes('authorized') || err?.message?.includes('revoked')
+            ? `❌ <b>${err.message}</b>`
+            : '❌ <b>Credentials could not be retrieved securely.</b>';
+          await this.sendMessageRaw(chatId, errorMsg);
           return { action, success: false };
         }
       }

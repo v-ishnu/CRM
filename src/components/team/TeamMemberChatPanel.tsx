@@ -14,7 +14,16 @@ import {
   Unlock,
   ExternalLink,
   X,
+  Bold,
+  Italic,
+  Strikethrough,
+  Code,
+  Link2,
+  Quote,
+  List,
+  ListOrdered,
 } from 'lucide-react';
+import { sanitizeChatHtml, convertMarkdownToTelegramHtml } from '@/lib/templates/rich-text';
 
 export interface TeamMemberChatPanelProps {
   teamMemberId: string;
@@ -82,6 +91,51 @@ export function TeamMemberChatPanel({
   const isNearBottomRef = useRef(true);
   const lastMessageAtRef = useRef<string | null>(null);
   const pollingRef = useRef(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const applyFormatting = (startTag: string, endTag: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selected = replyText.substring(start, end);
+    const replacement = `${startTag}${selected || 'text'}${endTag}`;
+    const newText = replyText.substring(0, start) + replacement + replyText.substring(end);
+    setReplyText(newText);
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(
+        start + startTag.length,
+        start + startTag.length + (selected ? selected.length : 4)
+      );
+    }, 0);
+  };
+
+  const insertBulletList = () => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const prefix = start > 0 && replyText[start - 1] !== '\n' ? '\n• ' : '• ';
+    const newText = replyText.substring(0, start) + prefix + replyText.substring(start);
+    setReplyText(newText);
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + prefix.length, start + prefix.length);
+    }, 0);
+  };
+
+  const insertNumberedList = () => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const prefix = start > 0 && replyText[start - 1] !== '\n' ? '\n1. ' : '1. ';
+    const newText = replyText.substring(0, start) + prefix + replyText.substring(start);
+    setReplyText(newText);
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + prefix.length, start + prefix.length);
+    }, 0);
+  };
 
   // Monitor scroll position
   const handleScroll = () => {
@@ -541,7 +595,12 @@ export function TeamMemberChatPanel({
                         : 'bg-[#18181b] text-white border-[#242428]'
                     }`}
                   >
-                    <div className="whitespace-pre-wrap break-words">{msg.text}</div>
+                    <div
+                      className="text-xs sm:text-sm whitespace-pre-wrap break-words leading-relaxed [&>pre]:bg-black/50 [&>pre]:p-2 [&>pre]:my-1.5 [&>pre]:font-mono [&>code]:bg-black/40 [&>code]:px-1 [&>code]:font-mono [&>a]:text-[#ff3e00] [&>a]:underline"
+                      dangerouslySetInnerHTML={{
+                        __html: sanitizeChatHtml(convertMarkdownToTelegramHtml(msg.text)),
+                      }}
+                    />
                   </div>
 
                   {/* Metadata and Delivery Status */}
@@ -632,9 +691,77 @@ export function TeamMemberChatPanel({
 
       {/* Input Box Footer */}
       <div className="p-3 bg-[#0e0e11] border-t border-[#242428] shrink-0">
+        {/* Rich Text Composer Toolbar */}
+        <div className="flex items-center gap-1 mb-2 pb-1.5 border-b border-[#242428]/60 overflow-x-auto scrollbar-hide">
+          <button
+            type="button"
+            onClick={() => applyFormatting('**', '**')}
+            disabled={!telegramConnected || isClosed || sending}
+            title="Bold (**text**)"
+            className="p-1 hover:bg-[#242428] text-[#a1a1aa] hover:text-white rounded-none md:rounded-xs transition-colors cursor-pointer disabled:opacity-30"
+          >
+            <Bold className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => applyFormatting('*', '*')}
+            disabled={!telegramConnected || isClosed || sending}
+            title="Italic (*text*)"
+            className="p-1 hover:bg-[#242428] text-[#a1a1aa] hover:text-white rounded-none md:rounded-xs transition-colors cursor-pointer disabled:opacity-30"
+          >
+            <Italic className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => applyFormatting('~', '~')}
+            disabled={!telegramConnected || isClosed || sending}
+            title="Strikethrough (~text~)"
+            className="p-1 hover:bg-[#242428] text-[#a1a1aa] hover:text-white rounded-none md:rounded-xs transition-colors cursor-pointer disabled:opacity-30"
+          >
+            <Strikethrough className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => applyFormatting('`', '`')}
+            disabled={!telegramConnected || isClosed || sending}
+            title="Monospace (`code`)"
+            className="p-1 hover:bg-[#242428] text-[#a1a1aa] hover:text-white rounded-none md:rounded-xs transition-colors cursor-pointer disabled:opacity-30"
+          >
+            <Code className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={insertBulletList}
+            disabled={!telegramConnected || isClosed || sending}
+            title="Bullet list"
+            className="p-1 hover:bg-[#242428] text-[#a1a1aa] hover:text-white rounded-none md:rounded-xs transition-colors cursor-pointer disabled:opacity-30"
+          >
+            <List className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={insertNumberedList}
+            disabled={!telegramConnected || isClosed || sending}
+            title="Numbered list"
+            className="p-1 hover:bg-[#242428] text-[#a1a1aa] hover:text-white rounded-none md:rounded-xs transition-colors cursor-pointer disabled:opacity-30"
+          >
+            <ListOrdered className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => applyFormatting('[', '](https://)')}
+            disabled={!telegramConnected || isClosed || sending}
+            title="Add Link [label](url)"
+            className="p-1 hover:bg-[#242428] text-[#a1a1aa] hover:text-white rounded-none md:rounded-xs transition-colors cursor-pointer disabled:opacity-30"
+          >
+            <Link2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
         <form onSubmit={handleSendMessage} className="flex items-end gap-2">
           <div className="flex-1 min-w-0">
             <textarea
+              ref={textareaRef}
               rows={2}
               value={replyText}
               onChange={(e) => setReplyText(e.target.value)}

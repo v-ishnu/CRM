@@ -106,8 +106,10 @@ export interface IAuditLog extends Document {
     | 'BANK_DETAILS_UPDATED'
     | 'MASTER_DATA_CREATED'
     | 'MASTER_DATA_UPDATED'
-    | 'MASTER_DATA_DELETED';
-  entityType: 'Client' | 'Project' | 'Payment' | 'Invoice' | 'Notification' | 'Auth' | 'DataRequest' | 'RequestResponse' | 'Credential' | 'TeamMember' | 'Task' | 'TeamPayment' | 'Inquiry' | 'Hosting' | 'Agreement' | 'TeamMemberInvitation' | 'TaskSubmission' | 'MasterData';
+    | 'MASTER_DATA_DELETED'
+    | 'TEMPLATE_UPDATED'
+    | 'TEMPLATE_RESET_TO_DEFAULT';
+  entityType: 'Client' | 'Project' | 'Payment' | 'Invoice' | 'Notification' | 'Auth' | 'DataRequest' | 'RequestResponse' | 'Credential' | 'TeamMember' | 'Task' | 'TeamPayment' | 'Inquiry' | 'Hosting' | 'Agreement' | 'TeamMemberInvitation' | 'TaskSubmission' | 'MasterData' | 'MessageTemplate';
   entityId?: mongoose.Types.ObjectId | string;
   metadata?: Record<string, any>;
   timestamp: Date;
@@ -220,13 +222,15 @@ const AuditLogSchema = new Schema<IAuditLog>(
         'MASTER_DATA_CREATED',
         'MASTER_DATA_UPDATED',
         'MASTER_DATA_DELETED',
+        'TEMPLATE_UPDATED',
+        'TEMPLATE_RESET_TO_DEFAULT',
       ],
       required: true,
       index: true,
     },
     entityType: {
       type: String,
-      enum: ['Client', 'Project', 'Payment', 'Invoice', 'Notification', 'Auth', 'DataRequest', 'RequestResponse', 'Credential', 'TeamMember', 'Task', 'TeamPayment', 'Inquiry', 'Hosting', 'Agreement', 'TeamMemberInvitation', 'TaskSubmission', 'MasterData'],
+      enum: ['Client', 'Project', 'Payment', 'Invoice', 'Notification', 'Auth', 'DataRequest', 'RequestResponse', 'Credential', 'TeamMember', 'Task', 'TeamPayment', 'Inquiry', 'Hosting', 'Agreement', 'TeamMemberInvitation', 'TaskSubmission', 'MasterData', 'MessageTemplate'],
       required: true,
       index: true,
     },

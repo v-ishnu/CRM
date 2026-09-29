@@ -409,13 +409,30 @@ export class HostingService {
 
             // 1. Dispatch Client Telegram Notification (NO SENSITIVE DATA INCLUDED!)
             if (client && client.telegramConnected && client.telegramChatId) {
-              const clientMessage =
+              let clientMessage =
                 `⚠️ <b>Hosting Expiry Reminder</b>\n\n` +
                 `Your hosting for <b>${hosting.domain || project?.name || 'your project'}</b> is expiring soon.\n\n` +
                 `<b>Provider:</b> ${hosting.hostingProvider}\n` +
                 `<b>Expiry Date:</b> ${formattedDate}\n` +
                 `<b>Days Remaining:</b> ${daysRemainingText}\n\n` +
                 `Please contact us if you want to renew the hosting service.`;
+
+              try {
+                const { MessageTemplateService } = await import('./message-template.service');
+                const rendered = await MessageTemplateService.renderTemplate(
+                  'CLIENT_HOSTING_EXPIRY',
+                  'TELEGRAM',
+                  {
+                    projectName: hosting.domain || project?.name || 'your project',
+                    hostingProvider: hosting.hostingProvider,
+                    expiryDate: formattedDate,
+                    daysRemaining: daysRemainingText,
+                  }
+                );
+                clientMessage = rendered.body;
+              } catch {
+                // Safe fallback
+              }
 
               const res = await TelegramService.sendMessageRaw(client.telegramChatId, clientMessage);
               clientSent = !!(res && res.success);
@@ -424,7 +441,7 @@ export class HostingService {
             // 2. Dispatch Admin Telegram Notification
             const adminTelegramId = process.env.ADMIN_TELEGRAM_ID;
             if (adminTelegramId) {
-              const adminMessage =
+              let adminMessage =
                 `⚠️ <b>Hosting Expiry Alert</b>\n\n` +
                 `<b>Client:</b> ${client ? client.name : 'Unknown'}\n` +
                 `<b>Project:</b> ${project ? project.name : 'General'}\n` +
@@ -433,6 +450,26 @@ export class HostingService {
                 `<b>Expiry:</b> ${formattedDate}\n` +
                 `<b>Days Remaining:</b> ${daysRemainingText}\n` +
                 `<b>Client Telegram:</b> ${client?.telegramConnected ? 'CONNECTED' : 'NOT CONNECTED'}`;
+
+              try {
+                const { MessageTemplateService } = await import('./message-template.service');
+                const rendered = await MessageTemplateService.renderTemplate(
+                  'ADMIN_HOSTING_EXPIRY_ALERT',
+                  'TELEGRAM',
+                  {
+                    clientName: client ? client.name : 'Unknown',
+                    projectName: project ? project.name : 'General',
+                    hostingProvider: hosting.hostingProvider,
+                    domain: hosting.domain || 'N/A',
+                    expiryDate: formattedDate,
+                    daysRemaining: daysRemainingText,
+                    telegramStatus: client?.telegramConnected ? 'CONNECTED' : 'NOT CONNECTED',
+                  }
+                );
+                adminMessage = rendered.body;
+              } catch {
+                // Safe fallback
+              }
 
               const res = await TelegramService.sendMessageRaw(adminTelegramId, adminMessage);
               adminSent = !!(res && res.success);

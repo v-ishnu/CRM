@@ -941,8 +941,7 @@ export class TeamMemberService {
     if (member.role === 'ADMIN' || member.isPrimaryAdmin) return true;
     if (!this.hasPermission(member, 'VIEW_CREDENTIALS')) return false;
 
-    if (member.allowedCredentialTypes && Array.isArray(member.allowedCredentialTypes)) {
-      if (member.allowedCredentialTypes.length === 0) return false;
+    if (member.allowedCredentialTypes && Array.isArray(member.allowedCredentialTypes) && member.allowedCredentialTypes.length > 0) {
       const normalizedReq = (credentialType || 'CUSTOM').toUpperCase().trim();
       return member.allowedCredentialTypes.some(
         (t) => t.toUpperCase().trim() === normalizedReq
