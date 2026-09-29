@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { TaskService } from '@/services/task.service';
 import TeamMember from '@/models/TeamMember';
 import { dbConnect } from '@/lib/db/connect';
+import { verifyJWT } from '@/lib/auth/jwt';
 
 export async function POST(
   req: NextRequest,
@@ -9,8 +10,14 @@ export async function POST(
 ) {
   await dbConnect();
 
-  const actorEmail = req.headers.get('x-user-email') || 'system';
-  const actorRole = req.headers.get('x-user-role') || 'ADMIN';
+  let sessionPayload = null;
+  const sessionCookie = req.cookies.get('session')?.value;
+  if (sessionCookie) {
+    sessionPayload = await verifyJWT(sessionCookie);
+  }
+
+  const actorEmail = sessionPayload?.email || req.headers.get('x-user-email') || 'system';
+  const actorRole = sessionPayload?.role || req.headers.get('x-user-role') || 'MEMBER';
   let actorTeamMemberId = req.headers.get('x-team-member-id');
 
   try {

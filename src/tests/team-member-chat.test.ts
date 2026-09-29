@@ -158,6 +158,7 @@ describe('Team Member Chat & Next.js Dev Origin Test Suite', () => {
       })
     );
 
+    vi.spyOn(TeamMemberMessage, 'findOne').mockResolvedValue(null);
     vi.spyOn(TeamMemberMessage.prototype, 'save').mockImplementation(async function (this: any) {
       return this;
     });
@@ -433,6 +434,22 @@ describe('Team Member Chat & Next.js Dev Origin Test Suite', () => {
       expect(msgA.conversationId).not.toEqual(msgB.conversationId);
       expect(msgA.senderId).toBe(mockMemberAId);
       expect(msgB.senderId).toBe(mockMemberBId);
+    });
+
+    it('should return existing message without creating duplicate if telegramMessageId already exists (Webhook Retry Deduplication)', async () => {
+      const existingMsg: any = {
+        _id: new mongoose.Types.ObjectId(),
+        telegramMessageId: '101',
+        text: 'Msg from A',
+        status: 'DELIVERED',
+      };
+      vi.spyOn(TeamMemberMessage, 'findOne').mockResolvedValue(existingMsg as any);
+      const saveSpy = vi.spyOn(TeamMemberMessage.prototype, 'save');
+
+      const result = await TeamChatService.handleIncomingTeamMemberMessage(fakeMemberA, 'Msg from A', 101);
+
+      expect(result).toBe(existingMsg);
+      expect(saveSpy).not.toHaveBeenCalled();
     });
 
     it('should mark conversation read only when conversation is explicitly opened/read', async () => {

@@ -581,7 +581,7 @@ export class TaskService {
 
     // Authorization check: Only assigned team member or Admin can submit
     if (actorRole !== 'ADMIN') {
-      if (!task.assignedTo || (actorTeamMemberId && task.assignedTo.toString() !== actorTeamMemberId.toString())) {
+      if (!task.assignedTo || !actorTeamMemberId || task.assignedTo.toString() !== actorTeamMemberId.toString()) {
         throw new Error('Unauthorized: You can only submit completion for tasks assigned to you');
       }
     }
@@ -630,6 +630,19 @@ export class TaskService {
     }
 
     const isResubmission = !!task.submission && !!task.completedAt;
+
+    // Idempotency check: If an identical submission was received within 5 seconds, return without creating duplicate history
+    if (task.submission && isResubmission) {
+      const lastSub = task.submission;
+      const isIdentical =
+        (lastSub.submissionNotes || '') === (data.submissionNotes?.trim() || '') &&
+        JSON.stringify(lastSub.submissionUrls || []) === JSON.stringify(urls) &&
+        (lastSub.submissionFiles || []).length === files.length;
+      const timeDiff = Date.now() - new Date(lastSub.submittedAt).getTime();
+      if (isIdentical && timeDiff < 5000) {
+        return task;
+      }
+    }
 
     // Archive previous submission into submissionHistory if present
     if (task.submission) {

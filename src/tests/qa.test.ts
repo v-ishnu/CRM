@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import mongoose from 'mongoose';
 import fs from 'fs';
 import path from 'path';
@@ -65,9 +65,17 @@ describe('Developer CRM Full QA Suite', () => {
     else failedCount++;
   };
 
+  let isLiveDb = false;
+
   beforeAll(async () => {
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(MONGODB_URI);
+    try {
+      if (mongoose.connection.readyState === 0) {
+        await mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 800 });
+      }
+      isLiveDb = true;
+    } catch {
+      console.warn('Local test MongoDB is not running, skipping live DB qa suite tests.');
+      return;
     }
     
     // Clear all past test schemas to avoid index conflicts
@@ -88,7 +96,14 @@ describe('Developer CRM Full QA Suite', () => {
     });
   });
 
+  beforeEach((context: any) => {
+    if (!isLiveDb) {
+      context.skip();
+    }
+  });
+
   afterAll(async () => {
+    if (!isLiveDb) return;
     // Generate the TEST_REPORT.md file dynamically
     const reportPath = path.join(process.cwd(), 'TEST_REPORT.md');
     const reportContent = `==============================

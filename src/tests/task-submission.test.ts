@@ -367,7 +367,8 @@ describe('Task Completion Submissions - Unit Tests', () => {
     expect(mockTask.save).not.toHaveBeenCalled();
     expect(TelegramService.sendMessageRaw).toHaveBeenCalledWith(
       '987654',
-      expect.stringContaining('Submission Required')
+      expect.stringContaining('Submission Required'),
+      expect.anything()
     );
   });
 });

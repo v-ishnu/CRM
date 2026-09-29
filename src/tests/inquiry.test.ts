@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import mongoose from 'mongoose';
 import { dbConnect } from '@/lib/db/connect';
 import Client from '@/models/Client';
@@ -18,8 +18,20 @@ describe('Public Inquiry & Human Handoff Fallback System', () => {
   const publicUser1TelegramId = '93939303';
   const publicUser2TelegramId = '94949404';
 
+  let isLiveDb = false;
+
   beforeAll(async () => {
-    await dbConnect();
+    try {
+      if (mongoose.connection.readyState === 0) {
+        await mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/developer-crm-test', {
+          serverSelectionTimeoutMS: 800,
+        });
+      }
+      isLiveDb = true;
+    } catch {
+      console.warn('Local test MongoDB is not running, skipping live DB inquiry tests.');
+      return;
+    }
     process.env.ADMIN_TELEGRAM_ID = adminTelegramId;
     process.env.TELEGRAM_BOT_TOKEN = '8848520592:AAG4ADhi5XX0QAJwNus2A0_8woIeOv_dl78';
 
@@ -69,7 +81,14 @@ describe('Public Inquiry & Human Handoff Fallback System', () => {
     });
   }, 25000);
 
+  beforeEach((context: any) => {
+    if (!isLiveDb) {
+      context.skip();
+    }
+  });
+
   afterAll(async () => {
+    if (!isLiveDb) return;
     await Client.deleteMany({
       $or: [
         { telegramUserId: { $in: [clientTelegramId, publicUser1TelegramId, publicUser2TelegramId] } },

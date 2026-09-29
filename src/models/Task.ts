@@ -70,7 +70,6 @@ const TaskSchema = new Schema<ITask>(
       unique: true,
       uppercase: true,
       trim: true,
-      index: true,
     },
     title: {
       type: String,
@@ -132,7 +131,6 @@ const TaskSchema = new Schema<ITask>(
       {
         type: Schema.Types.ObjectId,
         ref: 'Credential',
-        index: true,
       },
     ],
     agreedAmount: {

@@ -36,6 +36,8 @@ declare global {
   var activeClientRequests: Record<string, string> | undefined;
   // eslint-disable-next-line no-var
   var processedTelegramUpdates: Set<number> | undefined;
+  // eslint-disable-next-line no-var
+  var activeTeamTaskSubmissions: Record<string, { taskId: string; taskCode: string; title: string; timestamp: number }> | undefined;
 }
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -47,6 +49,69 @@ export class TelegramService {
    */
   static isConfigured(): boolean {
     return !!BOT_TOKEN;
+  }
+
+  /**
+   * Get active team task submission context (checks memory then distributed Redis)
+   */
+  static async getActiveTaskSubmission(chatId: string): Promise<{
+    taskId: string;
+    taskCode: string;
+    title: string;
+    timestamp: number;
+  } | null> {
+    if (global.activeTeamTaskSubmissions && global.activeTeamTaskSubmissions[chatId]) {
+      return global.activeTeamTaskSubmissions[chatId];
+    }
+    try {
+      const { CacheService } = await import('./cache.service');
+      const cached = await CacheService.get<{
+        taskId: string;
+        taskCode: string;
+        title: string;
+        timestamp: number;
+      }>(CacheService.teamTaskSubmissionKey(chatId));
+      if (cached) {
+        global.activeTeamTaskSubmissions = global.activeTeamTaskSubmissions || {};
+        global.activeTeamTaskSubmissions[chatId] = cached;
+        return cached;
+      }
+    } catch {
+      // Ignore cache error and proceed
+    }
+    return null;
+  }
+
+  /**
+   * Persist active team task submission context (memory + Redis)
+   */
+  static async setActiveTaskSubmission(
+    chatId: string,
+    data: { taskId: string; taskCode: string; title: string; timestamp: number }
+  ): Promise<void> {
+    global.activeTeamTaskSubmissions = global.activeTeamTaskSubmissions || {};
+    global.activeTeamTaskSubmissions[chatId] = data;
+    try {
+      const { CacheService } = await import('./cache.service');
+      await CacheService.set(CacheService.teamTaskSubmissionKey(chatId), data, 86400);
+    } catch {
+      // Ignore cache error
+    }
+  }
+
+  /**
+   * Clear active team task submission context
+   */
+  static async clearActiveTaskSubmission(chatId: string): Promise<void> {
+    if (global.activeTeamTaskSubmissions && global.activeTeamTaskSubmissions[chatId]) {
+      delete global.activeTeamTaskSubmissions[chatId];
+    }
+    try {
+      const { CacheService } = await import('./cache.service');
+      await CacheService.del(CacheService.teamTaskSubmissionKey(chatId));
+    } catch {
+      // Ignore cache error
+    }
   }
 
   /**
@@ -556,25 +621,36 @@ export class TelegramService {
     }
 
     // 3. Lookup TeamMember & Client concurrently using lean projections (excluding heavy/encrypted fields)
+    const tmQuery: any = TeamMember.findOne({
+      telegramConnected: true,
+      $or: [
+        { telegramUserId: strUserId },
+        ...(strChatId ? [{ telegramChatId: strChatId }] : []),
+      ],
+    });
+    const clQuery: any = Client.findOne({
+      telegramConnected: true,
+      $or: [
+        { telegramUserId: strUserId },
+        ...(strChatId ? [{ telegramChatId: strChatId }] : []),
+      ],
+    });
+
+    const safeExec = async (query: any, projection: string) => {
+      if (!query) return null;
+      let q = query;
+      if (typeof q.select === 'function') {
+        q = q.select(projection);
+      }
+      if (typeof q?.lean === 'function') {
+        return q.lean();
+      }
+      return q;
+    };
+
     const [teamMember, client] = await Promise.all([
-      TeamMember.findOne({
-        telegramConnected: true,
-        $or: [
-          { telegramUserId: strUserId },
-          ...(strChatId ? [{ telegramChatId: strChatId }] : []),
-        ],
-      })
-        .select('_id name email role designation status telegramConnected telegramUserId telegramChatId')
-        .lean(),
-      Client.findOne({
-        telegramConnected: true,
-        $or: [
-          { telegramUserId: strUserId },
-          ...(strChatId ? [{ telegramChatId: strChatId }] : []),
-        ],
-      })
-        .select('_id name email company status telegramConnected telegramUserId telegramChatId')
-        .lean(),
+      safeExec(tmQuery, '_id name email role designation status telegramConnected telegramUserId telegramChatId'),
+      safeExec(clQuery, '_id name email company status telegramConnected telegramUserId telegramChatId'),
     ]);
 
     // 4. Conflict Detection: Account linked as both TeamMember and Client
@@ -896,6 +972,18 @@ export class TelegramService {
     } else if (cbData.startsWith('team_task:credentials:')) {
       action = 'credentials';
       taskId = cbData.replace('team_task:credentials:', '');
+    } else if (cbData.startsWith('team_task:cancel_sub:')) {
+      action = 'cancel_sub';
+      taskId = cbData.replace('team_task:cancel_sub:', '');
+    }
+
+    if (action === 'cancel_sub') {
+      await this.answerCallbackQuery(cbId, 'Submission cancelled.');
+      await this.clearActiveTaskSubmission(chatId);
+      await this.sendMessageRaw(chatId, 'ℹ️ <i>Task submission mode cancelled. Back to standard mode.</i>', {
+        reply_markup: this.getTeamMemberReplyKeyboard(),
+      });
+      return { action, success: true };
     }
 
     // Validate task ID format
@@ -1066,10 +1154,28 @@ export class TelegramService {
         }
 
         if (task.submissionRequired) {
-          const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://crm.drdebuggers.com';
+          await this.setActiveTaskSubmission(chatId, {
+            taskId: task._id.toString(),
+            taskCode: task.taskCode,
+            title: task.title,
+            timestamp: Date.now(),
+          });
+
           await this.sendMessageRaw(
             chatId,
-            `⚠️ <b>Submission Required</b>\n\nThis task requires submission of deliverables (URLs or files). Please complete this task with your submission on the web dashboard:\n<a href="${appUrl}/dashboard/tasks?task=${task._id}">Open Task Dashboard</a>`
+            `⚠️ <b>Submission Required for ${task.title} (<code>${task.taskCode}</code>)</b>\n\n` +
+            `This task requires deliverables before it can be marked completed.\n\n` +
+            `<b>Please submit your work directly here:</b>\n` +
+            `• Send a <b>URL / link</b> (e.g. GitHub PR, Figma, drive link)\n` +
+            `• Or upload a <b>file</b> (ZIP, PDF, images, document, etc.)\n\n` +
+            `<i>Send your deliverables now, or tap Cancel below.</i>`,
+            {
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: '❌ Cancel Submission', callback_data: `team_task:cancel_sub:${task._id}` }],
+                ],
+              },
+            }
           );
           return { action, success: false };
         }
@@ -1218,6 +1324,15 @@ export class TelegramService {
         }
       }
 
+      case 'cancel_sub': {
+        await this.answerCallbackQuery(cbId, 'Submission cancelled.');
+        await this.clearActiveTaskSubmission(chatId);
+        await this.sendMessageRaw(chatId, 'ℹ️ <i>Task submission mode cancelled. Back to standard mode.</i>', {
+          reply_markup: this.getTeamMemberReplyKeyboard(),
+        });
+        return { action, success: true };
+      }
+
       default:
         await this.answerCallbackQuery(cbId, 'Unknown task action.', true);
         return { action, success: false };
@@ -1232,7 +1347,9 @@ export class TelegramService {
     text: string,
     teamMember: any,
     timings?: any,
-    messageId?: number | string
+    messageId?: number | string,
+    rawAttachment?: any,
+    messageType?: string
   ): Promise<void> {
     const raw = text.trim();
     const isCommand = raw.startsWith('/');
@@ -1254,8 +1371,169 @@ export class TelegramService {
     else if (raw === '👤 My Profile' || raw === 'My Profile') cmd = '/myprofile';
     else if (raw === '❓ Help' || raw === 'Help') cmd = '/help';
 
+    // Active Task Submission Handler: Check if this Team Member is currently in submission mode for an assigned task
+    const activeSub = await this.getActiveTaskSubmission(chatId);
+    if (activeSub) {
+      if (raw.toLowerCase() === '/cancel' || cmd === '/cancel') {
+        await this.clearActiveTaskSubmission(chatId);
+        await this.sendMessageRaw(
+          chatId,
+          'ℹ️ <i>Task submission mode cancelled. Back to standard mode.</i>',
+          { reply_markup: this.getTeamMemberReplyKeyboard() }
+        );
+        return;
+      }
+
+      try {
+        const { TaskService } = await import('./task.service');
+        const Task = (await import('@/models/Task')).default;
+        const task = await Task.findById(activeSub.taskId);
+
+        if (!task || task.status === 'COMPLETED' || task.status === 'CANCELLED') {
+          await this.clearActiveTaskSubmission(chatId);
+          await this.sendMessageRaw(
+            chatId,
+            'ℹ️ <i>This task is no longer awaiting submission.</i>',
+            { reply_markup: this.getTeamMemberReplyKeyboard() }
+          );
+          return;
+        }
+
+        // Validate assignee: team members can only submit work for their assigned tasks
+        if (task.assignedTo?.toString() !== teamMember._id.toString() && teamMember.role !== 'ADMIN') {
+          await this.clearActiveTaskSubmission(chatId);
+          await this.sendMessageRaw(
+            chatId,
+            '❌ <b>You are not authorized to submit deliverables for this task.</b>',
+            { reply_markup: this.getTeamMemberReplyKeyboard() }
+          );
+          return;
+        }
+
+        const submissionUrls: string[] = [];
+        const submissionFiles: any[] = [];
+        const submissionNotes = raw || (rawAttachment ? 'Uploaded file via Telegram' : '');
+
+        // Check if raw contains URLs
+        const urlMatches = raw.match(/https?:\/\/[^\s]+/g);
+        if (urlMatches) {
+          for (const u of urlMatches) {
+            submissionUrls.push(u.trim());
+          }
+        }
+
+        // Process file attachment if present
+        if (rawAttachment) {
+          const fileId = rawAttachment.file_id;
+          const fileName = rawAttachment.file_name || `deliverable_${Date.now()}`;
+          const token = process.env.TELEGRAM_BOT_TOKEN;
+
+          let fileBuffer: Buffer | null = null;
+          if (process.env.NODE_ENV === 'test') {
+            fileBuffer = Buffer.from('mock telegram deliverable content');
+          } else if (token && fileId) {
+            try {
+              const resFile = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${fileId}`);
+              const dataFile = await resFile.json();
+              if (dataFile.ok && dataFile.result?.file_path) {
+                const resBuffer = await fetch(`https://api.telegram.org/file/bot${token}/${dataFile.result.file_path}`);
+                const arrayBuffer = await resBuffer.arrayBuffer();
+                fileBuffer = Buffer.from(arrayBuffer);
+              }
+            } catch (err: any) {
+              console.error('Failed to download telegram file for task submission:', err);
+            }
+          }
+
+          if (fileBuffer) {
+            const maxMb = task.maxFileSizeMb || 25;
+            if (fileBuffer.length > maxMb * 1024 * 1024) {
+              await this.sendMessageRaw(
+                chatId,
+                `❌ <b>File Too Large:</b> Maximum allowed size is ${maxMb}MB. Please compress or provide a drive link.\n\n<i>Type /cancel to abort.</i>`
+              );
+              return;
+            }
+
+            const pathModule = await import('path');
+            const sanitizedName = (fileName || 'deliverable').replace(/[^a-zA-Z0-9._-]/g, '_');
+            const storagePath = `task-submissions/${task.projectId}/${task._id}/${Date.now()}_${sanitizedName}`;
+            const ext = pathModule.default.extname(fileName || '').toLowerCase();
+            let contentType = 'application/octet-stream';
+            if (ext === '.pdf') contentType = 'application/pdf';
+            else if (['.jpg', '.jpeg'].includes(ext)) contentType = 'image/jpeg';
+            else if (ext === '.png') contentType = 'image/png';
+            else if (ext === '.zip') contentType = 'application/zip';
+
+            const { StorageService } = await import('./storage.service');
+            await StorageService.uploadFile(fileBuffer, storagePath, contentType);
+
+            submissionFiles.push({
+              fileName,
+              fileSize: fileBuffer.length,
+              mimeType: contentType,
+              storagePath,
+              uploadedAt: new Date(),
+            });
+          }
+        }
+
+        // Validate deliverable requirements
+        if (submissionUrls.length === 0 && submissionFiles.length === 0) {
+          await this.sendMessageRaw(
+            chatId,
+            `⚠️ <b>Deliverable Required</b>\n\nPlease send a valid URL (http:// or https://) or upload a file (document/archive/image) to complete this task.\n\n<i>Type /cancel to abort submission.</i>`
+          );
+          return;
+        }
+
+        await TaskService.submitAndCompleteTask(
+          activeSub.taskId,
+          {
+            submissionNotes: submissionNotes || 'Submitted via Telegram',
+            submissionUrls,
+            submissionFiles,
+          },
+          teamMember.email,
+          teamMember.role,
+          teamMember._id.toString()
+        );
+
+        await this.clearActiveTaskSubmission(chatId);
+
+        await this.sendMessageRaw(
+          chatId,
+          `✅ <b>Task Deliverables Submitted Successfully!</b>\n\n` +
+          `<b>Task:</b> ${task.title} (<code>${task.taskCode}</code>)\n` +
+          `<b>Status:</b> <code>COMPLETED</code>\n\n` +
+          `Your deliverables have been recorded in the Task Submission system and notified to Admin for review.`,
+          { reply_markup: this.getTeamMemberReplyKeyboard() }
+        );
+        return;
+      } catch (submitErr: any) {
+        await this.sendMessageRaw(
+          chatId,
+          `❌ <b>Submission Failed:</b> ${submitErr.message || 'Unknown error'}\n\nPlease try again or send /cancel to exit.`
+        );
+        return;
+      }
+    }
+
+    // If a file was received without an active task submission context, guide the user
+    if (rawAttachment) {
+      await this.sendMessageRaw(
+        chatId,
+        `ℹ️ <b>File received, but no task submission is currently active.</b>\n\n` +
+        `To submit deliverables for a task, please tap <b>✅ Mark as Done</b> on the task first (or use /tasks to view your tasks).\n\n` +
+        `<i>To send a message to Admin, please send text.</i>`,
+        { reply_markup: this.getTeamMemberReplyKeyboard() }
+      );
+      return;
+    }
+
     // If it is not a slash command and not a menu keyboard button, route to Admin <-> Team Member Chat!
     if (!isCommand && !isMenuButton) {
+      if (!raw) return;
       const { TeamChatService } = await import('./team-chat.service');
       await TeamChatService.handleIncomingTeamMemberMessage(teamMember, raw, messageId);
 
@@ -1629,9 +1907,32 @@ export class TelegramService {
     // Idempotency: Prevent duplicate processing of retried Telegram webhook updates
     const updateId = update?.update_id;
     if (updateId) {
+      try {
+        const { getRedisClient } = await import('@/lib/redis/client');
+        const redis = getRedisClient();
+        if (redis) {
+          const acquired = await redis.set(`crm:telegram:update:${updateId}`, '1', 'EX', 86400, 'NX');
+          if (!acquired) {
+            console.log(`[DEDUPLICATION] Telegram update ${updateId} already processed (Redis). Skipping.`);
+            return {
+              command: 'duplicate',
+              clientLookup: 0,
+              databaseQuery: 0,
+              handler: 0,
+              telegramAPI: 0,
+              total: 0,
+              startTotal,
+              timings,
+            };
+          }
+        }
+      } catch {
+        // Fallback to in-memory Set on Redis error or disconnect
+      }
+
       global.processedTelegramUpdates = global.processedTelegramUpdates || new Set<number>();
       if (global.processedTelegramUpdates.has(updateId)) {
-        console.log(`[DEDUPLICATION] Telegram update ${updateId} already processed. Skipping.`);
+        console.log(`[DEDUPLICATION] Telegram update ${updateId} already processed (Memory). Skipping.`);
         return {
           command: 'duplicate',
           clientLookup: 0,
@@ -1877,7 +2178,7 @@ export class TelegramService {
       }
 
       const handlerStart = performance.now();
-      await this.handleTeamMemberCommand(chatId, text, teamMember, timings, message?.message_id);
+      await this.handleTeamMemberCommand(chatId, text, teamMember, timings, message?.message_id, rawAttachment, messageType);
       const handlerTime = performance.now() - handlerStart;
       timings.handler = Math.max(0, Math.round(handlerTime - timings.databaseQuery - timings.telegramAPI));
       const total = Math.round(performance.now() - startTotal);

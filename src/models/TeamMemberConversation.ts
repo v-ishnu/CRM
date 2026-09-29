@@ -44,7 +44,6 @@ const TeamMemberConversationSchema = new Schema<ITeamMemberConversation>(
     lastMessageAt: {
       type: Date,
       default: Date.now,
-      index: true,
     },
     lastMessageText: {
       type: String,

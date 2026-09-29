@@ -145,6 +145,10 @@ export class CacheService {
     return `crm:team_chat:conv:${teamMemberId}:${adminId || 'default'}`;
   }
 
+  static teamTaskSubmissionKey(chatId: string): string {
+    return `crm:team:submission:${chatId}`;
+  }
+
   static telegramIdentityKey(telegramUserId: string, chatId?: string): string {
     return `crm:telegram:identity:${telegramUserId}:${chatId || ''}`;
   }

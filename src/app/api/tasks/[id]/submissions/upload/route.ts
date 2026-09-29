@@ -5,6 +5,7 @@ import TeamMember from '@/models/TeamMember';
 import { StorageService } from '@/services/storage.service';
 import { AuditService } from '@/services/audit.service';
 import { dbConnect } from '@/lib/db/connect';
+import { verifyJWT } from '@/lib/auth/jwt';
 
 const ALLOWED_EXTENSIONS = new Set([
   '.zip', '.pdf', '.docx', '.doc', '.xlsx', '.xls',
@@ -18,8 +19,14 @@ export async function POST(
 ) {
   await dbConnect();
 
-  const actorEmail = req.headers.get('x-user-email') || 'system';
-  const actorRole = req.headers.get('x-user-role') || 'ADMIN';
+  let sessionPayload = null;
+  const sessionCookie = req.cookies.get('session')?.value;
+  if (sessionCookie) {
+    sessionPayload = await verifyJWT(sessionCookie);
+  }
+
+  const actorEmail = sessionPayload?.email || req.headers.get('x-user-email') || 'system';
+  const actorRole = sessionPayload?.role || req.headers.get('x-user-role') || 'MEMBER';
   let actorTeamMemberId = req.headers.get('x-team-member-id');
 
   try {
@@ -97,7 +104,7 @@ export async function POST(
       );
     }
 
-    const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const sanitizedName = path.basename(file.name).replace(/[^a-zA-Z0-9._-]/g, '_');
     const storagePath = `task-submissions/${task.projectId}/${task._id}/${Date.now()}_${sanitizedName}`;
 
     const arrayBuffer = await file.arrayBuffer();

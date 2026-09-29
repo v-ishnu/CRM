@@ -741,6 +741,13 @@ describe('Task Client -> Project Filtering & Safe Redis Caching (38 Requirements
 
     it('33. Credential access and requiredCredentialIds persist properly', async () => {
       const credId = new mongoose.Types.ObjectId();
+      const Credential = (await import('@/models/Credential')).default;
+      vi.spyOn(Credential, 'findById').mockResolvedValue({
+        _id: credId,
+        projectId: projectA1Id,
+        isRevoked: false,
+        credentialType: 'WORDPRESS',
+      } as any);
       vi.spyOn(Project, 'findById').mockResolvedValue(projectA1);
       vi.spyOn(Client, 'findById').mockResolvedValue(clientA);
       vi.spyOn(Task, 'countDocuments').mockResolvedValue(1);

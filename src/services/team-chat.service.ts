@@ -284,6 +284,18 @@ export class TeamChatService {
 
     const memberId = teamMember._id as mongoose.Types.ObjectId;
 
+    // Deduplication guard: Prevent duplicate chat message persistence if Telegram retries webhook update
+    if (telegramMessageId) {
+      const existingMessage = await TeamMemberMessage.findOne({
+        telegramMessageId: String(telegramMessageId),
+        teamMemberId: memberId,
+      });
+      if (existingMessage) {
+        console.log(`[DEDUPLICATION] Team chat message with telegramMessageId ${telegramMessageId} already exists. Skipping.`);
+        return existingMessage;
+      }
+    }
+
     // Resolve target conversation using a single query sorting OPEN ('O') before CLOSED ('C')
     let conversation = await TeamMemberConversation.findOne({
       teamMemberId: memberId,

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -20,21 +20,42 @@ import { InvoiceService } from '@/services/invoice.service';
 import { NotificationService } from '@/services/notification.service';
 import { signJWT, verifyJWT } from '@/lib/auth/jwt';
 
+let isLiveDb = false;
+
 describe('Developer CRM System Tests', () => {
   beforeAll(async () => {
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(MONGODB_URI);
+    const testUri = process.env.MONGODB_TEST_URI;
+    if (!testUri || testUri.includes('clienttelegrammanagemnt.m3gs6bt.mongodb.net')) {
+      console.warn('Skipping live DB tests in financial.test.ts: MONGODB_TEST_URI not configured or points to production');
+      return;
+    }
+    try {
+      if (mongoose.connection.readyState === 0) {
+        await mongoose.connect(testUri, { serverSelectionTimeoutMS: 1500 });
+      }
+      isLiveDb = mongoose.connection.readyState === 1;
+    } catch {
+      isLiveDb = false;
+      console.warn('Local test MongoDB not reachable, skipping live DB tests in financial.test.ts');
     }
   });
 
   afterAll(async () => {
-    // Clean up all test files created under prefix
-    await Client.deleteMany({ clientCode: /^TEST-CL-/ });
-    await Project.deleteMany({ projectCode: /^TEST-PR-/ });
-    await Payment.deleteMany({ paymentNumber: /^PAY-TEST-/ });
-    await Invoice.deleteMany({ invoiceNumber: /^INV-TEST-/ });
-    await Notification.deleteMany({ message: /TEST_MESSAGE/ });
-    await mongoose.connection.close();
+    if (isLiveDb) {
+      // Clean up all test files created under prefix
+      await Client.deleteMany({ clientCode: /^TEST-CL-/ });
+      await Project.deleteMany({ projectCode: /^TEST-PR-/ });
+      await Payment.deleteMany({ paymentNumber: /^PAY-TEST-/ });
+      await Invoice.deleteMany({ invoiceNumber: /^INV-TEST-/ });
+      await Notification.deleteMany({ message: /TEST_MESSAGE/ });
+      await mongoose.connection.close();
+    }
+  });
+
+  beforeEach((context: any) => {
+    if (!isLiveDb) {
+      context.skip();
+    }
   });
 
   describe('Client Management', () => {

@@ -100,6 +100,7 @@ describe('Chrome Web Push Notifications Test Suite', () => {
     vi.spyOn(TeamMemberConversation.prototype, 'save').mockImplementation(async function (this: any) {
       return this;
     });
+    vi.spyOn(TeamMemberMessage, 'findOne').mockResolvedValue(null);
     vi.spyOn(TeamMemberMessage.prototype, 'save').mockImplementation(async function (this: any) {
       return this;
     });
