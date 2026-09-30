@@ -28,6 +28,7 @@ vi.mock('@/services/storage.service', () => ({
       uploadedAt: new Date(),
     }),
     getSignedDownloadUrl: vi.fn().mockResolvedValue('https://mock-storage.test/download-signed'),
+    getSignedUrl: vi.fn().mockResolvedValue('https://mock-storage.test/download-signed'),
   },
 }));
 
@@ -386,7 +387,7 @@ describe('Task Submission vs Chat Hard Separation & Authorization Audit', () => 
       );
     });
 
-    it('should NOT upload file to Chat when NO task submission context is active and guide the user', async () => {
+    it('should route photo/file to Chat and NOT to Task Submission when NO task submission context is active', async () => {
       const chatId = '123456789';
       await TelegramService.clearActiveTaskSubmission(chatId);
 
@@ -398,6 +399,18 @@ describe('Task Submission vs Chat Hard Separation & Authorization Audit', () => 
       };
 
       const sendTelegramMsgSpy = vi.spyOn(TelegramService, 'sendMessageRaw').mockResolvedValue({ ok: true } as any);
+
+      // Mock Telegram CDN getFile and download
+      const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation(async (url: any) => {
+        if (url.toString().includes('getFile')) {
+          return {
+            json: async () => ({ ok: true, result: { file_path: 'photos/photo.jpg' } }),
+          } as any;
+        }
+        return {
+          arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer,
+        } as any;
+      });
 
       const rawAttachment = {
         file_id: 'random_photo_123',
@@ -414,17 +427,30 @@ describe('Task Submission vs Chat Hard Separation & Authorization Audit', () => 
         'photo'
       );
 
-      // Must NOT route to Chat
-      expect(TeamChatService.handleIncomingTeamMemberMessage).not.toHaveBeenCalled();
-      // Must NOT call TaskService
+      // Must route to Chat with attachment
+      expect(TeamChatService.handleIncomingTeamMemberMessage).toHaveBeenCalledWith(
+        mockMember,
+        '',
+        'msg-789',
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'IMAGE',
+            originalName: 'photo.jpg',
+          }),
+        ])
+      );
+
+      // Must NOT call TaskService submission
       expect(TaskService.submitAndCompleteTask).not.toHaveBeenCalled();
 
-      // Must inform user that no submission is active
+      // Must acknowledge receipt to team member
       expect(sendTelegramMsgSpy).toHaveBeenCalledWith(
         chatId,
-        expect.stringContaining('no task submission is currently active'),
+        expect.stringContaining('received by Admin'),
         expect.anything()
       );
+
+      fetchSpy.mockRestore();
     });
 
     it('should drop duplicate Telegram updates using update_id deduplication', async () => {

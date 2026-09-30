@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMasterData } from '@/hooks/useMasterData';
@@ -29,30 +29,40 @@ import {
   MessageSquare,
   Megaphone,
 } from 'lucide-react';
+import { TeamMemberChatPanel } from '@/components/team/TeamMemberChatPanel';
 import { TeamMemberChatModal } from '@/components/team/TeamMemberChatModal';
 import { TeamMemberBroadcastModal } from '@/components/team/TeamMemberBroadcastModal';
 
-function TeamChatQueryRedirect() {
+function TeamChatQuerySync({
+  onSelectMember,
+  onSelectTab,
+}: {
+  onSelectMember: (id: string) => void;
+  onSelectTab: (tab: 'overview' | 'chat' | 'invitations') => void;
+}) {
   const searchParams = useSearchParams();
-  const router = useRouter();
 
   useEffect(() => {
-    const chatMemberId = searchParams.get('chat') || searchParams.get('memberId');
-    if (chatMemberId) {
-      const convParam = searchParams.get('conversationId');
-      const target = convParam
-        ? `/dashboard/team/${chatMemberId}?tab=chat&conversationId=${encodeURIComponent(convParam)}`
-        : `/dashboard/team/${chatMemberId}?tab=chat`;
-      router.replace(target);
+    const tabParam = searchParams.get('tab');
+    const memberParam = searchParams.get('chat') || searchParams.get('memberId');
+    if (tabParam === 'chat' || memberParam) {
+      onSelectTab('chat');
+      if (memberParam) onSelectMember(memberParam);
+    } else if (tabParam === 'invitations') {
+      onSelectTab('invitations');
     }
-  }, [searchParams, router]);
+  }, [searchParams, onSelectMember, onSelectTab]);
 
   return null;
 }
 
 export default function TeamMembersPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'members' | 'invitations'>('members');
+  const [activeTab, setActiveTab] = useState<'overview' | 'chat' | 'invitations'>('overview');
+  const [selectedChatMemberId, setSelectedChatMemberId] = useState<string | null>(null);
+  const [chatSearch, setChatSearch] = useState('');
+  const [chatSummary, setChatSummary] = useState<Record<string, { unreadCount: number; lastMessageText?: string; lastMessageAt?: string; status: string }>>({});
+  const [chatSummaryLoading, setChatSummaryLoading] = useState(false);
 
   const { items: masterDesignations, refresh: refreshDesignations } = useMasterData('TEAM_DESIGNATION');
   const { items: masterCredTypes } = useMasterData('CREDENTIAL_TYPE');
@@ -246,6 +256,58 @@ export default function TeamMembersPage() {
       fetchInvitations();
     }
   }, [activeTab]);
+
+  const fetchChatSummary = useCallback(async () => {
+    try {
+      setChatSummaryLoading(true);
+      const res = await fetch('/api/team-members/chat-summary');
+      const json = await res.json();
+      if (json.success && json.data) {
+        setChatSummary(json.data);
+      }
+    } catch (err) {
+      console.error('Failed to load chat summary:', err);
+    } finally {
+      setChatSummaryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'chat') {
+      fetchChatSummary();
+    }
+  }, [activeTab, fetchChatSummary]);
+
+  const filteredChatMembers = members
+    .filter((m) => {
+      if (!chatSearch.trim()) return true;
+      const q = chatSearch.toLowerCase();
+      return (
+        m.name?.toLowerCase().includes(q) ||
+        m.email?.toLowerCase().includes(q) ||
+        m.role?.toLowerCase().includes(q) ||
+        m.designation?.toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => {
+      const unreadA = chatSummary[a._id]?.unreadCount || 0;
+      const unreadB = chatSummary[b._id]?.unreadCount || 0;
+      if (unreadA !== unreadB) return unreadB - unreadA;
+      const timeA = chatSummary[a._id]?.lastMessageAt ? new Date(chatSummary[a._id]!.lastMessageAt!).getTime() : 0;
+      const timeB = chatSummary[b._id]?.lastMessageAt ? new Date(chatSummary[b._id]!.lastMessageAt!).getTime() : 0;
+      if (timeA !== timeB) return timeB - timeA;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+
+  const selectedChatMember = members.find((m) => m._id === selectedChatMemberId) || null;
+
+  useEffect(() => {
+    if (activeTab === 'chat' && !selectedChatMemberId && filteredChatMembers.length > 0) {
+      if (typeof window !== 'undefined' && window.innerWidth >= 768) {
+        setSelectedChatMemberId(filteredChatMembers[0]._id);
+      }
+    }
+  }, [activeTab, selectedChatMemberId, filteredChatMembers]);
 
   const handleOpenAdd = () => {
     refreshDesignations();
@@ -623,7 +685,10 @@ export default function TeamMembersPage() {
   return (
     <div className="space-y-6">
       <Suspense fallback={null}>
-        <TeamChatQueryRedirect />
+        <TeamChatQuerySync
+          onSelectMember={(id) => setSelectedChatMemberId(id)}
+          onSelectTab={(tab) => setActiveTab(tab)}
+        />
       </Suspense>
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#242428]">
@@ -667,20 +732,47 @@ export default function TeamMembersPage() {
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs: [Overview] [Tasks] [Payments] [Chat] [Invitations] */}
       <div className="flex items-center gap-1 border-b border-[#242428] pb-px overflow-x-auto text-xs font-mono font-bold uppercase tracking-wider scrollbar-none">
         <button
-          onClick={() => setActiveTab('members')}
+          onClick={() => setActiveTab('overview')}
           className={`px-4 py-2.5 transition-all flex items-center gap-2 border-b-2 ${
-            activeTab === 'members'
+            activeTab === 'overview'
               ? 'border-[#ff3e00] text-white bg-white/[0.03]'
               : 'border-transparent text-[#71717a] hover:text-white'
           }`}
         >
-          <span>Team Members</span>
+          <span>Overview</span>
           <span className="text-[10px] px-1.5 py-0.2 rounded-xs bg-[#141416] border border-[#27272a] text-[#a1a1aa]">
             {members.length}
           </span>
+        </button>
+        <button
+          onClick={() => router.push('/dashboard/tasks')}
+          className="px-4 py-2.5 transition-all flex items-center gap-2 border-b-2 border-transparent text-[#71717a] hover:text-white cursor-pointer"
+        >
+          <span>Tasks</span>
+        </button>
+        <button
+          onClick={() => router.push('/dashboard/finance')}
+          className="px-4 py-2.5 transition-all flex items-center gap-2 border-b-2 border-transparent text-[#71717a] hover:text-white cursor-pointer"
+        >
+          <span>Payments</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('chat')}
+          className={`px-4 py-2.5 transition-all flex items-center gap-2 border-b-2 ${
+            activeTab === 'chat'
+              ? 'border-[#ff3e00] text-white bg-white/[0.03]'
+              : 'border-transparent text-[#71717a] hover:text-white'
+          }`}
+        >
+          <span>Chat</span>
+          {Object.values(chatSummary).reduce((acc, curr) => acc + (curr.unreadCount || 0), 0) > 0 && (
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-[#ff3e00] text-white font-bold">
+              {Object.values(chatSummary).reduce((acc, curr) => acc + (curr.unreadCount || 0), 0)}
+            </span>
+          )}
         </button>
         <button
           onClick={() => setActiveTab('invitations')}
@@ -690,14 +782,14 @@ export default function TeamMembersPage() {
               : 'border-transparent text-[#71717a] hover:text-white'
           }`}
         >
-          <span>Onboarding Invitations</span>
+          <span>Invitations</span>
           <span className="text-[10px] px-1.5 py-0.2 rounded-xs bg-[#141416] border border-[#27272a] text-[#a1a1aa]">
             {invitations.length}
           </span>
         </button>
       </div>
 
-      {activeTab === 'members' ? (
+      {activeTab === 'overview' && (
         <>
           {/* Filters Bar */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-[#141416] border border-[#242428] p-3 rounded-xs">
@@ -832,22 +924,22 @@ export default function TeamMembersPage() {
                       </div>
                     </div>
 
-                    {/* Project Statistics */}
+                    {/* Task Statistics (Authoritative counts from Task database) */}
                     <div className="grid grid-cols-2 gap-2 my-2">
                       <div className="bg-[#0e0e10] border border-[#242428] p-2.5 text-center">
                         <div className="text-[10px] font-mono uppercase tracking-wider text-[#8a8a93]">
-                          Assigned Projects
+                          Assigned Tasks
                         </div>
                         <div className="text-lg font-mono font-bold text-white mt-0.5">
-                          {member.projectsCount || 0}
+                          {member.assignedTasksCount ?? member.tasksCount ?? 0}
                         </div>
                       </div>
                       <div className="bg-[#0e0e10] border border-[#242428] p-2.5 text-center">
                         <div className="text-[10px] font-mono uppercase tracking-wider text-[#8a8a93]">
-                          Completed Projects
+                          Completed Tasks
                         </div>
                         <div className="text-lg font-mono font-bold text-[#00d664] mt-0.5">
-                          {member.completedProjectsCount || 0}
+                          {member.completedTasksCount ?? 0}
                         </div>
                       </div>
                     </div>
@@ -859,16 +951,17 @@ export default function TeamMembersPage() {
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setChatMember(member);
+                        setSelectedChatMemberId(member._id);
+                        setActiveTab('chat');
                       }}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#18181b] hover:bg-[#ff3e00]/10 border border-[#242428] hover:border-[#ff3e00]/40 text-xs font-mono text-white hover:text-[#ff3e00] transition-colors cursor-pointer"
                       title={`Chat with ${member.name}`}
                     >
                       <MessageSquare className="w-3.5 h-3.5 text-[#ff3e00]" />
                       <span>Chat</span>
-                      {member.chat?.unreadCount > 0 && (
+                      {(chatSummary[member._id]?.unreadCount || member.chat?.unreadCount || 0) > 0 && (
                         <span className="ml-1 bg-[#ff3e00] text-white text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-full">
-                          {member.chat.unreadCount}
+                          {chatSummary[member._id]?.unreadCount || member.chat?.unreadCount}
                         </span>
                       )}
                     </button>
@@ -883,8 +976,160 @@ export default function TeamMembersPage() {
             </div>
           )}
         </>
-      ) : (
-        /* Invitations Tab */
+      )}
+
+      {/* TAB CHAT: Telegram Desktop 2-column layout */}
+      {activeTab === 'chat' && (
+        <div className="bg-[#141416] border border-[#242428] rounded-none md:rounded-xs overflow-hidden shadow-2xl flex flex-col md:flex-row h-[720px] min-h-[550px]">
+          {/* Left Column: Team Members Search & List */}
+          <div
+            className={`w-full md:w-80 lg:w-96 md:border-r border-[#242428] flex flex-col h-full bg-[#0e0e11] shrink-0 ${
+              selectedChatMemberId ? 'hidden md:flex' : 'flex'
+            }`}
+          >
+            {/* Search Header */}
+            <div className="p-3 border-b border-[#242428] shrink-0">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#71717a] pointer-events-none" />
+                <input
+                  type="text"
+                  value={chatSearch}
+                  onChange={(e) => setChatSearch(e.target.value)}
+                  placeholder="Search team members..."
+                  className="w-full bg-[#141416] border border-[#27272a] focus:border-[#ff3e00] rounded-xs pl-8 pr-3 py-1.5 text-xs text-white placeholder-[#52525b] outline-none font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Member List */}
+            <div className="flex-1 overflow-y-auto divide-y divide-[#1e1e24] scrollbar-hide">
+              {filteredChatMembers.length === 0 ? (
+                <div className="p-6 text-center text-[#71717a] font-mono text-xs">
+                  No team members found
+                </div>
+              ) : (
+                filteredChatMembers.map((m) => {
+                  const isSelected = selectedChatMemberId === m._id;
+                  const summary = chatSummary[m._id];
+                  const unread = summary?.unreadCount || 0;
+                  const lastTime = summary?.lastMessageAt
+                    ? new Date(summary.lastMessageAt).toLocaleDateString([], {
+                        month: 'short',
+                        day: 'numeric',
+                      })
+                    : '';
+
+                  return (
+                    <button
+                      key={m._id}
+                      type="button"
+                      onClick={() => setSelectedChatMemberId(m._id)}
+                      className={`w-full text-left p-3 flex items-start gap-3 transition-colors cursor-pointer ${
+                        isSelected
+                          ? 'bg-[#1e1e24] border-l-2 border-[#ff3e00]'
+                          : 'hover:bg-[#141416] border-l-2 border-transparent'
+                      }`}
+                    >
+                      {/* Avatar initial */}
+                      <div className="w-9 h-9 rounded-xs bg-[#242428] border border-[#2e2e32] flex items-center justify-center font-mono font-bold text-white text-xs shrink-0">
+                        {m.name ? m.name.charAt(0).toUpperCase() : '?'}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="font-bold text-white text-xs truncate">
+                            {m.name}
+                          </span>
+                          {lastTime && (
+                            <span className="text-[10px] font-mono text-[#71717a] shrink-0">
+                              {lastTime}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between gap-1 mt-0.5">
+                          <p className="text-[11px] font-mono text-[#8a8a93] truncate">
+                            {summary?.lastMessageText || (m.telegramConnected ? 'No messages yet' : 'Telegram not connected')}
+                          </p>
+                          {unread > 0 && (
+                            <span className="shrink-0 bg-[#ff3e00] text-white text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-full">
+                              {unread}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 mt-1">
+                          {m.telegramConnected ? (
+                            <span className="text-[9px] font-mono text-[#00d664] flex items-center gap-1">
+                              <span className="w-1 h-1 rounded-full bg-[#00d664]" />
+                              <span>Connected</span>
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-mono text-[#ff3e00] flex items-center gap-1">
+                              <span className="w-1 h-1 rounded-full bg-[#ff3e00]" />
+                              <span>Telegram not connected</span>
+                            </span>
+                          )}
+                          {m.designation && (
+                            <span className="text-[9px] font-mono text-[#71717a] truncate">
+                              • {m.designation}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* Right Column: Chat Box */}
+          <div
+            className={`flex-1 flex flex-col h-full bg-[#141416] min-w-0 ${
+              !selectedChatMemberId ? 'hidden md:flex' : 'flex'
+            }`}
+          >
+            {selectedChatMember ? (
+              <div className="flex flex-col h-full">
+                {/* Mobile Back Button Bar */}
+                <div className="md:hidden flex items-center px-3 py-2 bg-[#0e0e11] border-b border-[#242428] shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedChatMemberId(null)}
+                    className="text-xs font-mono text-[#ff3e00] hover:text-white flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>← Back to team members</span>
+                  </button>
+                </div>
+
+                <div className="flex-1 min-h-0">
+                  <TeamMemberChatPanel
+                    teamMemberId={selectedChatMember._id}
+                    teamMemberName={selectedChatMember.name}
+                    teamMemberRole={selectedChatMember.role}
+                    telegramConnected={selectedChatMember.telegramConnected}
+                    telegramUsername={selectedChatMember.telegramUsername}
+                    onGenerateLink={() => handleGenerateLink(selectedChatMember)}
+                    onConversationUpdated={fetchChatSummary}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#0e0e11] text-[#71717a] font-mono">
+                <MessageSquare className="w-12 h-12 text-[#242428] mb-3" />
+                <h3 className="text-sm font-bold text-white mb-1">Team Members Chat</h3>
+                <p className="text-xs text-[#8a8a93] max-w-sm">
+                  Select a team member from the left sidebar to view messages, send replies, or share documents and photos.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Invitations Tab */}
+      {activeTab === 'invitations' && (
         <div className="space-y-4">
           <div className="bg-[#141416] border border-[#242428] rounded-none md:rounded-xs overflow-hidden">
             <div className="p-4 border-b border-[#242428] flex justify-between items-center">

@@ -447,9 +447,18 @@ export default function TasksPage() {
     setShowSubmissionModal(true);
   };
 
-  const handleOpenInspectModal = (task: any) => {
+  const handleOpenInspectModal = async (task: any) => {
     setInspectingTask(task);
     setShowInspectModal(true);
+    try {
+      const res = await fetch(`/api/tasks/${task._id}`);
+      const json = await res.json();
+      if (json.success && json.data) {
+        setInspectingTask(json.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch full task details:', err);
+    }
   };
 
   const handleOpenEditModal = async (task: any) => {
@@ -671,13 +680,17 @@ export default function TasksPage() {
 
   // Open Record Payment Modal for a task
   const handleOpenRecordPayment = (task: any) => {
+    const agreed = task.paymentSummary?.agreedAmount ?? (task.agreedAmount || 0);
+    const paid = task.paymentSummary?.totalPaid || 0;
+    const pending = task.paymentSummary?.outstanding ?? Math.max(0, agreed - paid);
+
     setPaymentFormData({
       taskId: task._id,
       projectId: task.projectId?._id || task.projectId,
-      teamMemberId: task.assignedTo?._id || '',
+      teamMemberId: task.assignedTo?._id || (typeof task.assignedTo === 'string' ? task.assignedTo : ''),
       taskTitle: task.title,
       teamMemberName: task.assignedTo?.name || 'Assigned Member',
-      amount: task.agreedAmount ? String(task.agreedAmount) : '',
+      amount: pending > 0 ? String(pending) : (agreed > 0 ? String(agreed) : ''),
       paymentMethod: 'UPI',
       paymentDate: new Date().toISOString().split('T')[0],
       reference: '',
@@ -715,6 +728,17 @@ export default function TasksPage() {
         setShowPaymentModal(false);
         setBannerSuccess(`Payment of ₹${Number(paymentFormData.amount).toLocaleString('en-IN')} recorded successfully!`);
         setTimeout(() => setBannerSuccess(null), 5000);
+        // Refresh inspectingTask payment summary
+        if (inspectingTask && inspectingTask._id === paymentFormData.taskId) {
+          fetch(`/api/tasks/${paymentFormData.taskId}`)
+            .then((r) => r.json())
+            .then((json) => {
+              if (json.success && json.data) setInspectingTask(json.data);
+            })
+            .catch(() => {});
+        }
+        // Refresh tasks table
+        fetchData();
       } else {
         alert(data.error?.message || 'Failed to record payment');
       }
@@ -2177,6 +2201,93 @@ export default function TasksPage() {
                     })}
                   </div>
                 )}
+              </div>
+
+              {/* Task Payment Section */}
+              <div className="p-3.5 bg-[#0a0a0a] border border-[#242428] space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs uppercase tracking-wider text-white font-semibold flex items-center gap-1.5 font-mono">
+                    <Coins className="w-3.5 h-3.5 text-[#00D664]" />
+                    <span>Task Payment</span>
+                  </span>
+                  {inspectingTask.assignedTo && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenRecordPayment(inspectingTask)}
+                      className="px-2.5 py-1 text-[11px] bg-[#00D664]/10 hover:bg-[#00D664]/20 text-[#00D664] border border-[#00D664]/30 transition-colors flex items-center gap-1 font-mono uppercase font-semibold cursor-pointer"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Add Payment</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 font-mono text-center">
+                  <div className="p-2.5 bg-[#141416] border border-[#242428]">
+                    <span className="text-[10px] text-[#88888e] uppercase block">Agreed Amount</span>
+                    <span className="text-sm font-bold text-white mt-0.5 block">
+                      ₹{(inspectingTask.paymentSummary?.agreedAmount ?? (inspectingTask.agreedAmount || 0)).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-[#141416] border border-[#242428]">
+                    <span className="text-[10px] text-[#88888e] uppercase block">Total Paid</span>
+                    <span className="text-sm font-bold text-[#00D664] mt-0.5 block">
+                      ₹{(inspectingTask.paymentSummary?.totalPaid || 0).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-[#141416] border border-[#242428]">
+                    <span className="text-[10px] text-[#88888e] uppercase block">Pending</span>
+                    <span className={`text-sm font-bold mt-0.5 block ${
+                      (inspectingTask.paymentSummary?.outstanding ?? Math.max(0, (inspectingTask.agreedAmount || 0) - (inspectingTask.paymentSummary?.totalPaid || 0))) > 0
+                        ? 'text-[#ff3e00]'
+                        : 'text-[#00D664]'
+                    }`}>
+                      ₹{(inspectingTask.paymentSummary?.outstanding ?? Math.max(0, (inspectingTask.agreedAmount || 0) - (inspectingTask.paymentSummary?.totalPaid || 0))).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Payment History */}
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-[#88888e] block">
+                    Payment History ({inspectingTask.paymentSummary?.payments?.length || 0})
+                  </span>
+                  {(!inspectingTask.paymentSummary?.payments || inspectingTask.paymentSummary.payments.length === 0) ? (
+                    <p className="text-[11px] text-[#88888e] italic font-mono">
+                      No payments recorded for this task yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-1 max-h-36 overflow-y-auto">
+                      {inspectingTask.paymentSummary.payments.map((p: any) => (
+                        <div
+                          key={p._id}
+                          className="p-2 bg-[#141416] border border-[#242428] flex items-center justify-between text-xs font-mono"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-white font-semibold">₹{p.amount?.toLocaleString('en-IN')}</span>
+                            <span className="text-[10px] text-[#88888e]">
+                              {p.paymentMethod} • {new Date(p.paymentDate).toLocaleDateString('en-IN')}
+                            </span>
+                            {p.reference && (
+                              <span className="text-[10px] text-[#55555a] truncate max-w-[120px]" title={p.reference}>
+                                ({p.reference})
+                              </span>
+                            )}
+                          </div>
+                          <span className={`text-[10px] uppercase px-1.5 py-0.5 font-bold ${
+                            p.status === 'PAID'
+                              ? 'bg-[#00D664]/10 text-[#00D664] border border-[#00D664]/30'
+                              : p.status === 'PENDING'
+                              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                              : 'bg-red-500/10 text-red-400 border border-red-500/30'
+                          }`}>
+                            {p.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 

@@ -1,13 +1,15 @@
 import mongoose from 'mongoose';
 import TeamMember from '@/models/TeamMember';
 import TeamMemberConversation, { ITeamMemberConversation } from '@/models/TeamMemberConversation';
-import TeamMemberMessage, { ITeamMemberMessage } from '@/models/TeamMemberMessage';
+import TeamMemberMessage, { ITeamMemberMessage, ITeamMemberAttachment } from '@/models/TeamMemberMessage';
 import User from '@/models/User';
 import { TelegramService } from './telegram.service';
 import { AuditService } from './audit.service';
 import { CacheService } from './cache.service';
+import { StorageService } from './storage.service';
 import { PushNotificationService } from './push-notification.service';
 import { dbConnect } from '@/lib/db/connect';
+import path from 'path';
 
 export interface AdminUserContext {
   id: string;
@@ -16,10 +18,21 @@ export interface AdminUserContext {
   role?: string;
 }
 
+export interface SendMessageAttachmentInput {
+  type: 'IMAGE' | 'FILE';
+  originalName: string;
+  mimeType: string;
+  size: number;
+  buffer?: Buffer;
+  storagePath?: string;
+  url?: string;
+}
+
 export interface SendMessageOptions {
   teamMemberId: string;
-  text: string;
+  text?: string;
   adminUser: AdminUserContext;
+  attachments?: SendMessageAttachmentInput[];
 }
 
 export interface ConversationMessagesResult {
@@ -153,11 +166,11 @@ export class TeamChatService {
   ): Promise<{ success: boolean; message: ITeamMemberMessage; conversation: ITeamMemberConversation }> {
     await dbConnect();
 
-    const { teamMemberId, text, adminUser } = params;
+    const { teamMemberId, text, adminUser, attachments: inputAttachments } = params;
 
-    const trimmedText = text?.trim();
-    if (!trimmedText) {
-      throw new Error('Message text cannot be empty');
+    const trimmedText = text?.trim() || '';
+    if (!trimmedText && (!inputAttachments || inputAttachments.length === 0)) {
+      throw new Error('Message text or attachment is required');
     }
 
     if (!mongoose.Types.ObjectId.isValid(teamMemberId)) {
@@ -188,6 +201,34 @@ export class TeamChatService {
       conversation.status = 'OPEN';
     }
 
+    // Process attachments if provided
+    const savedAttachments: ITeamMemberAttachment[] = [];
+    if (inputAttachments && inputAttachments.length > 0) {
+      for (const att of inputAttachments) {
+        let storagePath = att.storagePath;
+        let url = att.url;
+
+        if (att.buffer && !storagePath) {
+          const sanitized = (att.originalName || 'file').replace(/[^a-zA-Z0-9._-]/g, '_');
+          storagePath = `team-chat/${conversation._id}/${Date.now()}_${sanitized}`;
+          await StorageService.uploadFile(att.buffer, storagePath, att.mimeType);
+          url = await StorageService.getSignedUrl(storagePath);
+        } else if (!url && storagePath) {
+          url = await StorageService.getSignedUrl(storagePath);
+        }
+
+        savedAttachments.push({
+          type: att.type,
+          originalName: att.originalName,
+          mimeType: att.mimeType,
+          size: att.size,
+          storagePath: storagePath || '',
+          url,
+          createdAt: new Date(),
+        });
+      }
+    }
+
     // 1. Create message record with initial SENT status
     const message = new TeamMemberMessage({
       conversationId: conversation._id,
@@ -197,34 +238,70 @@ export class TeamChatService {
       senderName: adminUser.name || 'Admin',
       channel: 'CRM',
       text: trimmedText,
+      attachments: savedAttachments,
+      messageType: savedAttachments.length > 0 ? savedAttachments[0].type : 'TEXT',
       status: 'SENT',
       sentAt: new Date(),
     });
     await message.save();
 
     // 2. Dispatch via TelegramService directly to chatId
-    let formattedTelegramMessage = `⌯⌲<b>Dr. Debuggers (${adminUser.name || 'Admin'}):</b>\n\n${trimmedText}`;
-    try {
-      const { MessageTemplateService } = await import('./message-template.service');
-      const rendered = await MessageTemplateService.renderTemplate(
-        'TEAM_MEMBER_CHAT_MESSAGE',
-        'TELEGRAM',
-        {
-          adminName: adminUser.name || 'Admin',
-          messageText: trimmedText,
-          teamMemberName: member.name,
-        }
-      );
-      formattedTelegramMessage = rendered.body;
-    } catch {
-      // Safe fallback to default string
-    }
+    let sendResult: { success: boolean; messageId?: number; error?: string } = { success: false };
 
-    let sendResult: { success: boolean; messageId?: number; error?: string };
-    try {
-      sendResult = await TelegramService.sendMessageRaw(member.telegramChatId, formattedTelegramMessage);
-    } catch (err: any) {
-      sendResult = { success: false, error: err.message || 'Telegram dispatch failed' };
+    if (savedAttachments.length > 0) {
+      // Send attachment to Telegram
+      const primaryAtt = savedAttachments[0];
+      const captionText = trimmedText
+        ? `⌯⌲ <b>Dr. Debuggers (${adminUser.name || 'Admin'}):</b>\n\n${trimmedText}`
+        : `⌯⌲ <b>Dr. Debuggers (${adminUser.name || 'Admin'})</b>`;
+
+      const inputForAtt = inputAttachments?.[0];
+      const filePayload = inputForAtt?.buffer || primaryAtt.url || '';
+
+      try {
+        const tgRes = await TelegramService.sendMediaRaw(
+          member.telegramChatId,
+          primaryAtt.type === 'IMAGE' ? 'IMAGE' : 'DOCUMENT',
+          filePayload,
+          primaryAtt.originalName,
+          primaryAtt.mimeType,
+          captionText
+        );
+        sendResult = {
+          success: tgRes.success,
+          messageId: tgRes.messageId,
+          error: tgRes.error,
+        };
+        if (tgRes.fileId) {
+          primaryAtt.telegramFileId = tgRes.fileId;
+        }
+      } catch (err: any) {
+        sendResult = { success: false, error: err.message || 'Telegram file dispatch failed' };
+      }
+    } else {
+      // Text-only dispatch
+      let formattedTelegramMessage = `⌯⌲<b>Dr. Debuggers (${adminUser.name || 'Admin'}):</b>\n\n${trimmedText}`;
+      try {
+        const { MessageTemplateService } = await import('./message-template.service');
+        const rendered = await MessageTemplateService.renderTemplate(
+          'TEAM_MEMBER_CHAT_MESSAGE',
+          'TELEGRAM',
+          {
+            adminName: adminUser.name || 'Admin',
+            messageText: trimmedText,
+            teamMemberName: member.name,
+          }
+        );
+        formattedTelegramMessage = rendered.body;
+      } catch {
+        // Safe fallback
+      }
+
+      try {
+        sendResult = await TelegramService.sendMessageRaw(member.telegramChatId, formattedTelegramMessage);
+      } catch (err: any) {
+        sendResult = { success: false, error: err.message || 'Telegram dispatch failed' };
+      }
     }
 
     if (sendResult.success) {
@@ -235,7 +312,7 @@ export class TeamChatService {
       message.deliveredAt = new Date();
 
       conversation.lastMessageAt = new Date();
-      conversation.lastMessageText = trimmedText;
+      conversation.lastMessageText = trimmedText || (savedAttachments[0]?.type === 'IMAGE' ? '📷 Image' : '📎 File');
 
       // Parallelize MongoDB updates across independent collections
       await Promise.all([message.save(), conversation.save()]);
@@ -251,6 +328,7 @@ export class TeamChatService {
             conversationId: conversation._id.toString(),
             messageId: message._id.toString(),
             telegramMessageId: message.telegramMessageId,
+            attachmentsCount: savedAttachments.length,
           }
         ),
         CacheService.invalidateTeamChatCache(teamMemberId),
@@ -284,13 +362,14 @@ export class TeamChatService {
   static async handleIncomingTeamMemberMessage(
     teamMember: any,
     text: string,
-    telegramMessageId?: string | number
+    telegramMessageId?: string | number,
+    attachments?: ITeamMemberAttachment[]
   ): Promise<ITeamMemberMessage> {
     await dbConnect();
 
-    const trimmedText = text?.trim();
-    if (!trimmedText) {
-      throw new Error('Message text cannot be empty');
+    const trimmedText = text?.trim() || '';
+    if (!trimmedText && (!attachments || attachments.length === 0)) {
+      throw new Error('Message text or attachment is required');
     }
 
     if (teamMember.status === 'DEACTIVATED') {
@@ -316,6 +395,8 @@ export class TeamChatService {
       teamMemberId: memberId,
     }).sort({ status: -1, lastMessageAt: -1 });
 
+    const summaryText = trimmedText || (attachments && attachments.length > 0 ? (attachments[0].type === 'IMAGE' ? '📷 Image' : `📎 ${attachments[0].originalName}`) : 'Message');
+
     if (!conversation) {
       // Find primary admin with projection
       const defaultAdmin = await User.findOne({ role: 'ADMIN' }).select('_id').lean();
@@ -327,7 +408,7 @@ export class TeamChatService {
         type: 'TEAM_MEMBER',
         status: 'OPEN',
         lastMessageAt: new Date(),
-        lastMessageText: trimmedText,
+        lastMessageText: summaryText,
         unreadAdminCount: 1,
         unreadTeamMemberCount: 0,
       });
@@ -346,7 +427,7 @@ export class TeamChatService {
     } else {
       conversation.unreadAdminCount = (conversation.unreadAdminCount || 0) + 1;
       conversation.lastMessageAt = new Date();
-      conversation.lastMessageText = trimmedText;
+      conversation.lastMessageText = summaryText;
       if (conversation.status === 'CLOSED') {
         conversation.status = 'OPEN';
       }
@@ -362,6 +443,8 @@ export class TeamChatService {
       channel: 'TELEGRAM',
       telegramMessageId: telegramMessageId ? String(telegramMessageId) : undefined,
       text: trimmedText,
+      attachments: attachments || [],
+      messageType: attachments && attachments.length > 0 ? attachments[0].type : 'TEXT',
       status: 'DELIVERED',
       sentAt: new Date(),
       deliveredAt: new Date(),
@@ -375,7 +458,7 @@ export class TeamChatService {
     if (targetAdminId) {
       console.log(`[PUSH] incoming team member message for admin: ${targetAdminId}`);
       let pushTitle = `💬 ${teamMember.name}`;
-      let pushBody = trimmedText.length > 80 ? trimmedText.slice(0, 77) + '...' : trimmedText;
+      let pushBody = summaryText.length > 80 ? summaryText.slice(0, 77) + '...' : summaryText;
 
       try {
         const { MessageTemplateService } = await import('./message-template.service');
@@ -459,6 +542,7 @@ export class TeamChatService {
       TeamMemberMessage.find({
         teamMemberId: memberObjectId,
         sentAt: { $gt: afterDate },
+        isDeleted: { $ne: true },
       })
         .sort({ sentAt: 1 })
         .limit(100)
@@ -507,10 +591,10 @@ export class TeamChatService {
     const limit = Math.min(100, Math.max(1, Number(options.limit) || 50));
     const skip = (page - 1) * limit;
 
-    // Parallelize message count and messages fetch
+    // Parallelize message count and messages fetch (excluding soft-deleted messages)
     const [total, rawMessages] = await Promise.all([
-      TeamMemberMessage.countDocuments({ conversationId: conversation._id }),
-      TeamMemberMessage.find({ conversationId: conversation._id })
+      TeamMemberMessage.countDocuments({ conversationId: conversation._id, isDeleted: { $ne: true } }),
+      TeamMemberMessage.find({ conversationId: conversation._id, isDeleted: { $ne: true } })
         .sort({ sentAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -619,5 +703,103 @@ export class TeamChatService {
     }
 
     return summary;
+  }
+
+  /**
+   * Delete a single message (soft-delete to maintain audit integrity)
+   */
+  static async deleteMessage(
+    messageId: string,
+    teamMemberId: string,
+    adminUser: AdminUserContext
+  ): Promise<{ success: boolean; message: string }> {
+    await dbConnect();
+
+    if (!mongoose.Types.ObjectId.isValid(messageId) || !mongoose.Types.ObjectId.isValid(teamMemberId)) {
+      throw new Error('Invalid ID format');
+    }
+
+    const message = await TeamMemberMessage.findOne({
+      _id: new mongoose.Types.ObjectId(messageId),
+      teamMemberId: new mongoose.Types.ObjectId(teamMemberId),
+    });
+
+    if (!message) {
+      throw new Error('Message not found');
+    }
+
+    message.isDeleted = true;
+    message.deletedAt = new Date();
+    message.deletedBy = adminUser.email;
+    message.text = 'This message was deleted';
+    await message.save();
+
+    await CacheService.invalidateTeamChatCache(teamMemberId);
+
+    await AuditService.logAction(
+      adminUser.email,
+      'TEAM_MEMBER_CHAT_MESSAGE_DELETED',
+      'TeamMember',
+      teamMemberId,
+      {
+        conversationId: message.conversationId.toString(),
+        messageId: message._id.toString(),
+      }
+    );
+
+    return { success: true, message: 'Message deleted successfully' };
+  }
+
+  /**
+   * Clear entire conversation history with a team member
+   * Strictly preserves Team Member, Tasks, Credentials, Submissions, and Payments!
+   */
+  static async clearConversation(
+    teamMemberId: string,
+    adminUser: AdminUserContext
+  ): Promise<{ success: boolean; message: string }> {
+    await dbConnect();
+
+    if (!mongoose.Types.ObjectId.isValid(teamMemberId)) {
+      throw new Error('Invalid team member ID format');
+    }
+
+    const conversation = await TeamMemberConversation.findOne({
+      teamMemberId: new mongoose.Types.ObjectId(teamMemberId),
+    });
+
+    if (!conversation) {
+      return { success: true, message: 'No conversation to clear' };
+    }
+
+    // Soft delete all messages in conversation
+    await TeamMemberMessage.updateMany(
+      { conversationId: conversation._id },
+      {
+        $set: {
+          isDeleted: true,
+          deletedAt: new Date(),
+          deletedBy: adminUser.email,
+        },
+      }
+    );
+
+    conversation.lastMessageText = '';
+    conversation.unreadAdminCount = 0;
+    await conversation.save();
+
+    await CacheService.invalidateTeamChatCache(teamMemberId);
+
+    await AuditService.logAction(
+      adminUser.email,
+      'TEAM_MEMBER_CHAT_CLEARED',
+      'TeamMember',
+      teamMemberId,
+      {
+        conversationId: conversation._id.toString(),
+      }
+    );
+
+    return { success: true, message: 'Chat history cleared successfully' };
   }
 }

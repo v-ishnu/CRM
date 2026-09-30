@@ -22,6 +22,11 @@ import {
   Quote,
   List,
   ListOrdered,
+  Image as ImageIcon,
+  Paperclip,
+  Trash2,
+  Download,
+  FileText,
 } from 'lucide-react';
 import { sanitizeChatHtml, convertMarkdownToTelegramHtml } from '@/lib/templates/rich-text';
 
@@ -38,6 +43,17 @@ export interface TeamMemberChatPanelProps {
   isModal?: boolean;
 }
 
+interface ChatAttachment {
+  type: 'IMAGE' | 'FILE';
+  originalName: string;
+  mimeType: string;
+  size: number;
+  storagePath: string;
+  url: string;
+  telegramFileId?: string;
+  createdAt: string;
+}
+
 interface ChatMessage {
   _id: string;
   conversationId: string;
@@ -47,6 +63,9 @@ interface ChatMessage {
   channel: 'CRM' | 'TELEGRAM';
   telegramMessageId?: string;
   text: string;
+  attachments?: ChatAttachment[];
+  messageType?: 'TEXT' | 'IMAGE' | 'FILE' | 'MIXED';
+  isDeleted?: boolean;
   status: 'SENT' | 'DELIVERED' | 'FAILED' | 'READ';
   sentAt: string;
   deliveredAt?: string;
@@ -83,6 +102,7 @@ export function TeamMemberChatPanel({
   const [totalPages, setTotalPages] = useState(1);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const [unseenCount, setUnseenCount] = useState(0);
 
@@ -92,6 +112,8 @@ export function TeamMemberChatPanel({
   const lastMessageAtRef = useRef<string | null>(null);
   const pollingRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const applyFormatting = (startTag: string, endTag: string) => {
     const textarea = textareaRef.current;
@@ -300,7 +322,50 @@ export function TeamMemberChatPanel({
     await fetchMessages(page + 1);
   };
 
-  // Send message with optimistic UI and reconciliation
+  // Delete a single message (soft-delete on backend, removed from state)
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!confirm('Are you sure you want to delete this message?')) return;
+    try {
+      const res = await fetch(`/api/team-members/${teamMemberId}/chat?messageId=${messageId}`, {
+        method: 'DELETE',
+      });
+      const json = await res.json();
+      if (json.success) {
+        setMessages((prev) => prev.filter((m) => m._id !== messageId));
+      } else {
+        alert(json.error?.message || 'Failed to delete message');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error deleting message');
+    }
+  };
+
+  // Clear entire chat history safely (soft-deletes messages, keeps team member, tasks, credentials, and payments intact)
+  const handleClearChat = async () => {
+    if (
+      !confirm(
+        'Are you sure you want to clear chat history? Team member, tasks, credentials, and payments will not be affected.'
+      )
+    ) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/team-members/${teamMemberId}/chat?clearAll=true`, {
+        method: 'DELETE',
+      });
+      const json = await res.json();
+      if (json.success) {
+        setMessages([]);
+        if (onConversationUpdated) onConversationUpdated();
+      } else {
+        alert(json.error?.message || 'Failed to clear chat');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error clearing chat');
+    }
+  };
+
+  // Send message with optimistic UI and reconciliation (supports text, images, and files)
   const handleSendMessage = async (textToSend?: string | React.FormEvent) => {
     if (typeof textToSend === 'object' && textToSend !== null && 'preventDefault' in textToSend) {
       textToSend.preventDefault();
@@ -308,13 +373,28 @@ export function TeamMemberChatPanel({
     }
 
     const text = (typeof textToSend === 'string' ? textToSend : replyText).trim();
-    if (!text || sending || !telegramConnected) return;
+    const fileToSend = selectedFile;
+    if ((!text && !fileToSend) || sending || !telegramConnected) return;
 
     setSending(true);
     setSendError(null);
 
     // Optimistic message entry with unique client-side key
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const optimisticAttachments: ChatAttachment[] = fileToSend
+      ? [
+          {
+            type: fileToSend.type.startsWith('image/') ? 'IMAGE' : 'FILE',
+            originalName: fileToSend.name,
+            mimeType: fileToSend.type,
+            size: fileToSend.size,
+            storagePath: '',
+            url: URL.createObjectURL(fileToSend),
+            createdAt: new Date().toISOString(),
+          },
+        ]
+      : [];
+
     const optimisticMsg: ChatMessage = {
       _id: tempId,
       conversationId: conversation?._id || '',
@@ -323,23 +403,37 @@ export function TeamMemberChatPanel({
       senderName: 'You (Admin)',
       channel: 'CRM',
       text,
+      attachments: optimisticAttachments,
+      messageType: fileToSend ? (fileToSend.type.startsWith('image/') ? 'IMAGE' : 'FILE') : 'TEXT',
       status: 'SENT',
       sentAt: new Date().toISOString(),
     };
 
     setMessages((prev) => [...prev, optimisticMsg]);
     if (!textToSend) setReplyText('');
+    setSelectedFile(null);
 
     if (isNearBottomRef.current) {
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
     }
 
     try {
-      const res = await fetch(`/api/team-members/${teamMemberId}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-      });
+      let res: Response;
+      if (fileToSend) {
+        const formData = new FormData();
+        if (text) formData.append('text', text);
+        formData.append('file', fileToSend);
+        res = await fetch(`/api/team-members/${teamMemberId}/chat`, {
+          method: 'POST',
+          body: formData,
+        });
+      } else {
+        res = await fetch(`/api/team-members/${teamMemberId}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        });
+      }
 
       const json = await res.json();
 
@@ -482,6 +576,15 @@ export function TeamMemberChatPanel({
             <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-[#ff3e00]' : ''}`} />
           </button>
 
+          <button
+            type="button"
+            onClick={handleClearChat}
+            className="p-1.5 bg-[#18181b] hover:bg-[#ff3e00]/20 border border-[#242428] hover:border-[#ff3e00]/50 text-[#8a8a93] hover:text-[#ff3e00] rounded-none md:rounded-xs transition-colors cursor-pointer"
+            title="Clear chat history"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+
           {onClose && (
             <button
               type="button"
@@ -564,7 +667,7 @@ export function TeamMemberChatPanel({
               return (
                 <div
                   key={msg._id}
-                  className={`flex flex-col max-w-[85%] sm:max-w-[75%] space-y-1 ${
+                  className={`group flex flex-col max-w-[85%] sm:max-w-[75%] space-y-1 ${
                     isAdmin ? 'items-end ml-auto' : 'items-start mr-auto'
                   }`}
                 >
@@ -595,12 +698,57 @@ export function TeamMemberChatPanel({
                         : 'bg-[#18181b] text-white border-[#242428]'
                     }`}
                   >
-                    <div
-                      className="text-xs sm:text-sm whitespace-pre-wrap break-words leading-relaxed [&>pre]:bg-black/50 [&>pre]:p-2 [&>pre]:my-1.5 [&>pre]:font-mono [&>code]:bg-black/40 [&>code]:px-1 [&>code]:font-mono [&>a]:text-[#ff3e00] [&>a]:underline"
-                      dangerouslySetInnerHTML={{
-                        __html: sanitizeChatHtml(convertMarkdownToTelegramHtml(msg.text)),
-                      }}
-                    />
+                    {/* Attachments rendering */}
+                    {msg.attachments && msg.attachments.length > 0 && (
+                      <div className="space-y-2 mb-2">
+                        {msg.attachments.map((att, idx) => (
+                          <div key={idx} className="rounded-xs overflow-hidden">
+                            {att.type === 'IMAGE' ? (
+                              <a
+                                href={att.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block group/img relative"
+                              >
+                                <img
+                                  src={att.url}
+                                  alt={att.originalName || 'Chat image'}
+                                  className="max-w-xs max-h-60 rounded-xs object-cover border border-white/10 hover:opacity-90 transition-opacity"
+                                  loading="lazy"
+                                />
+                              </a>
+                            ) : (
+                              <a
+                                href={att.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                download={att.originalName}
+                                className="flex items-center gap-2 p-2 bg-black/40 hover:bg-black/60 border border-white/10 rounded-xs transition-colors text-white"
+                              >
+                                <FileText className="w-4 h-4 text-[#ff3e00] shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-mono font-medium truncate">{att.originalName}</p>
+                                  <p className="text-[10px] font-mono text-[#8a8a93]">
+                                    {(att.size / 1024).toFixed(1)} KB
+                                  </p>
+                                </div>
+                                <Download className="w-3.5 h-3.5 text-[#8a8a93] shrink-0" />
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Text content */}
+                    {msg.text && (
+                      <div
+                        className="text-xs sm:text-sm whitespace-pre-wrap break-words leading-relaxed [&>pre]:bg-black/50 [&>pre]:p-2 [&>pre]:my-1.5 [&>pre]:font-mono [&>code]:bg-black/40 [&>code]:px-1 [&>code]:font-mono [&>a]:text-[#ff3e00] [&>a]:underline"
+                        dangerouslySetInnerHTML={{
+                          __html: sanitizeChatHtml(convertMarkdownToTelegramHtml(msg.text)),
+                        }}
+                      />
+                    )}
                   </div>
 
                   {/* Metadata and Delivery Status */}
@@ -647,6 +795,16 @@ export function TeamMemberChatPanel({
                             </button>
                           </span>
                         )}
+
+                        {/* Per-message delete option */}
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteMessage(msg._id)}
+                          className="opacity-60 hover:opacity-100 transition-opacity p-0.5 text-[#71717a] hover:text-[#ff3e00] cursor-pointer ml-1"
+                          title="Delete message"
+                        >
+                          <Trash2 className="w-2.5 h-2.5" />
+                        </button>
                       </span>
                     )}
                   </div>
@@ -756,7 +914,80 @@ export function TeamMemberChatPanel({
           >
             <Link2 className="w-3.5 h-3.5" />
           </button>
+
+          <span className="w-px h-3.5 bg-[#242428] mx-0.5" />
+
+          {/* Hidden inputs for Image and File */}
+          <input
+            type="file"
+            ref={imageInputRef}
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files && e.target.files[0]) {
+                setSelectedFile(e.target.files[0]);
+              }
+              e.target.value = '';
+            }}
+          />
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept="application/pdf,application/zip,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files && e.target.files[0]) {
+                setSelectedFile(e.target.files[0]);
+              }
+              e.target.value = '';
+            }}
+          />
+
+          <button
+            type="button"
+            onClick={() => imageInputRef.current?.click()}
+            disabled={!telegramConnected || isClosed || sending}
+            title="Attach image (PNG, JPG, WebP)"
+            className="p-1 hover:bg-[#242428] text-[#a1a1aa] hover:text-white rounded-none md:rounded-xs transition-colors cursor-pointer disabled:opacity-30"
+          >
+            <ImageIcon className="w-3.5 h-3.5 text-[#ff3e00]" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={!telegramConnected || isClosed || sending}
+            title="Attach file (PDF, Doc, Zip)"
+            className="p-1 hover:bg-[#242428] text-[#a1a1aa] hover:text-white rounded-none md:rounded-xs transition-colors cursor-pointer disabled:opacity-30"
+          >
+            <Paperclip className="w-3.5 h-3.5" />
+          </button>
         </div>
+
+        {/* Selected File Preview Chip */}
+        {selectedFile && (
+          <div className="flex items-center justify-between p-2 mb-2 bg-[#18181b] border border-[#2e2e32] rounded-none md:rounded-xs font-mono text-xs animate-in fade-in duration-100">
+            <div className="flex items-center gap-2 truncate">
+              {selectedFile.type.startsWith('image/') ? (
+                <ImageIcon className="w-3.5 h-3.5 text-[#ff3e00] shrink-0" />
+              ) : (
+                <FileText className="w-3.5 h-3.5 text-[#ff3e00] shrink-0" />
+              )}
+              <span className="text-white truncate font-medium">{selectedFile.name}</span>
+              <span className="text-[#8a8a93] text-[10px] shrink-0">
+                ({(selectedFile.size / 1024).toFixed(1)} KB)
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedFile(null)}
+              className="p-1 text-[#8a8a93] hover:text-white cursor-pointer shrink-0"
+              title="Remove attachment"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         <form onSubmit={handleSendMessage} className="flex items-end gap-2">
           <div className="flex-1 min-w-0">
@@ -777,6 +1008,8 @@ export function TeamMemberChatPanel({
                   ? 'Connect Telegram to enable messaging...'
                   : isClosed
                   ? 'Conversation is closed. Reopen to send messages...'
+                  : selectedFile
+                  ? `Send ${selectedFile.name} (optional caption...)`
                   : 'Type a message... (Press Enter to send, Shift+Enter for newline)'
               }
               className="w-full bg-[#18181b] border border-[#242428] focus:border-[#ff3e00]/60 focus:outline-none text-white text-xs sm:text-sm p-2.5 rounded-none md:rounded-xs resize-none placeholder:text-[#52525b] font-mono disabled:opacity-50 disabled:cursor-not-allowed"
@@ -785,7 +1018,7 @@ export function TeamMemberChatPanel({
 
           <button
             type="submit"
-            disabled={!replyText.trim() || sending || !telegramConnected || isClosed}
+            disabled={(!replyText.trim() && !selectedFile) || sending || !telegramConnected || isClosed}
             className="px-3.5 sm:px-4 py-2.5 bg-[#ff3e00] hover:bg-[#ff3e00]/90 text-white font-mono font-bold text-xs uppercase tracking-wider rounded-none md:rounded-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed h-[58px] shrink-0"
           >
             {sending ? (

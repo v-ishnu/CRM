@@ -250,7 +250,18 @@ export default function TeamMemberWorkspacePage() {
     }
   }, [memberId]);
 
+  // Deep-link / bookmark redirect: send directly to centralized Team Members Chat
+  useEffect(() => {
+    if (activeTab === 'chat' && memberId) {
+      router.replace(`/dashboard/team?tab=chat&memberId=${memberId}`);
+    }
+  }, [activeTab, memberId, router]);
+
   const setTab = (tab: string) => {
+    if (tab === 'chat') {
+      router.push(`/dashboard/team?tab=chat&memberId=${memberId}`);
+      return;
+    }
     router.push(`/dashboard/team/${memberId}?tab=${tab}`);
   };
 

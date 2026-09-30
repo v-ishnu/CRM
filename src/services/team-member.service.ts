@@ -627,11 +627,19 @@ export class TeamMemberService {
       convMap.set(c.teamMemberId.toString(), c);
     }
 
-    // Enrich with active tasks count, assigned projects count, and chat summary
+    // Enrich with active tasks count, assigned tasks count, completed tasks count, assigned projects count, and chat summary
     const enriched = await Promise.all(
       members.map(async (m) => {
-        const [projectsCount, activeTasksCount, completedProjectsCount] = await Promise.all([
+        const [
+          projectsCount,
+          assignedTasksCount,
+          completedTasksCount,
+          activeTasksCount,
+          completedProjectsCount,
+        ] = await Promise.all([
           Project.countDocuments({ teamMemberIds: m._id }),
+          Task.countDocuments({ assignedTo: m._id }),
+          Task.countDocuments({ assignedTo: m._id, status: 'COMPLETED' }),
           Task.countDocuments({ assignedTo: m._id, status: { $nin: ['COMPLETED', 'CANCELLED'] } }),
           Project.countDocuments({ teamMemberIds: m._id, status: 'COMPLETED' }),
         ]);
@@ -641,6 +649,9 @@ export class TeamMemberService {
         return {
           ...m,
           projectsCount,
+          assignedTasksCount,
+          completedTasksCount,
+          tasksCount: assignedTasksCount,
           activeTasksCount,
           completedProjectsCount: completedProjectsCount || 0,
           chat: conv ? {
@@ -672,7 +683,17 @@ export class TeamMemberService {
       throw new Error('Team member not found');
     }
 
-    const [projects, tasks, payments, auditLogs] = await Promise.all([
+    const [
+      projects,
+      tasks,
+      payments,
+      auditLogs,
+      totalTasksCount,
+      todoTasksCount,
+      inProgressTasksCount,
+      reviewTasksCount,
+      completedTasksCount,
+    ] = await Promise.all([
       Project.find({ teamMemberIds: member._id }).select('projectCode name serviceType status totalAmount').lean(),
       Task.find({ assignedTo: member._id })
         .populate('projectId', 'name projectCode serviceType')
@@ -695,6 +716,11 @@ export class TeamMemberService {
         .sort({ timestamp: -1 })
         .limit(50)
         .lean(),
+      Task.countDocuments({ assignedTo: member._id }),
+      Task.countDocuments({ assignedTo: member._id, status: 'TODO' }),
+      Task.countDocuments({ assignedTo: member._id, status: 'IN_PROGRESS' }),
+      Task.countDocuments({ assignedTo: member._id, status: 'REVIEW' }),
+      Task.countDocuments({ assignedTo: member._id, status: 'COMPLETED' }),
     ]);
 
     const totalPaid = payments
@@ -709,11 +735,11 @@ export class TeamMemberService {
       payments,
       auditLogs,
       stats: {
-        totalTasks: tasks.length,
-        todoTasks: tasks.filter((t: any) => t.status === 'TODO').length,
-        inProgressTasks: tasks.filter((t: any) => t.status === 'IN_PROGRESS').length,
-        reviewTasks: tasks.filter((t: any) => t.status === 'REVIEW').length,
-        completedTasks: tasks.filter((t: any) => t.status === 'COMPLETED').length,
+        totalTasks: totalTasksCount || (tasks ? tasks.length : 0),
+        todoTasks: todoTasksCount || (tasks ? tasks.filter((t: any) => t.status === 'TODO').length : 0),
+        inProgressTasks: inProgressTasksCount || (tasks ? tasks.filter((t: any) => t.status === 'IN_PROGRESS').length : 0),
+        reviewTasks: reviewTasksCount || (tasks ? tasks.filter((t: any) => t.status === 'REVIEW').length : 0),
+        completedTasks: completedTasksCount || (tasks ? tasks.filter((t: any) => t.status === 'COMPLETED').length : 0),
         totalPaid,
         pendingPaymentsCount,
       },

@@ -93,6 +93,15 @@ export class TaskService {
       throw new Error('Project is required');
     }
 
+    let agreedAmount: number | undefined = undefined;
+    if (data.agreedAmount !== undefined && data.agreedAmount !== null && String(data.agreedAmount).trim() !== '') {
+      const amt = Number(data.agreedAmount);
+      if (isNaN(amt) || amt < 0) {
+        throw new Error('Agreed amount must be a non-negative number');
+      }
+      agreedAmount = amt;
+    }
+
     // Parallelize validation lookups to eliminate serial round trips
     const [project, client, assignedMember] = await Promise.all([
       Project.findById(data.projectId),
@@ -160,7 +169,7 @@ export class TaskService {
       dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
       attachments: data.attachments || [],
       requiredCredentialIds: data.requiredCredentialIds || [],
-      agreedAmount: data.agreedAmount !== undefined ? Number(data.agreedAmount) : undefined,
+      agreedAmount,
       autoShareCredentials: !!data.autoShareCredentials,
       credentialAccessRevoked: false,
       submissionRequired: !!data.submissionRequired,
@@ -270,7 +279,20 @@ export class TaskService {
       task.attachments = data.attachments as any;
     }
     if (data.agreedAmount !== undefined) {
-      task.agreedAmount = Number(data.agreedAmount);
+      if (data.agreedAmount === null || String(data.agreedAmount).trim() === '') {
+        task.agreedAmount = undefined;
+      } else {
+        const amt = Number(data.agreedAmount);
+        if (isNaN(amt) || amt < 0) {
+          throw new Error('Agreed amount must be a non-negative number');
+        }
+        const { TeamPaymentService } = await import('./team-payment.service');
+        const paymentSummary = await TeamPaymentService.getTaskPaymentSummary(task._id.toString());
+        if (amt < paymentSummary.totalPaid) {
+          throw new Error(`Cannot set agreed amount to ₹${amt} because ₹${paymentSummary.totalPaid} has already been paid for this task`);
+        }
+        task.agreedAmount = amt;
+      }
     }
     if (data.autoShareCredentials !== undefined) {
       task.autoShareCredentials = data.autoShareCredentials;
@@ -496,7 +518,9 @@ export class TaskService {
     const query: any = {};
     if (filter.projectId) query.projectId = filter.projectId;
     if (filter.clientId) query.clientId = filter.clientId;
-    if (filter.assignedTo) query.assignedTo = filter.assignedTo;
+    if (filter.assignedTo) {
+      query.assignedTo = filter.assignedTo;
+    }
     if (filter.status) query.status = filter.status;
     if (filter.priority) query.priority = filter.priority;
     if (filter.search) {
@@ -557,6 +581,19 @@ export class TaskService {
       });
     } else {
       task.requiredCredentials = [];
+    }
+
+    try {
+      const { TeamPaymentService } = await import('./team-payment.service');
+      const paymentSummary = await TeamPaymentService.getTaskPaymentSummary(id);
+      task.paymentSummary = paymentSummary;
+    } catch {
+      task.paymentSummary = {
+        agreedAmount: task.agreedAmount || 0,
+        totalPaid: 0,
+        pendingAmount: task.agreedAmount || 0,
+        payments: [],
+      };
     }
 
     return task;

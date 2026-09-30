@@ -1,5 +1,16 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
+export interface ITeamMemberAttachment {
+  type: 'IMAGE' | 'FILE';
+  originalName: string;
+  mimeType: string;
+  size: number;
+  storagePath: string;
+  url?: string;
+  telegramFileId?: string;
+  createdAt?: Date;
+}
+
 export interface ITeamMemberMessage extends Document {
   conversationId: mongoose.Types.ObjectId;
   teamMemberId: mongoose.Types.ObjectId;
@@ -9,7 +20,12 @@ export interface ITeamMemberMessage extends Document {
   channel: 'CRM' | 'TELEGRAM';
   telegramMessageId?: string;
   text: string;
+  attachments?: ITeamMemberAttachment[];
+  messageType?: 'TEXT' | 'IMAGE' | 'FILE';
   status: 'SENT' | 'DELIVERED' | 'FAILED' | 'READ';
+  isDeleted?: boolean;
+  deletedAt?: Date;
+  deletedBy?: string;
   sentAt: Date;
   deliveredAt?: Date;
   readAt?: Date;
@@ -60,8 +76,41 @@ const TeamMemberMessageSchema = new Schema<ITeamMemberMessage>(
     },
     text: {
       type: String,
-      required: true,
+      default: '',
       trim: true,
+    },
+    attachments: [
+      {
+        type: {
+          type: String,
+          enum: ['IMAGE', 'FILE'],
+          required: true,
+        },
+        originalName: { type: String, required: true },
+        mimeType: { type: String, required: true },
+        size: { type: Number, required: true },
+        storagePath: { type: String, required: true },
+        url: { type: String },
+        telegramFileId: { type: String },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
+    messageType: {
+      type: String,
+      enum: ['TEXT', 'IMAGE', 'FILE'],
+      default: 'TEXT',
+      required: true,
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    deletedAt: {
+      type: Date,
+    },
+    deletedBy: {
+      type: String,
     },
     status: {
       type: String,

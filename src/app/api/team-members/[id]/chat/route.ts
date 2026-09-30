@@ -72,13 +72,42 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const { id } = await params;
     const adminUser = await getAdminUser(req);
+    const contentType = req.headers.get('content-type') || '';
 
-    const body = await req.json();
-    const text = body.text || body.message;
+    let text = '';
+    let attachments: any[] | undefined = undefined;
 
-    if (!text || typeof text !== 'string' || !text.trim()) {
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await req.formData();
+      text = ((formData.get('text') || formData.get('message')) as string) || '';
+      const file = formData.get('file') as File | null;
+
+      if (file && typeof file.arrayBuffer === 'function') {
+        const arrayBuf = await file.arrayBuffer();
+        const buffer = Buffer.from(arrayBuf);
+        const mimeType = file.type || 'application/octet-stream';
+        const isImage = mimeType.startsWith('image/');
+        const type: 'IMAGE' | 'FILE' = isImage ? 'IMAGE' : 'FILE';
+
+        attachments = [
+          {
+            type,
+            originalName: file.name || (isImage ? 'image.jpg' : 'file.dat'),
+            mimeType,
+            size: file.size || buffer.length,
+            buffer,
+          },
+        ];
+      }
+    } else {
+      const body = await req.json();
+      text = body.text || body.message || '';
+      attachments = body.attachments;
+    }
+
+    if (!text.trim() && (!attachments || attachments.length === 0)) {
       return NextResponse.json(
-        { success: false, error: { code: 'VALIDATION_ERROR', message: 'Message text is required' } },
+        { success: false, error: { code: 'VALIDATION_ERROR', message: 'Message text or attachment is required' } },
         { status: 400 }
       );
     }
@@ -87,6 +116,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       teamMemberId: id,
       text: text.trim(),
       adminUser,
+      attachments,
     });
 
     return NextResponse.json({ success: true, data: result }, { status: 201 });
@@ -104,6 +134,36 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json(
       { success: false, error: { code, message: error.message } },
       { status }
+    );
+  }
+}
+
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params;
+    const adminUser = await getAdminUser(req);
+    const { searchParams } = new URL(req.url);
+    const messageId = searchParams.get('messageId');
+    const clearAll = searchParams.get('clearAll') === 'true';
+
+    if (messageId) {
+      const result = await TeamChatService.deleteMessage(messageId, id, adminUser);
+      return NextResponse.json({ success: true, data: result });
+    }
+
+    if (clearAll) {
+      const result = await TeamChatService.clearConversation(id, adminUser);
+      return NextResponse.json({ success: true, data: result });
+    }
+
+    return NextResponse.json(
+      { success: false, error: { code: 'BAD_REQUEST', message: 'Specify messageId or clearAll=true' } },
+      { status: 400 }
+    );
+  } catch (error: any) {
+    return NextResponse.json(
+      { success: false, error: { code: 'CHAT_DELETE_FAILED', message: error.message } },
+      { status: 400 }
     );
   }
 }

@@ -1622,16 +1622,69 @@ export class TelegramService {
       }
     }
 
-    // If a file was received without an active task submission context, guide the user
+    // If an attachment was received without an active task submission context, route to Admin <-> Team Member Chat!
     if (rawAttachment) {
-      await this.sendMessageRaw(
-        chatId,
-        `ℹ️ <b>File received, but no task submission is currently active.</b>\n\n` +
-        `To submit deliverables for a task, please tap <b>✅ Mark as Done</b> on the task first (or use /tasks to view your tasks).\n\n` +
-        `<i>To send a message to Admin, please send text.</i>`,
-        { reply_markup: this.getTeamMemberReplyKeyboard() }
-      );
-      return;
+      const fileId = rawAttachment.file_id;
+      const fileName = rawAttachment.file_name || (rawAttachment.width ? `photo_${Date.now()}.jpg` : `file_${Date.now()}`);
+      const isPhoto = !!rawAttachment.width || rawAttachment.mime_type?.startsWith('image/') || (fileName && /\.(jpg|jpeg|png|webp|gif)$/i.test(fileName));
+
+      let fileBuffer: Buffer | null = null;
+      const botToken = process.env.TELEGRAM_BOT_TOKEN || BOT_TOKEN;
+      if (process.env.NODE_ENV === 'test') {
+        fileBuffer = Buffer.from('mock chat attachment content');
+      } else if (botToken && fileId) {
+        try {
+          const resFile = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
+          const dataFile = await resFile.json();
+          if (dataFile.ok && dataFile.result?.file_path) {
+            const resBuffer = await fetch(`https://api.telegram.org/file/bot${botToken}/${dataFile.result.file_path}`);
+            const arrayBuffer = await resBuffer.arrayBuffer();
+            fileBuffer = Buffer.from(arrayBuffer);
+          }
+        } catch (err: any) {
+          console.error('Failed to download telegram file for team chat:', err);
+        }
+      }
+
+      if (fileBuffer) {
+        const pathModule = await import('path');
+        const sanitizedName = (fileName || 'attachment').replace(/[^a-zA-Z0-9._-]/g, '_');
+        const ext = pathModule.default.extname(fileName || '').toLowerCase();
+        let contentType = rawAttachment.mime_type || 'application/octet-stream';
+        if (!rawAttachment.mime_type) {
+          if (ext === '.pdf') contentType = 'application/pdf';
+          else if (['.jpg', '.jpeg'].includes(ext)) contentType = 'image/jpeg';
+          else if (ext === '.png') contentType = 'image/png';
+          else if (ext === '.zip') contentType = 'application/zip';
+          else if (isPhoto) contentType = 'image/jpeg';
+        }
+
+        const { StorageService } = await import('./storage.service');
+        const storagePath = `team-chat/${teamMember._id}/${Date.now()}_${sanitizedName}`;
+        await StorageService.uploadFile(fileBuffer, storagePath, contentType);
+        const signedUrl = await StorageService.getSignedUrl(storagePath);
+
+        const attachment = {
+          type: (isPhoto ? 'IMAGE' : 'FILE') as 'IMAGE' | 'FILE',
+          originalName: fileName,
+          mimeType: contentType,
+          size: fileBuffer.length,
+          storagePath,
+          url: signedUrl,
+          telegramFileId: fileId,
+          createdAt: new Date(),
+        };
+
+        const { TeamChatService } = await import('./team-chat.service');
+        await TeamChatService.handleIncomingTeamMemberMessage(teamMember, raw || '', messageId, [attachment]);
+
+        await this.sendMessageRaw(
+          chatId,
+          `<i>✓ ${isPhoto ? 'Photo' : 'File'} received by Admin.</i>`,
+          { reply_markup: this.getTeamMemberReplyKeyboard() }
+        );
+        return;
+      }
     }
 
     // If it is not a slash command and not a menu keyboard button, route to Admin <-> Team Member Chat!
