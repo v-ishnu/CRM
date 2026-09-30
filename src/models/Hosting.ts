@@ -11,6 +11,7 @@ const EncryptedFieldSchema = new Schema(
 );
 
 export type HostingStatus = 'ACTIVE' | 'EXPIRING_SOON' | 'EXPIRED' | 'CANCELLED';
+export type WebsiteStatus = 'ACTIVE' | 'EXPIRING_SOON' | 'EXPIRED' | 'SUSPENDED' | 'CANCELLED';
 
 export interface IHostingRenewalRecord {
   renewedAt: Date;
@@ -20,6 +21,18 @@ export interface IHostingRenewalRecord {
   actor: string;
 }
 
+export interface IHostingWebsite {
+  _id: mongoose.Types.ObjectId;
+  domain: string;
+  expiryDate: Date;
+  status: WebsiteStatus;
+  notes?: string;
+  credentialIds: mongoose.Types.ObjectId[];
+  notificationsSent?: Map<string, Date>;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 export interface IHosting extends Document {
   clientId: mongoose.Types.ObjectId;
   projectId?: mongoose.Types.ObjectId;
@@ -27,7 +40,7 @@ export interface IHosting extends Document {
   hostingType: string;
   panelUrl?: string;
   serverHost?: string;
-  domain: string;
+  domain?: string;
   port?: number | string;
   planName?: string;
   username?: string;
@@ -39,6 +52,7 @@ export interface IHosting extends Document {
   autoRenewal: boolean;
   status: HostingStatus;
   notes?: string;
+  websites: IHostingWebsite[];
   notificationsSent: Map<string, Date>;
   renewalHistory: IHostingRenewalRecord[];
   createdAt: Date;
@@ -54,6 +68,44 @@ const HostingRenewalSchema = new Schema<IHostingRenewalRecord>(
     actor: { type: String, required: true },
   },
   { _id: false }
+);
+
+export const HostingWebsiteSchema = new Schema<IHostingWebsite>(
+  {
+    domain: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    expiryDate: {
+      type: Date,
+      required: true,
+    },
+    status: {
+      type: String,
+      enum: ['ACTIVE', 'EXPIRING_SOON', 'EXPIRED', 'SUSPENDED', 'CANCELLED'],
+      default: 'ACTIVE',
+      required: true,
+    },
+    notes: {
+      type: String,
+      trim: true,
+    },
+    credentialIds: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: 'Credential',
+      },
+    ],
+    notificationsSent: {
+      type: Map,
+      of: Date,
+      default: () => new Map(),
+    },
+  },
+  {
+    timestamps: true,
+  }
 );
 
 const HostingSchema = new Schema<IHosting>(
@@ -90,7 +142,8 @@ const HostingSchema = new Schema<IHosting>(
     },
     domain: {
       type: String,
-      required: true,
+      required: false,
+      default: '',
       trim: true,
       index: true,
     },
@@ -137,6 +190,10 @@ const HostingSchema = new Schema<IHosting>(
     notes: {
       type: String,
     },
+    websites: {
+      type: [HostingWebsiteSchema],
+      default: [],
+    },
     notificationsSent: {
       type: Map,
       of: Date,
@@ -151,6 +208,9 @@ const HostingSchema = new Schema<IHosting>(
     timestamps: true,
   }
 );
+
+HostingSchema.index({ 'websites.domain': 1 });
+HostingSchema.index({ 'websites.expiryDate': 1 });
 
 const Hosting: Model<IHosting> =
   mongoose.models.Hosting || mongoose.model<IHosting>('Hosting', HostingSchema);

@@ -20,6 +20,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     const daysRemaining = HostingService.calculateDaysRemaining(hosting.expiryDate);
+    const rawWebsites = HostingService.normalizeWebsites(hosting);
+    const safeWebsites = rawWebsites.map((w: any) => ({
+      _id: w._id,
+      domain: w.domain,
+      expiryDate: w.expiryDate,
+      daysRemaining: HostingService.calculateDaysRemaining(w.expiryDate),
+      status: w.status,
+      notes: w.notes,
+      credentialCount: w.credentialIds?.length || 0,
+      createdAt: w.createdAt,
+      updatedAt: w.updatedAt,
+    }));
 
     // Omit sensitive passwords in standard GET
     return NextResponse.json({
@@ -42,6 +54,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         autoRenewal: hosting.autoRenewal,
         status: hosting.status,
         notes: hosting.notes,
+        websites: safeWebsites,
         renewalHistory: hosting.renewalHistory,
         createdAt: hosting.createdAt,
         updatedAt: hosting.updatedAt,

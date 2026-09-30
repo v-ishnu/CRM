@@ -1083,8 +1083,27 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 </thead>
                 <tbody className="divide-y divide-[#242428] text-[#88888e]">
                   {hostings.map((h) => (
-                    <tr key={h._id} className="hover:bg-[#18181b]/50 transition-colors">
-                      <td className="px-4 py-3 font-semibold text-white">{h.domain}</td>
+                    <tr key={h._id} className="hover:bg-[#18181b]/50 transition-colors align-top">
+                      <td className="px-4 py-3 font-semibold text-white">
+                        <div className="font-mono text-xs">{h.domain || 'Hosting Account'}</div>
+                        {h.websites && h.websites.length > 0 && (
+                          <div className="mt-2 space-y-1">
+                            <span className="text-[10px] font-mono uppercase tracking-wider text-[#55555e]">Websites:</span>
+                            {h.websites.map((w: any) => (
+                              <div key={w._id || w.domain} className="flex flex-wrap items-center gap-1.5 text-[11px] text-[#88888e] bg-[#0a0a0a] px-2 py-0.5 border border-[#242428]">
+                                <span className="text-[#00D664]">🌐</span>
+                                <span className="text-white font-mono">{w.domain}</span>
+                                <span className="text-[#55555e]">•</span>
+                                <span>Exp: {w.expiryDate ? new Date(w.expiryDate).toLocaleDateString() : '—'}</span>
+                                <span className={`px-1 py-0.2 text-[9px] font-mono font-semibold ${
+                                  w.status === 'ACTIVE' ? 'text-[#00D664]' :
+                                  w.status === 'EXPIRING_SOON' ? 'text-amber-400' : 'text-red-400'
+                                }`}>[{w.status}]</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-white">
                         {h.hostingProvider} • {h.hostingType}
                       </td>

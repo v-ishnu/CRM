@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
       const searchRegex = new RegExp(search, 'i');
       query.$or = [
         { domain: searchRegex },
+        { 'websites.domain': searchRegex },
         { hostingProvider: searchRegex },
         { planName: searchRegex },
         { serverHost: searchRegex },
@@ -37,6 +38,19 @@ export async function GET(req: NextRequest) {
     // Map to safe response (NEVER return password, sshKey, apiToken in list)
     const safeHostings = hostings.map((h: any) => {
       const daysRemaining = HostingService.calculateDaysRemaining(h.expiryDate);
+      const rawWebsites = HostingService.normalizeWebsites(h);
+      const safeWebsites = rawWebsites.map((w: any) => ({
+        _id: w._id,
+        domain: w.domain,
+        expiryDate: w.expiryDate,
+        daysRemaining: HostingService.calculateDaysRemaining(w.expiryDate),
+        status: w.status,
+        notes: w.notes,
+        credentialCount: w.credentialIds?.length || 0,
+        createdAt: w.createdAt,
+        updatedAt: w.updatedAt,
+      }));
+
       return {
         _id: h._id,
         clientId: h.clientId,
@@ -55,6 +69,7 @@ export async function GET(req: NextRequest) {
         autoRenewal: h.autoRenewal,
         status: h.status,
         notes: h.notes,
+        websites: safeWebsites,
         renewalHistoryCount: h.renewalHistory?.length || 0,
         createdAt: h.createdAt,
         updatedAt: h.updatedAt,

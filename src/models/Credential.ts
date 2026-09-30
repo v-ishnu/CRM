@@ -20,6 +20,9 @@ export interface ICredential extends Document {
   clientId: mongoose.Types.ObjectId;
   projectId?: mongoose.Types.ObjectId;
   taskId?: mongoose.Types.ObjectId;
+  hostingId?: mongoose.Types.ObjectId;
+  websiteId?: mongoose.Types.ObjectId;
+  domainId?: mongoose.Types.ObjectId;
   credentialType?: string;
   source: 'MANUAL' | 'CLIENT_REQUEST' | 'IMPORTED';
   service: IEncryptedField;
@@ -56,6 +59,19 @@ const CredentialSchema = new Schema<ICredential>(
     taskId: {
       type: Schema.Types.ObjectId,
       ref: 'Task',
+      index: true,
+    },
+    hostingId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Hosting',
+      index: true,
+    },
+    websiteId: {
+      type: Schema.Types.ObjectId,
+      index: true,
+    },
+    domainId: {
+      type: Schema.Types.ObjectId,
       index: true,
     },
     credentialType: {

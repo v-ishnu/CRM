@@ -135,11 +135,13 @@ export class CredentialSharingService {
     }
 
     // 9. Load authoritative active credentials belonging to this project (Dynamic Least Privilege)
+    // Website-specific credentials (with websiteId) are strictly excluded from general project queries
+    // unless explicitly authorized in task.requiredCredentialIds or assigned to taskId.
     let candidateQuery: any;
     if (task.requiredCredentialIds && task.requiredCredentialIds.length > 0) {
       candidateQuery = {
         $or: [
-          { projectId: project._id },
+          { projectId: project._id, websiteId: { $in: [null, undefined] }, domainId: { $in: [null, undefined] } },
           { _id: { $in: task.requiredCredentialIds } },
           { taskId: task._id },
         ],
@@ -148,7 +150,7 @@ export class CredentialSharingService {
     } else {
       candidateQuery = {
         $or: [
-          { projectId: project._id },
+          { projectId: project._id, websiteId: { $in: [null, undefined] }, domainId: { $in: [null, undefined] } },
           { taskId: task._id },
         ],
         isRevoked: { $ne: true },

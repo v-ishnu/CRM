@@ -3014,7 +3014,7 @@ export class TelegramService {
                  `   <b>Project:</b> ${projectName}\n` +
                  `   <b>Provider:</b> ${h.hostingProvider}${h.hostingType ? ` (${h.hostingType})` : ''}\n` +
                  `   <b>Status:</b> ${statusEmoji} ${statusText}\n` +
-                 `   <b>Expires:</b> ${expiryDateFormatted} <i>(${daysText})</i>\n`;
+                 `   <b>Hosting Expiry:</b> ${expiryDateFormatted} <i>(${daysText})</i>\n`;
 
           if (h.serverHost) {
             msg += `   <b>Server:</b> <code>${h.serverHost}</code>\n`;
@@ -3024,6 +3024,29 @@ export class TelegramService {
           }
           if (h.planName) {
             msg += `   <b>Plan:</b> ${h.planName}\n`;
+          }
+
+          const websites = HostingService.normalizeWebsites(h);
+          if (websites.length > 0 && (h.websites && h.websites.length > 0)) {
+            msg += `   <b>Websites (${websites.length}):</b>\n`;
+            websites.forEach((w: any) => {
+              const wDays = HostingService.calculateDaysRemaining(w.expiryDate);
+              const wStatus = HostingService.deriveWebsiteStatus(w.expiryDate, w.status);
+              let wEmoji = '🟢';
+              if (wStatus === 'EXPIRING_SOON') wEmoji = '⚠️';
+              else if (wStatus === 'EXPIRED') wEmoji = '🔴';
+              else if (wStatus === 'CANCELLED' || wStatus === 'SUSPENDED') wEmoji = '⚪';
+
+              const wExpiryFormatted = new Date(w.expiryDate).toLocaleDateString('en-IN', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+              });
+              const wDaysText = wDays <= 0 ? 'Expired' : `${wDays}d remaining`;
+              msg += `   🌐 <b>${w.domain}</b>\n` +
+                     `      Expiry: ${wExpiryFormatted} (${wDaysText})\n` +
+                     `      Status: ${wEmoji} ${wStatus}\n`;
+            });
           }
           msg += `\n`;
         });

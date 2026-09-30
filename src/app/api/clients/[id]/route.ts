@@ -90,17 +90,29 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const Hosting = (await import('@/models/Hosting')).default;
     const { HostingService } = await import('@/services/hosting.service');
     const rawHostings = await Hosting.find({ clientId: id }).sort({ expiryDate: 1 }).lean();
-    const hostings = rawHostings.map((h: any) => ({
-      _id: h._id,
-      domain: h.domain,
-      hostingProvider: h.hostingProvider,
-      hostingType: h.hostingType,
-      panelUrl: h.panelUrl,
-      expiryDate: h.expiryDate,
-      daysRemaining: HostingService.calculateDaysRemaining(h.expiryDate),
-      status: h.status,
-      autoRenewal: h.autoRenewal,
-    }));
+    const hostings = rawHostings.map((h: any) => {
+      const websites = HostingService.normalizeWebsites(h).map((w) => ({
+        _id: w._id,
+        domain: w.domain,
+        expiryDate: w.expiryDate,
+        daysRemaining: HostingService.calculateDaysRemaining(w.expiryDate),
+        status: w.status,
+        notes: w.notes,
+        credentialCount: w.credentialIds?.length || 0,
+      }));
+      return {
+        _id: h._id,
+        domain: h.domain,
+        hostingProvider: h.hostingProvider,
+        hostingType: h.hostingType,
+        panelUrl: h.panelUrl,
+        expiryDate: h.expiryDate,
+        daysRemaining: HostingService.calculateDaysRemaining(h.expiryDate),
+        status: h.status,
+        autoRenewal: h.autoRenewal,
+        websites,
+      };
+    });
 
     return NextResponse.json({
       success: true,
