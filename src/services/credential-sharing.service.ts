@@ -9,11 +9,13 @@ import { AuditService } from './audit.service';
 import { TelegramService } from './telegram.service';
 import { TeamMemberService } from './team-member.service';
 import { dbConnect } from '@/lib/db/connect';
+import { escapeHtml, stripHtml } from '@/lib/templates/rich-text';
 
 export interface ShareCredentialOptions {
   oneTime?: boolean;
   notes?: string;
   chatId?: string;
+  requesterTeamMemberId?: string;
 }
 
 export class CredentialSharingService {
@@ -49,23 +51,23 @@ export class CredentialSharingService {
       throw new Error('Cannot share credentials: Task has no assigned team member');
     }
 
+    // 2b. Verify requester is authorized for this task if specified
+    if (options.requesterTeamMemberId && task.assignedTo.toString() !== options.requesterTeamMemberId) {
+      throw new Error('Cannot share credentials: Team member is not assigned to this task');
+    }
+
     // 3. Verify Task Credential Access is not revoked
     if (task.credentialAccessRevoked) {
       throw new Error('Credential access for this task has been revoked. Re-enable access before sharing.');
     }
 
-    // 4. Verify Task has required credentials specified
-    if (!task.requiredCredentialIds || task.requiredCredentialIds.length === 0) {
-      throw new Error('No specific credentials are required for this task. Select required credentials before sharing.');
-    }
-
-    // 5. Load Project & verify Task belongs to Project
+    // 4. Load Project & verify Task belongs to Project
     const project = await Project.findById(task.projectId);
     if (!project) {
       throw new Error('Associated project not found');
     }
 
-    // 6. Load Team Member & verify ACTIVE status
+    // 5. Load Team Member & verify ACTIVE status
     const teamMember = await TeamMember.findById(task.assignedTo);
     if (!teamMember) {
       throw new Error('Assigned team member not found');
@@ -86,7 +88,7 @@ export class CredentialSharingService {
       throw new Error(`Cannot share credentials: Team member is not active (current status: ${teamMember.status})`);
     }
 
-    // 7. Verify Team Member belongs to Project team (or is explicitly assigned to this project's task)
+    // 6. Verify Team Member belongs to Project team (or is explicitly assigned to this project's task)
     const isAssignedToProject = (project.teamMemberIds && project.teamMemberIds.some(
       (id) => id.toString() === teamMember._id.toString()
     )) || (task.assignedTo && task.assignedTo.toString() === teamMember._id.toString());
@@ -106,7 +108,7 @@ export class CredentialSharingService {
       throw new Error(`Cannot share credentials: Team member "${teamMember.name}" is not assigned to project "${project.name}"`);
     }
 
-    // 8. Verify Team Member has VIEW_CREDENTIALS permission
+    // 7. Verify Team Member has VIEW_CREDENTIALS permission
     const hasCredPerm = TeamMemberService.hasPermission(teamMember, 'VIEW_CREDENTIALS');
     if (!hasCredPerm) {
       await AuditService.log({
@@ -123,7 +125,7 @@ export class CredentialSharingService {
       throw new Error(`Cannot share credentials: Team member "${teamMember.name}" does not have VIEW_CREDENTIALS permission`);
     }
 
-    // 9. Verify Team Member has Telegram connected or active chat session
+    // 8. Verify Team Member has Telegram connected or active chat session
     const targetChatId = options.chatId || teamMember.telegramChatId || teamMember.telegramUserId;
     if (!teamMember.telegramConnected && !options.chatId) {
       throw new Error(`Team member "${teamMember.name}" has not connected their Telegram account yet.`);
@@ -132,18 +134,48 @@ export class CredentialSharingService {
       throw new Error(`Team member "${teamMember.name}" has no valid Telegram destination.`);
     }
 
-    // 10. Load ONLY required credentials belonging to this project (Strict Least Privilege)
-    const rawCredentials = await Credential.find({
-      _id: { $in: task.requiredCredentialIds },
-      projectId: project._id,
-      isRevoked: { $ne: true },
-    });
-
-    if (rawCredentials.length === 0) {
-      throw new Error('None of the required credentials for this task were found or active in the project');
+    // 9. Load authoritative active credentials belonging to this project (Dynamic Least Privilege)
+    let candidateQuery: any;
+    if (task.requiredCredentialIds && task.requiredCredentialIds.length > 0) {
+      candidateQuery = {
+        $or: [
+          { projectId: project._id },
+          { _id: { $in: task.requiredCredentialIds } },
+          { taskId: task._id },
+        ],
+        isRevoked: { $ne: true },
+      };
+    } else {
+      candidateQuery = {
+        $or: [
+          { projectId: project._id },
+          { taskId: task._id },
+        ],
+        isRevoked: { $ne: true },
+      };
     }
 
-    // Filter by team member authorized credential types
+    const rawCredentials = await Credential.find(candidateQuery);
+
+    if (rawCredentials.length === 0) {
+      if (task.requiredCredentialIds && task.requiredCredentialIds.length > 0) {
+        throw new Error('None of the required credentials for this task were found or active in the project');
+      }
+      await TelegramService.sendMessageRaw(
+        targetChatId,
+        '🔐 <b>Project Credentials</b>\n\nNo authorized credentials are currently available for this task.'
+      );
+      return {
+        success: true,
+        taskId: task._id.toString(),
+        teamMemberName: teamMember.name,
+        sharedCount: 0,
+        telegramSent: true,
+        message: 'No authorized credentials are currently available for this task.',
+      };
+    }
+
+    // Filter by team member authorized credential types (Intersection with current permissions)
     const credentials = rawCredentials.filter((cred) =>
       TeamMemberService.isAuthorizedForCredentialType(teamMember, cred.credentialType)
     );
@@ -157,13 +189,24 @@ export class CredentialSharingService {
         metadata: {
           taskId: task._id,
           teamMemberId: teamMember._id,
-          reason: 'Team member is not authorized for any of the required credential types',
+          reason: 'Team member is not authorized for any of the available credential types on this project',
         },
       });
-      throw new Error('None of the required credentials for this task are authorized for this team member');
+      await TelegramService.sendMessageRaw(
+        targetChatId,
+        '🔐 <b>Project Credentials</b>\n\nNo authorized credentials are currently available for this task based on your permissions.'
+      );
+      return {
+        success: true,
+        taskId: task._id.toString(),
+        teamMemberName: teamMember.name,
+        sharedCount: 0,
+        telegramSent: true,
+        message: 'No authorized credentials are currently available for this task based on your permissions.',
+      };
     }
 
-    // 11. Decrypt ONLY the required credentials right before dispatch
+    // 10. Decrypt ONLY the authorized credentials right before dispatch
     const decryptedItems: Array<{
       service: string;
       username: string;
@@ -178,8 +221,8 @@ export class CredentialSharingService {
         const decryptedService = decrypt(cred.service);
         const decryptedUsername = decrypt(cred.username);
         const decryptedPassword = decrypt(cred.password);
-        const decryptedLoginUrl = cred.loginUrl ? decrypt(cred.loginUrl) : undefined;
-        const decryptedInfo = cred.additionalInfo ? decrypt(cred.additionalInfo) : undefined;
+        const decryptedLoginUrl = cred.loginUrl && cred.loginUrl.ciphertext ? decrypt(cred.loginUrl) : undefined;
+        const decryptedInfo = cred.additionalInfo && cred.additionalInfo.ciphertext ? decrypt(cred.additionalInfo) : undefined;
 
         decryptedItems.push({
           service: decryptedService,
@@ -195,16 +238,28 @@ export class CredentialSharingService {
       }
     }
 
-    // 12. Format minimal Telegram message with task context & strictly required credentials
+    // 11. Format clean Telegram message with proper HTML escaping
     let credentialsBlock = '';
     for (let i = 0; i < decryptedItems.length; i++) {
       const item = decryptedItems[i];
-      credentialsBlock += `<b>${i + 1}. Required Access: ${item.service}</b>\n`;
-      if (item.loginUrl) credentialsBlock += `   <b>URL:</b> ${item.loginUrl}\n`;
-      credentialsBlock += `   <b>Username:</b> <code>${item.username}</code>\n`;
-      credentialsBlock += `   <b>Password:</b> <code>${item.password}</code>\n`;
-      if (item.additionalInfo) credentialsBlock += `   <b>Notes:</b> ${item.additionalInfo}\n`;
-      if (i < decryptedItems.length - 1) credentialsBlock += `\n`;
+      const serviceEsc = escapeHtml(item.service);
+      const usernameEsc = escapeHtml(item.username);
+      const passwordEsc = escapeHtml(item.password);
+      const loginUrlEsc = item.loginUrl ? escapeHtml(item.loginUrl) : '';
+      const infoEsc = item.additionalInfo ? escapeHtml(item.additionalInfo) : '';
+
+      credentialsBlock += `<b>${i + 1}. ${serviceEsc}</b>\n\n`;
+      credentialsBlock += `<b>Username:</b> <code>${usernameEsc}</code>\n`;
+      credentialsBlock += `<b>Password:</b> <code>${passwordEsc}</code>\n`;
+      if (item.loginUrl) {
+        credentialsBlock += `<b>Login URL:</b> ${loginUrlEsc}\n`;
+      }
+      if (item.additionalInfo) {
+        credentialsBlock += `<b>Notes:</b> ${infoEsc}\n`;
+      }
+      if (i < decryptedItems.length - 1) {
+        credentialsBlock += `\n━━━━━━━━━━━━━━━━━━━━\n\n`;
+      }
     }
 
     let messageText = '';
@@ -214,31 +269,69 @@ export class CredentialSharingService {
         'TEAM_MEMBER_TASK_CREDENTIALS',
         'TELEGRAM',
         {
+          teamMemberName: teamMember.name,
           projectName: project.name,
           projectCode: project.projectCode,
           taskTitle: task.title,
           taskCode: task.taskCode,
           credentialsCount: String(decryptedItems.length),
+          credentialsList: credentialsBlock,
           credentialsBlock: credentialsBlock,
           sharedBy: actor,
+          confidentialNotice: options.oneTime ? `⚠️ <i>Confidential: This access is granted solely for completing task ${escapeHtml(task.taskCode)}. Do not share or forward.</i>` : '',
         }
       );
       messageText = rendered.body;
     } catch {
       messageText = `🔐 <b>Credentials for Task</b>\n\n` +
-        `<b>Project:</b> ${project.name} (<code>${project.projectCode}</code>)\n` +
-        `<b>Task:</b> ${task.title} (<code>${task.taskCode}</code>)\n` +
+        `<b>Project:</b> ${escapeHtml(project.name)} (<code>${escapeHtml(project.projectCode)}</code>)\n` +
+        `<b>Task:</b> ${escapeHtml(task.title)} (<code>${escapeHtml(task.taskCode)}</code>)\n` +
         `<b>Credentials Provided:</b> ${decryptedItems.length}\n` +
         `━━━━━━━━━━━━━━━━━━━━\n\n` +
         credentialsBlock + `\n\n` +
-        `<b>Shared by:</b> ${actor}\n` +
-        (options.oneTime ? `⚠️ <i>Confidential: This access is granted solely for completing task ${task.taskCode}. Do not share or forward.</i>` : '');
+        `<b>Shared by:</b> ${escapeHtml(actor)}\n` +
+        (options.oneTime ? `⚠️ <i>Confidential: This access is granted solely for completing task ${escapeHtml(task.taskCode)}. Do not share or forward.</i>` : '');
     }
 
-    // 13. Dispatch to Telegram
+    // 12. Dispatch to Telegram
     const dispatchResult = await TelegramService.sendMessageRaw(targetChatId, messageText);
 
     if (!dispatchResult.success) {
+      console.error('[TELEGRAM_CREDENTIAL_DISPATCH_ERROR]', {
+        chatId: targetChatId,
+        taskId: task._id.toString(),
+        teamMemberId: teamMember._id.toString(),
+        error: dispatchResult.error,
+      });
+
+      // Safe fallback if Telegram rejected HTML entities: retry with plain text (stripped HTML)
+      if (dispatchResult.error?.toLowerCase().includes("can't parse entities") || dispatchResult.error?.toLowerCase().includes('parse')) {
+        const plainFallback = stripHtml(messageText);
+        const retryResult = await TelegramService.sendMessageRaw(targetChatId, plainFallback, { parse_mode: '' });
+        if (retryResult.success) {
+          await AuditService.log({
+            actor,
+            action: 'CREDENTIAL_SHARED',
+            entityType: 'Task',
+            entityId: task._id,
+            metadata: {
+              taskCode: task.taskCode,
+              teamMemberId: teamMember._id,
+              sharedCount: decryptedItems.length,
+              mode: 'PLAIN_TEXT_FALLBACK',
+            },
+          });
+          return {
+            success: true,
+            taskId: task._id.toString(),
+            teamMemberName: teamMember.name,
+            sharedCount: decryptedItems.length,
+            telegramSent: true,
+            message: `Successfully shared ${decryptedItems.length} required credential(s) via Telegram (fallback).`,
+          };
+        }
+      }
+
       await AuditService.log({
         actor,
         action: 'CREDENTIAL_SHARE_FAILED',
@@ -385,8 +478,8 @@ export class CredentialSharingService {
     }
 
     const credential = await Credential.findById(credentialId);
-    if (!credential) {
-      throw new Error('Credential not found');
+    if (!credential || credential.isRevoked) {
+      throw new Error('Credential is no longer available or has been revoked');
     }
 
     if (!credential.projectId) {
@@ -417,9 +510,11 @@ export class CredentialSharingService {
       throw new Error(`Cannot share credential: Team member is not active (current status: ${teamMember.status})`);
     }
 
-    const isAssigned = project.teamMemberIds && project.teamMemberIds.some(
+    const isAssigned = (project.teamMemberIds && project.teamMemberIds.some(
       (id) => id.toString() === teamMember._id.toString()
-    );
+    )) || (credential.taskId ? await Task.exists({ _id: credential.taskId, assignedTo: teamMember._id }) : false)
+       || (await Task.exists({ projectId: project._id, assignedTo: teamMember._id }));
+
     if (!isAssigned) {
       await AuditService.log({
         actor,
@@ -450,8 +545,28 @@ export class CredentialSharingService {
       throw new Error(`Cannot share credential: Team member "${teamMember.name}" does not have VIEW_CREDENTIALS permission`);
     }
 
-    if (!teamMember.telegramConnected || !teamMember.telegramChatId) {
+    // Verify authorized credential type for team member
+    if (!TeamMemberService.isAuthorizedForCredentialType(teamMember, credential.credentialType)) {
+      await AuditService.log({
+        actor,
+        action: 'CREDENTIAL_ACCESS_DENIED',
+        entityType: 'Credential',
+        entityId: credential._id,
+        metadata: {
+          teamMemberId: teamMember._id,
+          credentialType: credential.credentialType,
+          reason: 'Team member is not authorized for this credential type',
+        },
+      });
+      throw new Error(`Team member "${teamMember.name}" is not authorized to access "${credential.credentialType || 'CUSTOM'}" credentials`);
+    }
+
+    const targetChatId = options.chatId || teamMember.telegramChatId || teamMember.telegramUserId;
+    if (!teamMember.telegramConnected && !options.chatId) {
       throw new Error(`Team member "${teamMember.name}" has not connected their Telegram account yet. Please generate a Telegram connection link first.`);
+    }
+    if (!targetChatId) {
+      throw new Error(`Team member "${teamMember.name}" has no valid Telegram destination.`);
     }
 
     let decryptedService = '';
@@ -464,8 +579,8 @@ export class CredentialSharingService {
       decryptedService = decrypt(credential.service);
       decryptedUsername = decrypt(credential.username);
       decryptedPassword = decrypt(credential.password);
-      if (credential.loginUrl) decryptedLoginUrl = decrypt(credential.loginUrl);
-      if (credential.additionalInfo) decryptedNotes = decrypt(credential.additionalInfo);
+      if (credential.loginUrl && credential.loginUrl.ciphertext) decryptedLoginUrl = decrypt(credential.loginUrl);
+      if (credential.additionalInfo && credential.additionalInfo.ciphertext) decryptedNotes = decrypt(credential.additionalInfo);
     } catch (err: any) {
       console.error('Credential decryption error:', err);
       throw new Error('Failed to decrypt project credentials');
@@ -474,19 +589,15 @@ export class CredentialSharingService {
     const credCode = `CRED-${credential._id.toString().slice(-6).toUpperCase()}`;
 
     const messageText = `🔐 <b>Project Credential Shared</b>\n\n` +
-      `<b>Project:</b> ${project.name} (<code>${project.projectCode}</code>)\n` +
-      `<b>Service:</b> ${decryptedService}\n` +
-      `<b>Username:</b> <code>${decryptedUsername}</code>\n` +
-      `<b>Password:</b> <code>${decryptedPassword}</code>\n` +
-      `${decryptedLoginUrl ? `<b>Login URL:</b> ${decryptedLoginUrl}\n` : ''}${decryptedNotes ? `<b>Notes:</b> ${decryptedNotes}\n` : ''}` +
-      `<b>Shared by:</b> ${actor}\n` +
-      `<b>Credential ID:</b> <code>${credCode}</code>\n` +
+      `<b>Project:</b> ${escapeHtml(project.name)} (<code>${escapeHtml(project.projectCode)}</code>)\n` +
+      `<b>Service:</b> ${escapeHtml(decryptedService)}\n` +
+      `<b>Username:</b> <code>${escapeHtml(decryptedUsername)}</code>\n` +
+      `<b>Password:</b> <code>${escapeHtml(decryptedPassword)}</code>\n` +
+      `${decryptedLoginUrl ? `<b>Login URL:</b> ${escapeHtml(decryptedLoginUrl)}\n` : ''}${decryptedNotes ? `<b>Notes:</b> ${escapeHtml(decryptedNotes)}\n` : ''}` +
+      `<b>Shared by:</b> ${escapeHtml(actor)}\n` +
+      `<b>Credential ID:</b> <code>${escapeHtml(credCode)}</code>\n` +
       `${options.oneTime ? '\n⚠️ <i>Confidential: Do not forward or share these credentials outside your authorized scope.</i>' : ''}`;
 
-    const targetChatId = teamMember.telegramChatId || teamMember.telegramUserId;
-    if (!targetChatId) {
-      throw new Error(`Team member "${teamMember.name}" has no linked Telegram chat ID.`);
-    }
     const dispatchResult = await TelegramService.sendMessageRaw(targetChatId, messageText);
 
     if (!dispatchResult.success) {

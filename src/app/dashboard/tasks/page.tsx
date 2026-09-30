@@ -196,21 +196,27 @@ export default function TasksPage() {
     }
     setManualCredLoading(true);
     setManualCredError(null);
+
+    const selectedProj = projects.find((p) => p._id === manualCredData.projectId);
+    const resolvedClientId = selectedProj?.clientId?._id || selectedProj?.clientId;
+
     try {
       const res = await fetch('/api/credentials', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          clientId: resolvedClientId || undefined,
           projectId: manualCredData.projectId,
           taskId: manualCredData.taskId || undefined,
-          service: manualCredData.service,
+          service: manualCredData.service?.trim(),
           credentialType: manualCredData.credentialType,
-          loginUrl: manualCredData.loginUrl || undefined,
-          username: manualCredData.username || undefined,
-          password: manualCredData.password || undefined,
-          notes: manualCredData.notes || undefined,
+          loginUrl: manualCredData.loginUrl?.trim() || undefined,
+          username: manualCredData.username?.trim() || undefined,
+          password: manualCredData.password?.trim() || manualCredData.privateKey?.trim() || undefined,
+          additionalInfo: manualCredData.notes?.trim() || undefined,
+          notes: manualCredData.notes?.trim() || undefined,
           port: manualCredData.port ? Number(manualCredData.port) : undefined,
-          privateKey: manualCredData.privateKey || undefined,
+          privateKey: manualCredData.privateKey?.trim() || undefined,
         }),
       });
       const data = await res.json();

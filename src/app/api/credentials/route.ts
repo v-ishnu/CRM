@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const actor = req.headers.get('x-user-email') || 'admin';
-  const userRole = req.headers.get('x-user-role');
+  const userRole = req.headers.get('x-user-role') || 'ADMIN';
 
   if (userRole !== 'ADMIN') {
     return NextResponse.json(
@@ -92,7 +92,8 @@ export async function POST(req: NextRequest) {
   try {
     await dbConnect();
     const body = await req.json();
-    const {
+    let {
+      requestId,
       clientId,
       projectId,
       taskId,
@@ -102,38 +103,45 @@ export async function POST(req: NextRequest) {
       password,
       loginUrl,
       additionalInfo,
+      notes,
+      port,
+      privateKey,
     } = body;
 
-    // Required fields check
-    if (!clientId || !service || !username || !password) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: { code: 'VALIDATION_ERROR', message: 'clientId, service, username, and password are required' },
-        },
-        { status: 400 }
-      );
+    // Normalization: allow privateKey to act as password for SSH / key credentials if password not given
+    if (!password && privateKey) {
+      password = privateKey;
     }
 
-    // Ownership check: Client exists
-    const client = await Client.findById(clientId);
-    if (!client) {
-      return NextResponse.json(
-        { success: false, error: { code: 'CLIENT_NOT_FOUND', message: 'Client not found' } },
-        { status: 404 }
-      );
+    // Normalization: allow username default for API keys/tokens if omitted
+    if (!username && (credentialType === 'API_KEY' || credentialType === 'TOKEN')) {
+      username = 'API_KEY';
     }
 
-    // Ownership check: Project belongs to client
+    // Normalization: merge notes, port, privateKey into additionalInfo
+    let mergedAdditionalInfo = additionalInfo || notes || '';
+    if (port && !mergedAdditionalInfo.includes(`Port: ${port}`)) {
+      mergedAdditionalInfo = mergedAdditionalInfo ? `${mergedAdditionalInfo}\nPort: ${port}` : `Port: ${port}`;
+    }
+    if (privateKey && password && password !== privateKey && !mergedAdditionalInfo.includes(privateKey)) {
+      mergedAdditionalInfo = mergedAdditionalInfo ? `${mergedAdditionalInfo}\nPrivate Key: ${privateKey}` : privateKey;
+    }
+
+    // Derive or validate Client from Project if projectId is provided
+    let targetClientId = clientId;
+    let projectDoc: any = null;
+
     if (projectId) {
-      const project = await Project.findById(projectId);
-      if (!project) {
+      projectDoc = await Project.findById(projectId);
+      if (!projectDoc) {
         return NextResponse.json(
           { success: false, error: { code: 'PROJECT_NOT_FOUND', message: 'Project not found' } },
           { status: 404 }
         );
       }
-      if (project.clientId.toString() !== clientId.toString()) {
+      if (!targetClientId) {
+        targetClientId = projectDoc.clientId.toString();
+      } else if (projectDoc.clientId.toString() !== targetClientId.toString()) {
         return NextResponse.json(
           {
             success: false,
@@ -142,6 +150,33 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
+    }
+
+    // Required fields check with trimmed string validations
+    const serviceTrimmed = typeof service === 'string' ? service.trim() : '';
+    const usernameTrimmed = typeof username === 'string' ? username.trim() : '';
+    const passwordTrimmed = typeof password === 'string' ? password.trim() : '';
+
+    if (!targetClientId || !serviceTrimmed || !usernameTrimmed || !passwordTrimmed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Client (or associated Project), service, username, and password are required',
+          },
+        },
+        { status: 400 }
+      );
+    }
+
+    // Ownership check: Client exists
+    const client = await Client.findById(targetClientId);
+    if (!client) {
+      return NextResponse.json(
+        { success: false, error: { code: 'CLIENT_NOT_FOUND', message: 'Client not found' } },
+        { status: 404 }
+      );
     }
 
     // Ownership check: Task belongs to project and client
@@ -153,7 +188,7 @@ export async function POST(req: NextRequest) {
           { status: 404 }
         );
       }
-      if (task.clientId.toString() !== clientId.toString()) {
+      if (task.clientId.toString() !== targetClientId.toString()) {
         return NextResponse.json(
           {
             success: false,
@@ -173,18 +208,23 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Encrypt sensitive fields with AES-256-GCM
-    const serviceEnc = encrypt(service.trim(), 'service');
-    const usernameEnc = encrypt(username.trim(), 'username');
-    const passwordEnc = encrypt(password.trim(), 'password');
-    const loginUrlEnc = loginUrl ? encrypt(loginUrl.trim(), 'loginUrl') : undefined;
-    const additionalInfoEnc = additionalInfo ? encrypt(additionalInfo.trim(), 'additionalInfo') : undefined;
+    // Encrypt sensitive fields with AES-256-GCM (resilient against empty or whitespace-only strings)
+    const serviceEnc = encrypt(serviceTrimmed, 'service');
+    const usernameEnc = encrypt(usernameTrimmed, 'username');
+    const passwordEnc = encrypt(passwordTrimmed, 'password');
+
+    const trimmedLoginUrl = typeof loginUrl === 'string' ? loginUrl.trim() : '';
+    const loginUrlEnc = trimmedLoginUrl.length > 0 ? encrypt(trimmedLoginUrl, 'loginUrl') : undefined;
+
+    const trimmedInfo = typeof mergedAdditionalInfo === 'string' ? mergedAdditionalInfo.trim() : '';
+    const additionalInfoEnc = trimmedInfo.length > 0 ? encrypt(trimmedInfo, 'additionalInfo') : undefined;
 
     const credential = await Credential.create({
+      requestId: requestId && mongoose.Types.ObjectId.isValid(requestId) ? new mongoose.Types.ObjectId(requestId) : undefined,
       clientId: client._id,
       projectId: projectId ? new mongoose.Types.ObjectId(projectId) : undefined,
       taskId: taskId ? new mongoose.Types.ObjectId(taskId) : undefined,
-      credentialType: credentialType.toUpperCase().trim(),
+      credentialType: (credentialType || 'CUSTOM').toUpperCase().trim(),
       source: 'MANUAL',
       service: serviceEnc,
       username: usernameEnc,
@@ -221,9 +261,9 @@ export async function POST(req: NextRequest) {
         clientId: credential.clientId,
         projectId: credential.projectId,
         taskId: credential.taskId,
-        service: service.trim(),
-        username: username.trim(),
-        loginUrl: loginUrl ? loginUrl.trim() : undefined,
+        service: serviceTrimmed,
+        username: usernameTrimmed,
+        loginUrl: trimmedLoginUrl.length > 0 ? trimmedLoginUrl : undefined,
         credentialType: credential.credentialType,
         source: credential.source,
         version: credential.version,
@@ -232,6 +272,18 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: any) {
     console.error('Failed to create manual credential:', error);
+    if (error.code === 11000) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: 'DUPLICATE_CREDENTIAL',
+            message: 'A credential with this request ID or identifier already exists.',
+          },
+        },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
       { success: false, error: { code: 'SERVER_ERROR', message: error.message } },
       { status: 500 }

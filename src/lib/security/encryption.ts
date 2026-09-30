@@ -10,18 +10,59 @@ export function isEncryptionConfigured(): boolean {
   return !!process.env.CREDENTIAL_ENCRYPTION_KEY;
 }
 
-function getEncryptionKey(): Buffer {
-  const keyHex = process.env.CREDENTIAL_ENCRYPTION_KEY || process.env.AUTH_SECRET || 'crm_default_secure_encryption_key_2026';
-  
-  if (!keyHex) {
-    throw new Error('CREDENTIAL_ENCRYPTION_KEY is not configured.');
+function deriveKey(raw?: string | null): Buffer | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  // Resilient key derivation: if hex key is 64 chars (32 bytes), use directly; otherwise, hash with SHA-256 to derive a safe 32-byte key!
+  if (/^[0-9a-fA-F]{64}$/.test(trimmed)) {
+    return Buffer.from(trimmed, 'hex');
+  }
+  return crypto.createHash('sha256').update(trimmed).digest();
+}
+
+export function getEncryptionKey(): Buffer {
+  const primary = deriveKey(process.env.CREDENTIAL_ENCRYPTION_KEY);
+  if (primary) return primary;
+
+  const fallback = deriveKey(process.env.AUTH_SECRET);
+  if (fallback) return fallback;
+
+  return deriveKey('crm_default_secure_encryption_key_2026')!;
+}
+
+export function getDecryptionKeys(): Buffer[] {
+  const keys: Buffer[] = [];
+  const seen = new Set<string>();
+
+  const pushKey = (raw?: string | null) => {
+    const k = deriveKey(raw);
+    if (!k) return;
+    const hex = k.toString('hex');
+    if (!seen.has(hex)) {
+      seen.add(hex);
+      keys.push(k);
+    }
+  };
+
+  // 1. Primary active encryption key
+  pushKey(process.env.CREDENTIAL_ENCRYPTION_KEY);
+
+  // 2. Explicit fallback / previous keys from environment variables
+  if (process.env.CREDENTIAL_ENCRYPTION_KEY_FALLBACK) {
+    process.env.CREDENTIAL_ENCRYPTION_KEY_FALLBACK.split(',').forEach(pushKey);
+  }
+  if (process.env.PREVIOUS_ENCRYPTION_KEYS) {
+    process.env.PREVIOUS_ENCRYPTION_KEYS.split(',').forEach(pushKey);
   }
 
-  // Resilient key derivation: if hex key is 64 chars (32 bytes), use directly; otherwise, hash with SHA-256 to derive a safe 32-byte key!
-  if (/^[0-9a-fA-F]{64}$/.test(keyHex)) {
-    return Buffer.from(keyHex, 'hex');
-  }
-  return crypto.createHash('sha256').update(keyHex).digest();
+  // 3. Fallback to AUTH_SECRET (historical fallback from initial commit e5b190e)
+  pushKey(process.env.AUTH_SECRET);
+
+  // 4. Default fallback key if no key is configured
+  pushKey('crm_default_secure_encryption_key_2026');
+
+  return keys;
 }
 
 /**
@@ -63,20 +104,34 @@ authTagPresent=${!!authTag}`);
 }
 
 /**
- * Decrypt an AES-256-GCM encrypted block.
+ * Decrypt an AES-256-GCM encrypted block with multi-key keyring fallback.
  */
-export function decrypt(block: EncryptedBlock): string {
-  if (!block || !block.ciphertext || !block.iv || !block.authTag) {
-    throw new Error('Cannot decrypt invalid or incomplete encrypted block');
+export function decrypt(block: EncryptedBlock | null | undefined): string {
+  if (!block || (!block.ciphertext && !block.iv && !block.authTag)) {
+    return '';
   }
 
-  const key = getEncryptionKey();
+  if (!block.ciphertext || !block.iv || !block.authTag) {
+    throw new Error('Cannot decrypt invalid or incomplete encrypted block: missing ciphertext, iv, or authTag');
+  }
+
+  const keys = getDecryptionKeys();
   const iv = Buffer.from(block.iv, 'hex');
   const tag = Buffer.from(block.authTag, 'hex');
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-  decipher.setAuthTag(tag);
-  
-  let plaintext = decipher.update(block.ciphertext, 'hex', 'utf8');
-  plaintext += decipher.final('utf8');
-  return plaintext;
+
+  let lastError: Error | null = null;
+  for (const key of keys) {
+    try {
+      const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+      decipher.setAuthTag(tag);
+      let plaintext = decipher.update(block.ciphertext, 'hex', 'utf8');
+      plaintext += decipher.final('utf8');
+      return plaintext;
+    } catch (err: any) {
+      lastError = err;
+      // Tag mismatch indicates this block was encrypted with another key in the keyring
+    }
+  }
+
+  throw new Error(`Decryption failed: Authentication tag mismatch across all configured keys (${lastError?.message || 'unknown'})`);
 }

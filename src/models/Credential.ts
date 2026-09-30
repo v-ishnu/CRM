@@ -28,6 +28,8 @@ export interface ICredential extends Document {
   loginUrl?: IEncryptedField;
   additionalInfo?: IEncryptedField;
   isRevoked?: boolean;
+  deletedAt?: Date;
+  deletedBy?: string;
   version: number;
   createdAt: Date;
   updatedAt: Date;
@@ -39,9 +41,6 @@ const CredentialSchema = new Schema<ICredential>(
       type: Schema.Types.ObjectId,
       ref: 'DataRequest',
       required: false,
-      unique: true,
-      sparse: true,
-      index: true,
     },
     clientId: {
       type: Schema.Types.ObjectId,
@@ -95,6 +94,14 @@ const CredentialSchema = new Schema<ICredential>(
       default: false,
       index: true,
     },
+    deletedAt: {
+      type: Date,
+      index: true,
+    },
+    deletedBy: {
+      type: String,
+      trim: true,
+    },
     version: {
       type: Number,
       default: 1,
@@ -106,6 +113,13 @@ const CredentialSchema = new Schema<ICredential>(
   }
 );
 
+CredentialSchema.index(
+  { requestId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { requestId: { $type: 'objectId' } },
+  }
+);
 CredentialSchema.index({ projectId: 1, isRevoked: 1 });
 
 const Credential: Model<ICredential> = mongoose.models.Credential || mongoose.model<ICredential>('Credential', CredentialSchema);

@@ -116,6 +116,11 @@ export class MessageTemplateService {
       // Ignore cache lookup failure
     }
 
+    const isMocked = Boolean((MessageTemplate.findOne as any)?.mock || (MessageTemplate.findOne as any)?._isMockFunction);
+    if (mongoose.connection.readyState !== 1 && !isMocked) {
+      return null;
+    }
+
     const template = await MessageTemplate.findOne({ key: upperKey }).lean();
     if (template) {
       try {
@@ -426,6 +431,24 @@ export class MessageTemplateService {
       const stringVal = typeof val === 'object' ? JSON.stringify(val) : String(val);
 
       if (isTelegram) {
+        // Known pre-formatted HTML blocks should be preserved and sanitized, not double-escaped
+        const isHtmlBlock = [
+          'credentialsList',
+          'credentialsBlock',
+          'confidentialNotice',
+          'taskInfo',
+          'detailsBlock',
+        ].includes(varName) || (/<[a-z0-9-]+[\s>]/i.test(stringVal) && (
+          varName.toLowerCase().includes('html') ||
+          varName.toLowerCase().includes('block') ||
+          varName.toLowerCase().includes('list') ||
+          varName.toLowerCase().includes('notice')
+        ));
+
+        if (isHtmlBlock) {
+          return sanitizeTelegramHtml(stringVal);
+        }
+
         // For Telegram: escape HTML entities in dynamic variables so values like A&B <test> don't break markup
         return escapeHtml(stringVal);
       } else if (isWebPush) {

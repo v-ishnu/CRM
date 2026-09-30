@@ -223,13 +223,13 @@ export async function GET(
     let additionalInfo = '';
 
     try {
-      if (cred.service) service = decrypt(cred.service);
-      if (cred.username) username = decrypt(cred.username);
-      if (cred.password) password = decrypt(cred.password);
-      if (cred.loginUrl) loginUrl = decrypt(cred.loginUrl);
-      if (cred.additionalInfo) additionalInfo = decrypt(cred.additionalInfo);
+      if (cred.service && cred.service.ciphertext) service = decrypt(cred.service);
+      if (cred.username && cred.username.ciphertext) username = decrypt(cred.username);
+      if (cred.password && cred.password.ciphertext) password = decrypt(cred.password);
+      if (cred.loginUrl && cred.loginUrl.ciphertext) loginUrl = decrypt(cred.loginUrl);
+      if (cred.additionalInfo && cred.additionalInfo.ciphertext) additionalInfo = decrypt(cred.additionalInfo);
     } catch (decErr: any) {
-      console.error('Decryption failed for task credential:', decErr);
+      console.error('Decryption failed for task credential:', cred._id, decErr.message);
       return NextResponse.json(
         { success: false, error: { code: 'DECRYPTION_FAILED', message: 'Failed to decrypt credential fields' } },
         { status: 500 }

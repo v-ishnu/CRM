@@ -1401,28 +1401,26 @@ export class TelegramService {
           return { action, success: false };
         }
 
-        if (!task.requiredCredentialIds || task.requiredCredentialIds.length === 0) {
-          await this.sendMessageRaw(chatId, '🔐 <b>Credentials</b>\n\nNo credentials are required for this task.');
-          return { action, success: true };
-        }
-
         try {
           const { CredentialSharingService } = await import('./credential-sharing.service');
-          await CredentialSharingService.shareTaskCredentials(task._id.toString(), memberEmail, { chatId });
+          const shareResult = await CredentialSharingService.shareTaskCredentials(task._id.toString(), memberEmail, {
+            chatId,
+            requesterTeamMemberId: identity.type === 'TEAM_MEMBER' ? identity.teamMember._id.toString() : undefined,
+          });
 
           await AuditService.logAction(
             memberEmail,
             'TASK_CREDENTIALS_VIEWED',
             'Task',
             task._id.toString(),
-            { taskCode: task.taskCode, telegramUserId: fromUserId, requiredCredentialCount: task.requiredCredentialIds.length }
+            { taskCode: task.taskCode, telegramUserId: fromUserId, sharedCount: shareResult.sharedCount }
           );
 
           return { action, success: true };
         } catch (err: any) {
-          console.error('Task credential retrieval failed:', err);
+          console.error('Task credential retrieval failed:', err?.message);
           const errorMsg = err?.message?.includes('authorized') || err?.message?.includes('revoked')
-            ? `❌ <b>${err.message}</b>`
+            ? `❌ <b>${err.message.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</b>`
             : '❌ <b>Credentials could not be retrieved securely.</b>';
           await this.sendMessageRaw(chatId, errorMsg);
           return { action, success: false };
