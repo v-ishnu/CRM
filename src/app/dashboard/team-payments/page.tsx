@@ -188,9 +188,15 @@ export default function TeamPaymentsPage() {
   };
 
   const availableProjectTasks = tasks.filter((t) => {
-    if (!formData.projectId) return true;
-    const pId = t.projectId?._id || t.projectId;
-    return pId.toString() === formData.projectId;
+    if (formData.teamMemberId) {
+      const assignedId = (t.assignedTo?._id || t.assignedTo || '').toString();
+      if (assignedId && assignedId !== formData.teamMemberId) return false;
+    }
+    if (formData.projectId) {
+      const pId = (t.projectId?._id || t.projectId || '').toString();
+      if (pId && pId !== formData.projectId) return false;
+    }
+    return true;
   });
 
   return (
@@ -478,7 +484,17 @@ export default function TeamPaymentsPage() {
                   <select
                     required
                     value={formData.teamMemberId}
-                    onChange={(e) => setFormData({ ...formData, teamMemberId: e.target.value })}
+                    onChange={(e) => {
+                      const newMemberId = e.target.value;
+                      const currentTask = tasks.find((t) => t._id === formData.taskId);
+                      const currentTaskMemberId = (currentTask?.assignedTo?._id || currentTask?.assignedTo || '').toString();
+                      const shouldClearTask = currentTask && currentTaskMemberId !== newMemberId;
+                      setFormData({
+                        ...formData,
+                        teamMemberId: newMemberId,
+                        taskId: shouldClearTask ? '' : formData.taskId,
+                      });
+                    }}
                     className="crm-select"
                   >
                     <option value="">Select Member</option>
@@ -497,7 +513,17 @@ export default function TeamPaymentsPage() {
                   <select
                     required
                     value={formData.projectId}
-                    onChange={(e) => setFormData({ ...formData, projectId: e.target.value, taskId: '' })}
+                    onChange={(e) => {
+                      const newProjId = e.target.value;
+                      const currentTask = tasks.find((t) => t._id === formData.taskId);
+                      const currentTaskProjId = (currentTask?.projectId?._id || currentTask?.projectId || '').toString();
+                      const shouldClearTask = currentTask && currentTaskProjId !== newProjId;
+                      setFormData({
+                        ...formData,
+                        projectId: newProjId,
+                        taskId: shouldClearTask ? '' : formData.taskId,
+                      });
+                    }}
                     className="crm-select"
                   >
                     <option value="">Select Project</option>
@@ -516,7 +542,19 @@ export default function TeamPaymentsPage() {
                 </label>
                 <select
                   value={formData.taskId}
-                  onChange={(e) => setFormData({ ...formData, taskId: e.target.value })}
+                  onChange={(e) => {
+                    const tId = e.target.value;
+                    const chosen = tasks.find((t) => t._id === tId);
+                    const taskProjId = (chosen?.projectId?._id || chosen?.projectId || '').toString();
+                    const taskMemberId = (chosen?.assignedTo?._id || chosen?.assignedTo || '').toString();
+                    setFormData({
+                      ...formData,
+                      taskId: tId,
+                      projectId: taskProjId || formData.projectId,
+                      teamMemberId: taskMemberId || formData.teamMemberId,
+                      amount: chosen?.agreedAmount ? String(chosen.agreedAmount) : formData.amount,
+                    });
+                  }}
                   className="crm-select"
                 >
                   <option value="">No linked task (General Project Payout)</option>

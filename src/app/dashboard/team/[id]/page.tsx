@@ -104,6 +104,7 @@ export default function TeamMemberWorkspacePage() {
 
   // Modal active items
   const [selectedTask, setSelectedTask] = useState<any>(null);
+  const [paymentTaskContext, setPaymentTaskContext] = useState<any | null>(null);
   const [generatedTelegramLink, setGeneratedTelegramLink] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
   const [generatingTelegramLink, setGeneratingTelegramLink] = useState(false);
@@ -622,18 +623,55 @@ export default function TeamMemberWorkspacePage() {
 
   // Open Record Payment Modal
   const handleOpenRecordPayment = (task?: any) => {
-    const defaultProjId = task?.projectId?._id || task?.projectId || member?.assignedProjects?.[0]?._id || projects[0]?._id || '';
-    setPaymentForm({
-      taskId: task?._id || '',
-      projectId: defaultProjId,
-      amount: task?.agreedAmount ? String(task.agreedAmount) : '',
-      currency: 'INR',
-      paymentMethod: 'UPI',
-      paymentDate: new Date().toISOString().split('T')[0],
-      reference: '',
-      description: task ? `Payment for task: ${task.title}` : `Payment to ${member?.name}`,
-      status: 'PAID',
-    });
+    if (task) {
+      setPaymentTaskContext(task);
+      const projId = (task.projectId?._id || task.projectId || '').toString();
+      const taskPaid = payments
+        .filter((p) => {
+          const pTaskId = p.taskId?._id ? p.taskId._id.toString() : p.taskId?.toString();
+          return pTaskId === task._id?.toString() && p.status === 'PAID';
+        })
+        .reduce((sum, p) => sum + (p.amount || 0), 0);
+      const taskAgreed = task.agreedAmount || 0;
+      const taskPending = Math.max(0, taskAgreed - taskPaid);
+
+      setPaymentForm({
+        taskId: task._id?.toString() || '',
+        projectId: projId,
+        amount: taskPending > 0 ? String(taskPending) : (taskAgreed > 0 ? String(taskAgreed) : ''),
+        currency: 'INR',
+        paymentMethod: 'UPI',
+        paymentDate: new Date().toISOString().split('T')[0],
+        reference: '',
+        description: `Payment for task: ${task.title}`,
+        status: 'PAID',
+      });
+    } else {
+      setPaymentTaskContext(null);
+      // Select first eligible project if available
+      const eligibleProjects = projects.filter((p) => {
+        const isDirectMember = p.teamMemberIds?.some((id: any) => (id?._id || id).toString() === memberId);
+        const hasAssignedTask = tasks.some((t: any) => {
+          const tProjId = (t.projectId?._id || t.projectId || '').toString();
+          return tProjId === p._id.toString();
+        });
+        const isAssigned = member?.assignedProjects?.some((ap: any) => ap._id.toString() === p._id.toString());
+        return isDirectMember || hasAssignedTask || isAssigned;
+      });
+      const defaultProjId = eligibleProjects[0]?._id || member?.assignedProjects?.[0]?._id || projects[0]?._id || '';
+
+      setPaymentForm({
+        taskId: '',
+        projectId: defaultProjId,
+        amount: '',
+        currency: 'INR',
+        paymentMethod: 'UPI',
+        paymentDate: new Date().toISOString().split('T')[0],
+        reference: '',
+        description: `Payment to ${member?.name || 'team member'}`,
+        status: 'PAID',
+      });
+    }
     setPaymentError('');
     setShowRecordPaymentModal(true);
   };
@@ -670,7 +708,8 @@ export default function TeamMemberWorkspacePage() {
       const data = await res.json();
       if (data.success) {
         setShowRecordPaymentModal(false);
-        setBannerSuccess(`Payment of ₹${paymentForm.amount} recorded for ${member.name}!`);
+        setPaymentTaskContext(null);
+        setBannerSuccess(`Payment of ₹${Number(paymentForm.amount).toLocaleString('en-IN')} recorded for ${member.name}!`);
         setTimeout(() => setBannerSuccess(null), 4000);
         fetchMemberWorkspace();
       } else {
@@ -773,17 +812,26 @@ export default function TeamMemberWorkspacePage() {
     );
   }
 
-  // Calculate task summary directly from member's assigned tasks
+  // Calculate task summary and authoritative compensation totals
+  const totalAgreed = tasks
+    .filter((t) => t.status !== 'CANCELLED')
+    .reduce((sum, t) => sum + (t.agreedAmount || 0), 0);
+  const totalPaid = payments
+    .filter((p) => p.status === 'PAID')
+    .reduce((sum, p) => sum + (p.amount || 0), 0);
+  const totalPending = Math.max(0, totalAgreed - totalPaid);
+
   const stats = {
     total: tasks.length,
     todo: tasks.filter((t) => t.status === 'TODO').length,
     inProgress: tasks.filter((t) => t.status === 'IN_PROGRESS').length,
     review: tasks.filter((t) => t.status === 'REVIEW').length,
     completed: tasks.filter((t) => t.status === 'COMPLETED').length,
-    totalPaid: payments
-      .filter((p) => p.status === 'PAID')
-      .reduce((sum, p) => sum + (p.amount || 0), 0),
-    pendingPayments: payments.filter((p) => p.status === 'PENDING').length,
+    totalAgreed,
+    totalPaid,
+    totalPending,
+    pendingPayments: totalPending,
+    pendingPaymentsCount: payments.filter((p) => p.status === 'PENDING').length,
   };
 
   const priorityBadges: Record<string, { label: string; color: string }> = {
@@ -1065,12 +1113,16 @@ export default function TeamMemberWorkspacePage() {
                 </div>
                 <div className="space-y-2 pt-1">
                   <div className="flex justify-between items-center">
+                    <span className="text-[#88888e]">Total Agreed:</span>
+                    <span className="text-white font-bold text-sm">₹{stats.totalAgreed.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
                     <span className="text-[#88888e]">Total Paid Out:</span>
                     <span className="text-[#00D664] font-bold text-sm">₹{stats.totalPaid.toLocaleString('en-IN')}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-[#88888e]">Pending Payments:</span>
-                    <span className="text-white font-bold">{stats.pendingPayments}</span>
+                    <span className="text-[#88888e]">Pending Balance:</span>
+                    <span className="text-[#f59e0b] font-bold text-sm">₹{stats.totalPending.toLocaleString('en-IN')}</span>
                   </div>
                 </div>
                 <button
@@ -1179,11 +1231,38 @@ export default function TeamMemberWorkspacePage() {
                               <span>DELIVERABLE REQ</span>
                             </span>
                           ) : null}
-                          {task.agreedAmount ? (
-                            <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 border bg-[#0e1f15] border-[#00d664]/30 text-[#00d664]">
-                              ₹{task.agreedAmount.toLocaleString('en-IN')}
-                            </span>
-                          ) : null}
+                          {(() => {
+                            const tPaid = payments
+                              .filter((p) => {
+                                const pTaskId = p.taskId?._id ? p.taskId._id.toString() : p.taskId?.toString();
+                                return pTaskId === task._id?.toString() && p.status === 'PAID';
+                              })
+                              .reduce((sum, p) => sum + (p.amount || 0), 0);
+                            const tAgreed = task.agreedAmount || 0;
+                            const tPending = Math.max(0, tAgreed - tPaid);
+
+                            if (!tAgreed && !tPaid) return null;
+
+                            return (
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 border bg-[#0e1f15] border-[#00d664]/30 text-[#00d664]">
+                                  Agreed: ₹{tAgreed.toLocaleString('en-IN')}
+                                </span>
+                                {tPaid > 0 && (
+                                  <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 border bg-[#141416] border-[#242428] text-[#88888e]">
+                                    Paid: <b className="text-[#00D664]">₹{tPaid.toLocaleString('en-IN')}</b>
+                                  </span>
+                                )}
+                                <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 border ${
+                                  tPending === 0
+                                    ? 'bg-[#0e1f15] border-[#00d664]/30 text-[#00d664]'
+                                    : 'bg-[#1c1408] border-[#f59e0b]/30 text-[#f59e0b]'
+                                }`}>
+                                  Pending: <b>₹{tPending.toLocaleString('en-IN')}</b>
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </div>
 
                         {task.description && (
@@ -1345,7 +1424,7 @@ export default function TeamMemberWorkspacePage() {
                 Compensation & Payments ({payments.length})
               </h2>
               <p className="text-[11px] font-mono text-[#88888e] mt-0.5">
-                Total Paid: <b className="text-[#00D664]">₹{stats.totalPaid.toLocaleString('en-IN')}</b> • Pending: <b className="text-white">{stats.pendingPayments}</b>
+                Total Agreed: <b className="text-white">₹{stats.totalAgreed.toLocaleString('en-IN')}</b> • Total Paid: <b className="text-[#00D664]">₹{stats.totalPaid.toLocaleString('en-IN')}</b> • Pending: <b className="text-[#f59e0b]">₹{stats.totalPending.toLocaleString('en-IN')}</b>
               </p>
             </div>
             <button
@@ -2372,6 +2451,55 @@ export default function TeamMemberWorkspacePage() {
                 </div>
               </div>
 
+              {/* Task Compensation Breakdown */}
+              {(() => {
+                const selPaid = payments
+                  .filter((p) => {
+                    const pTaskId = p.taskId?._id ? p.taskId._id.toString() : p.taskId?.toString();
+                    return pTaskId === selectedTask._id?.toString() && p.status === 'PAID';
+                  })
+                  .reduce((sum, p) => sum + (p.amount || 0), 0);
+                const selAgreed = selectedTask.agreedAmount || 0;
+                const selPending = Math.max(0, selAgreed - selPaid);
+
+                return (
+                  <div className="p-3.5 bg-[#0a0a0a] border border-[#242428] space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs uppercase tracking-wider text-white font-semibold flex items-center gap-1.5">
+                        <Coins className="w-3.5 h-3.5 text-[#00D664]" />
+                        <span>Task Compensation & Payouts</span>
+                      </span>
+                      <button
+                        onClick={() => {
+                          setShowInspectTaskModal(false);
+                          handleOpenRecordPayment(selectedTask);
+                        }}
+                        className="text-[11px] text-[#00D664] hover:underline cursor-pointer flex items-center gap-1 font-semibold"
+                      >
+                        <Coins className="w-3 h-3" />
+                        <span>+ Record Payment</span>
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 pt-1 text-center font-mono">
+                      <div className="p-2 bg-[#141416] border border-[#242428]">
+                        <span className="text-[10px] text-[#88888e] block uppercase">Agreed</span>
+                        <span className="text-white font-bold">₹{selAgreed.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="p-2 bg-[#141416] border border-[#242428]">
+                        <span className="text-[10px] text-[#88888e] block uppercase">Paid</span>
+                        <span className="text-[#00D664] font-bold">₹{selPaid.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="p-2 bg-[#141416] border border-[#242428]">
+                        <span className="text-[10px] text-[#88888e] block uppercase">Pending</span>
+                        <span className={`font-bold ${selPending === 0 ? 'text-[#00D664]' : 'text-[#f59e0b]'}`}>
+                          ₹{selPending.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Submission Details */}
               <div className="p-3.5 bg-[#0a0a0a] border border-[#242428] space-y-2">
                 <div className="flex items-center justify-between">
@@ -2556,7 +2684,10 @@ export default function TeamMemberWorkspacePage() {
                 <p className="text-[10px] text-[#88888e] mt-1">Recipient: <b className="text-white">{member.name}</b></p>
               </div>
               <button
-                onClick={() => setShowRecordPaymentModal(false)}
+                onClick={() => {
+                  setShowRecordPaymentModal(false);
+                  setPaymentTaskContext(null);
+                }}
                 className="p-1 text-[#88888e] hover:text-white"
               >
                 <X className="w-4 h-4" />
@@ -2570,47 +2701,134 @@ export default function TeamMemberWorkspacePage() {
             )}
 
             <form onSubmit={handleRecordPaymentSubmit} className="space-y-4">
-              <div>
-                <label className="block text-[10px] uppercase text-[#88888e] mb-1">Project *</label>
-                <select
-                  required
-                  value={paymentForm.projectId}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, projectId: e.target.value })}
-                  className="crm-select"
-                >
-                  <option value="">Select Project</option>
-                  {projects.map((p) => (
-                    <option key={p._id} value={p._id}>
-                      {p.name} ({p.projectCode})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {paymentTaskContext ? (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] uppercase text-[#88888e]">Project *</label>
+                    <span className="text-[9px] font-mono text-[#00D664] flex items-center gap-1 font-semibold">
+                      <Lock className="w-2.5 h-2.5" /> LOCKED TO TASK
+                    </span>
+                  </div>
+                  <div className="w-full bg-[#0a0a0a] border border-[#242428] px-3.5 py-2 text-white font-mono text-xs flex items-center justify-between opacity-80 cursor-not-allowed">
+                    <span>{paymentTaskContext.projectId?.name || 'Project'} ({paymentTaskContext.projectId?.projectCode || 'PRJ'})</span>
+                    <Lock className="w-3.5 h-3.5 text-[#88888e]" />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-[10px] uppercase text-[#88888e] mb-1">Project *</label>
+                  <select
+                    required
+                    value={paymentForm.projectId}
+                    onChange={(e) => {
+                      const newProjId = e.target.value;
+                      const currentTask = tasks.find((t) => t._id === paymentForm.taskId);
+                      const currentTaskProjId = (currentTask?.projectId?._id || currentTask?.projectId || '').toString();
+                      const shouldClearTask = currentTask && currentTaskProjId !== newProjId;
+                      setPaymentForm({
+                        ...paymentForm,
+                        projectId: newProjId,
+                        taskId: shouldClearTask ? '' : paymentForm.taskId,
+                      });
+                    }}
+                    className="crm-select"
+                  >
+                    <option value="">Select Project</option>
+                    {(() => {
+                      const eligibleProjects = projects.filter((p) => {
+                        const isDirectMember = p.teamMemberIds?.some((id: any) => (id?._id || id).toString() === memberId);
+                        const hasAssignedTask = tasks.some((t: any) => {
+                          const tProjId = (t.projectId?._id || t.projectId || '').toString();
+                          return tProjId === p._id.toString();
+                        });
+                        const isAssigned = member?.assignedProjects?.some((ap: any) => ap._id.toString() === p._id.toString());
+                        return isDirectMember || hasAssignedTask || isAssigned;
+                      });
+                      const list = eligibleProjects.length > 0 ? eligibleProjects : projects;
+                      return list.map((p) => (
+                        <option key={p._id} value={p._id}>
+                          {p.name} ({p.projectCode})
+                        </option>
+                      ));
+                    })()}
+                  </select>
+                </div>
+              )}
 
-              <div>
-                <label className="block text-[10px] uppercase text-[#88888e] mb-1">Associated Task (Optional)</label>
-                <select
-                  value={paymentForm.taskId}
-                  onChange={(e) => {
-                    const tId = e.target.value;
-                    const t = tasks.find((item) => item._id === tId);
-                    setPaymentForm({
-                      ...paymentForm,
-                      taskId: tId,
-                      amount: t?.agreedAmount ? String(t.agreedAmount) : paymentForm.amount,
-                      description: t ? `Payment for task: ${t.title}` : paymentForm.description,
-                    });
-                  }}
-                  className="crm-select"
-                >
-                  <option value="">No specific task (General compensation)</option>
-                  {tasks.map((t) => (
-                    <option key={t._id} value={t._id}>
-                      {t.taskCode} - {t.title} {t.agreedAmount ? `(₹${t.agreedAmount})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {paymentTaskContext ? (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] uppercase text-[#88888e]">Associated Task *</label>
+                    <span className="text-[9px] font-mono text-[#00D664] flex items-center gap-1 font-semibold">
+                      <Lock className="w-2.5 h-2.5" /> LOCKED TO TASK
+                    </span>
+                  </div>
+                  <div className="w-full bg-[#0a0a0a] border border-[#242428] px-3.5 py-2 text-white font-mono text-xs flex items-center justify-between opacity-80 cursor-not-allowed">
+                    <span>{paymentTaskContext.title} ({paymentTaskContext.taskCode})</span>
+                    <Lock className="w-3.5 h-3.5 text-[#88888e]" />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-[10px] uppercase text-[#88888e] mb-1">Associated Task (Optional)</label>
+                  <select
+                    value={paymentForm.taskId}
+                    onChange={(e) => {
+                      const tId = e.target.value;
+                      if (!tId) {
+                        setPaymentForm({
+                          ...paymentForm,
+                          taskId: '',
+                          description: `Payment to ${member?.name || 'team member'}`,
+                        });
+                        return;
+                      }
+                      const t = tasks.find((item) => item._id === tId);
+                      const tProjId = (t?.projectId?._id || t?.projectId || '').toString();
+                      const tPaid = payments
+                        .filter((p) => {
+                          const pTaskId = p.taskId?._id ? p.taskId._id.toString() : p.taskId?.toString();
+                          return pTaskId === t?._id?.toString() && p.status === 'PAID';
+                        })
+                        .reduce((sum, p) => sum + (p.amount || 0), 0);
+                      const tAgreed = t?.agreedAmount || 0;
+                      const tPending = Math.max(0, tAgreed - tPaid);
+
+                      setPaymentForm({
+                        ...paymentForm,
+                        taskId: tId,
+                        projectId: tProjId || paymentForm.projectId, // Automatically establishes authoritative project relationship
+                        amount: tPending > 0 ? String(tPending) : (tAgreed > 0 ? String(tAgreed) : paymentForm.amount),
+                        description: t ? `Payment for task: ${t.title}` : paymentForm.description,
+                      });
+                    }}
+                    className="crm-select"
+                  >
+                    <option value="">No specific task (General compensation)</option>
+                    {tasks
+                      .filter((t) => {
+                        if (!paymentForm.projectId) return true;
+                        const tProjId = (t.projectId?._id || t.projectId || '').toString();
+                        return tProjId === paymentForm.projectId;
+                      })
+                      .map((t) => {
+                        const tPaid = payments
+                          .filter((p) => {
+                            const pTaskId = p.taskId?._id ? p.taskId._id.toString() : p.taskId?.toString();
+                            return pTaskId === t._id?.toString() && p.status === 'PAID';
+                          })
+                          .reduce((sum, p) => sum + (p.amount || 0), 0);
+                        const tAgreed = t.agreedAmount || 0;
+                        const tPending = Math.max(0, tAgreed - tPaid);
+                        return (
+                          <option key={t._id} value={t._id}>
+                            {t.taskCode} - {t.title} {t.agreedAmount ? `(Agreed: ₹${tAgreed} | Pending: ₹${tPending})` : ''}
+                          </option>
+                        );
+                      })}
+                  </select>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -2678,7 +2896,10 @@ export default function TeamMemberWorkspacePage() {
               <div className="flex justify-end space-x-3 pt-3 border-t border-[#242428]">
                 <button
                   type="button"
-                  onClick={() => setShowRecordPaymentModal(false)}
+                  onClick={() => {
+                    setShowRecordPaymentModal(false);
+                    setPaymentTaskContext(null);
+                  }}
                   className="crm-btn-secondary px-4 py-2"
                 >
                   Cancel

@@ -726,12 +726,34 @@ export class TeamMemberService {
     const totalPaid = payments
       .filter((p: any) => p.status === 'PAID')
       .reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+    const totalAgreed = tasks
+      .filter((t: any) => t.status !== 'CANCELLED')
+      .reduce((sum: number, t: any) => sum + (t.agreedAmount || 0), 0);
+    const totalPending = Math.max(0, totalAgreed - totalPaid);
     const pendingPaymentsCount = payments.filter((p: any) => p.status === 'PENDING').length;
+
+    // Attach task-level payment summaries to each assigned task
+    const tasksWithPayment = tasks.map((t: any) => {
+      const tId = t._id?.toString();
+      const taskPaid = payments
+        .filter((p: any) => {
+          const pTaskId = p.taskId?._id ? p.taskId._id.toString() : p.taskId?.toString();
+          return pTaskId === tId && p.status === 'PAID';
+        })
+        .reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+      const taskAgreed = t.agreedAmount || 0;
+      const taskPending = Math.max(0, taskAgreed - taskPaid);
+      return {
+        ...t,
+        paidAmount: taskPaid,
+        pendingAmount: taskPending,
+      };
+    });
 
     return this.sanitizeBankDetails({
       ...member,
       assignedProjects: projects,
-      assignedTasks: tasks,
+      assignedTasks: tasksWithPayment,
       payments,
       auditLogs,
       stats: {
@@ -740,7 +762,10 @@ export class TeamMemberService {
         inProgressTasks: inProgressTasksCount || (tasks ? tasks.filter((t: any) => t.status === 'IN_PROGRESS').length : 0),
         reviewTasks: reviewTasksCount || (tasks ? tasks.filter((t: any) => t.status === 'REVIEW').length : 0),
         completedTasks: completedTasksCount || (tasks ? tasks.filter((t: any) => t.status === 'COMPLETED').length : 0),
+        totalAgreed,
         totalPaid,
+        totalPending,
+        outstanding: totalPending,
         pendingPaymentsCount,
       },
     });

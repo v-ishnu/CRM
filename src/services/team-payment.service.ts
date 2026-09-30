@@ -9,7 +9,7 @@ import { dbConnect } from '@/lib/db/connect';
 
 export interface CreateTeamPaymentDto {
   teamMemberId: string;
-  projectId: string;
+  projectId?: string;
   taskId?: string;
   amount: number;
   currency?: string;
@@ -66,8 +66,8 @@ export class TeamPaymentService {
   static async recordTeamPayment(data: CreateTeamPaymentDto, actor: string = 'Admin'): Promise<ITeamPayment> {
     await dbConnect();
 
-    if (!data.teamMemberId || !data.projectId || data.amount === undefined) {
-      throw new Error('teamMemberId, projectId, and amount are required');
+    if (!data.teamMemberId || data.amount === undefined) {
+      throw new Error('teamMemberId and amount are required');
     }
 
     const numAmount = Number(data.amount);
@@ -80,23 +80,33 @@ export class TeamPaymentService {
       throw new Error('Team member not found');
     }
 
-    const project = await Project.findById(data.projectId);
-    if (!project) {
-      throw new Error('Project not found');
-    }
-
     let task: any = null;
+    let targetProjectId = data.projectId;
+
     if (data.taskId) {
       task = await Task.findById(data.taskId);
       if (!task) {
         throw new Error('Task not found');
       }
-      if (task.projectId && task.projectId.toString() !== project._id.toString()) {
-        throw new Error('Task does not belong to the selected project');
-      }
       if (task.assignedTo && task.assignedTo.toString() !== teamMember._id.toString()) {
         throw new Error('Task is assigned to a different team member');
       }
+      if (task.projectId) {
+        const taskProjectIdStr = task.projectId.toString();
+        if (data.projectId && data.projectId.toString() !== taskProjectIdStr) {
+          throw new Error('Task does not belong to the selected project');
+        }
+        targetProjectId = taskProjectIdStr;
+      }
+    }
+
+    if (!targetProjectId) {
+      throw new Error('Project is required');
+    }
+
+    const project = await Project.findById(targetProjectId);
+    if (!project) {
+      throw new Error('Project not found');
     }
 
     const paymentNumber = await this.generateNextPaymentNumber();
@@ -417,6 +427,7 @@ export class TeamPaymentService {
     totalPending: number;
     outstanding: number;
     paymentsCount: number;
+    pendingRecordsAmount?: number;
   }> {
     await dbConnect();
 
@@ -449,8 +460,9 @@ export class TeamPaymentService {
     return {
       totalAgreed,
       totalPaid,
-      totalPending,
+      totalPending: outstanding,
       outstanding,
+      pendingRecordsAmount: totalPending,
       paymentsCount: payments.length,
     };
   }
